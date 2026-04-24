@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Aanmelden — {{ evening.naam or evening.type }} — Bridge Club{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{{ evening.naam or evening.type }}</h1>
+  <p class="event-meta">{{ evening.datum.strftime('%A %-d %B %Y') }}</p>
+
+  {% if existing and existing.status != 'afgemeld' %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">
+      Je bent al aangemeld voor dit evenement.
+    </div>
+  {% endif %}
+
+  <form method="post" action="/aanmelden/{{ evening.id }}" class="form-stack">
+    <div class="form-group">
+      <label for="partner_id">Partner (optioneel)</label>
+      <select id="partner_id" name="partner_id" class="form-select">
+        <option value="">— Geen partner / beschikbaar als losloper —</option>
+        {% for m in members %}
+          <option value="{{ m.id }}"
+            {% if existing and existing.person1_id == current_user.id and existing.person2_id == m.id %}selected{% endif %}
+            {% if existing and existing.person2_id == current_user.id and existing.person1_id == m.id %}selected{% endif %}
+          >
+            {{ m.voornaam }} {{ m.achternaam }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="action-buttons">
+      <button type="submit" name="action" value="aanmelden" class="btn btn-primary">
+        {% if existing and existing.status != 'afgemeld' %}Wijzigen{% else %}Aanmelden{% endif %}
+      </button>
+      {% if existing and existing.status != 'afgemeld' %}
+        <button type="submit" name="action" value="afmelden" class="btn btn-danger"
+                onclick="return confirm('Weet je zeker dat je je wilt afmelden?')">
+          Afmelden
+        </button>
+      {% endif %}
+      <a href="/" class="btn btn-secondary">Annuleren</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

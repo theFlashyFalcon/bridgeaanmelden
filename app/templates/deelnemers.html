@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Deelnemers — {{ evening.naam or evening.type }} — Bridge Club{% endblock %}
+
+{% block content %}
+<section class="page-header">
+  <h1>{{ evening.naam or evening.type }}</h1>
+  <p class="subtitle">{{ evening.datum.strftime('%A %-d %B %Y') }} &middot;
+    <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
+  </p>
+</section>
+
+{% set pairs = registrations | selectattr('person2_id') | list %}
+{% set solo = registrations | rejectattr('person2_id') | list %}
+
+<section class="card">
+  <h2>Aangemelde paren <span class="badge">{{ pairs | length }}</span></h2>
+  {% if pairs %}
+    <ul class="participant-list">
+      {% for reg in pairs | sort(attribute='person1.achternaam') %}
+        <li class="participant-item">
+          {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+          &amp;
+          {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+          {% if reg.status == 'combipaar' %}<em>(combipaar)</em>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">Nog geen paren aangemeld.</p>
+  {% endif %}
+</section>
+
+{% if solo %}
+<section class="card">
+  <h2>Losse aanmeldingen <span class="badge">{{ solo | length }}</span></h2>
+  <ul class="participant-list">
+    {% for reg in solo | sort(attribute='person1.achternaam') %}
+      <li class="participant-item">
+        {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<div class="action-buttons">
+  <a href="/" class="btn btn-secondary">Terug naar agenda</a>
+  {% if current_user %}
+    <a href="/aanmelden/{{ evening.id }}" class="btn btn-primary">Aanmelden / wijzigen</a>
+  {% endif %}
+</div>
+{% endblock %}

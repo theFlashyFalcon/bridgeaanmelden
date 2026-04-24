@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#1e3a5f">
+  <title>{% block title %}Bridge Club{% endblock %}</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="stylesheet" href="/static/style.css">
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<header>
+  <nav class="navbar">
+    <a href="/" class="nav-brand">&#9824; Bridge Club</a>
+    <div class="nav-links">
+      {% if current_user %}
+        <span class="nav-user">
+          {{ current_user.voornaam }}
+          <span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span>
+        </span>
+
+        <a href="/instellingen">Instellingen</a>
+
+        {% if current_user.role in ['wedstrijdleider', 'admin'] %}
+        <div class="nav-dropdown">
+          <span class="nav-dropdown-toggle">Clubagenda &#9660;</span>
+          <div class="nav-dropdown-menu">
+            <a href="/beheer/avonden">Beheren</a>
+            <a href="/beheer/aanmeldingen">Bekijken</a>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if current_user.role == 'admin' %}
+        <div class="nav-dropdown">
+          <span class="nav-dropdown-toggle">Gebruikersbeheer &#9660;</span>
+          <div class="nav-dropdown-menu">
+            <a href="/leden">Lijst met gebruikers</a>
+            <a href="/beheer/aanvragen">Inkomende verzoeken</a>
+            <a href="/beheer/uitnodigingen">Uitnodigen</a>
+          </div>
+        </div>
+        {% endif %}
+
+        <a href="/logout">Uitloggen</a>
+      {% else %}
+        <a href="/login" class="btn btn-primary">Inloggen</a>
+      {% endif %}
+    </div>
+  </nav>
+</header>
+
+<main class="container">
+  {% if request.query_params.get('error') %}
+    <div class="alert alert-error">
+      Er is een fout opgetreden. Probeer het opnieuw.
+    </div>
+  {% endif %}
+
+  {% if welkom and current_user %}
+    <div class="alert alert-success">
+      Welkom, {{ current_user.voornaam }}! Je bent ingelogd als <strong>{{ current_user.role }}</strong>.
+    </div>
+  {% endif %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer>
+  <p><a href="/privacy">Privacybeleid</a></p>
+</footer>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js');
+  }
+
+  const isIos = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+  if (isIos && !isStandalone && !sessionStorage.getItem('ios-prompt-shown')) {
+    document.getElementById('ios-install-prompt')?.removeAttribute('hidden');
+    sessionStorage.setItem('ios-prompt-shown', '1');
+  }
+
+</script>
+
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Uitnodigen — Bridge Club{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Uitnodigen</h1>
+  <p style="color:var(--color-muted);margin-bottom:1rem;font-size:.9rem;">
+    Stuur een uitnodigingslink naar een nieuw lid. De ontvanger kan direct een account aanmaken en inloggen.
+  </p>
+
+  {% if request.query_params.get('verstuurd') %}
+    <div class="alert alert-success">Uitnodiging aangemaakt en e-mail verstuurd.</div>
+  {% elif request.query_params.get('aangemaakt') %}
+    <div class="alert alert-info">
+      Uitnodiging aangemaakt, maar e-mail kon niet worden verstuurd.
+      {% if request.query_params.get('token') %}
+        <br>Kopieer de link handmatig: <code>/invite/{{ request.query_params.get('token') }}</code>
+      {% endif %}
+    </div>
+  {% elif request.query_params.get('error') %}
+    <div class="alert alert-error">Voer een geldig e-mailadres in.</div>
+  {% endif %}
+
+  <form method="post" action="/beheer/uitnodigingen" class="form-stack" style="margin-bottom:1.5rem;">
+    <div class="form-group">
+      <label for="email">E-mailadres</label>
+      <input type="email" id="email" name="email" required placeholder="naam@voorbeeld.nl">
+    </div>
+    <div class="form-group">
+      <label for="role">Label / rol</label>
+      <select id="role" name="role" class="form-select">
+        {% for role in roles %}
+          <option value="{{ role }}">{{ role }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Uitnodiging versturen</button>
+  </form>
+
+  <h2>Verzonden uitnodigingen</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>E-mail</th>
+        <th>Aangemaakt</th>
+        <th>Status</th>
+        <th>Link</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in invitations %}
+      <tr>
+        <td>{{ inv.email }}</td>
+        <td>{{ inv.aangemaakt_op.strftime('%d-%m-%Y') }}</td>
+        <td>
+          {% if inv.gebruikt_op %}
+            <span class="badge badge-success">Gebruikt</span>
+          {% else %}
+            <span class="badge badge-warning">Open</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if not inv.gebruikt_op %}
+            <code style="font-size:.8rem;word-break:break-all;">/invite/{{ inv.token }}</code>
+          {% else %}
+            —
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">Nog geen uitnodigingen verstuurd.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

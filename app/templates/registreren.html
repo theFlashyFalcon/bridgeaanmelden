@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Account aanmaken — Bridge Club{% endblock %}
+
+{% block content %}
+<section class="card login-card" style="max-width: 460px;">
+  <h1>Account aanmaken</h1>
+
+  {% if verzonden %}
+    <div class="alert alert-success">
+      <strong>Aanvraag ingediend!</strong><br>
+      Je aanvraag is ontvangen. Je krijgt een e-mail zodra een beheerder je account heeft goedgekeurd.
+    </div>
+    <p style="text-align:center; margin-top: 1rem;">
+      <a href="/" class="btn btn-secondary">Terug naar home</a>
+    </p>
+  {% else %}
+    <p style="color: var(--color-muted); margin-bottom: 1.25rem;">
+      Vul je gegevens in. Een beheerder beoordeelt je aanvraag en stuurt je een e-mail om je account te activeren.
+    </p>
+
+    {% if errors %}
+      <div class="alert alert-error">
+        <ul style="margin: 0; padding-left: 1.2rem;">
+          {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <form method="post" action="/registreren" class="form-stack">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="voornaam">Voornaam</label>
+          <input type="text" id="voornaam" name="voornaam" required autocomplete="given-name"
+                 value="{{ voornaam or '' }}">
+        </div>
+        <div class="form-group">
+          <label for="achternaam">Achternaam</label>
+          <input type="text" id="achternaam" name="achternaam" required autocomplete="family-name"
+                 value="{{ achternaam or '' }}">
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="email">E-mailadres</label>
+        <input type="email" id="email" name="email" required autocomplete="email"
+               placeholder="naam@voorbeeld.nl" value="{{ email or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="lidnummer">Lidnummer</label>
+        <input type="text" id="lidnummer" name="lidnummer" required
+               placeholder="bijv. 12345" value="{{ lidnummer or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="password">Wachtwoord</label>
+        <input type="password" id="password" name="password" required
+               autocomplete="new-password" minlength="8" placeholder="Minimaal 8 tekens">
+      </div>
+      <div class="form-group">
+        <label for="password2">Wachtwoord bevestigen</label>
+        <input type="password" id="password2" name="password2" required
+               autocomplete="new-password" minlength="8" placeholder="Herhaal wachtwoord">
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Aanvraag indienen</button>
+    </form>
+
+    <p class="login-hint">Al een account? <a href="/login">Inloggen</a></p>
+  {% endif %}
+</section>
+{% endblock %}

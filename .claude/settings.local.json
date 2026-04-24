@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python -m uvicorn app.main:app --port 8000)",
+      "PowerShell(if \\(-not $?\\) { \"Process not found\" })",
+      "PowerShell(netstat -ano)",
+      "PowerShell(Get-Process | Where-Object { $_.Id -eq 19408 } | Select-Object Name, Id, CPU)",
+      "Bash(taskkill //PID 19408 //F)",
+      "Bash(netstat -ano)",
+      "Bash(python -)",
+      "Bash(python -c \"from app.main import app; print\\('App loaded OK'\\); print\\([r.path for r in app.routes]\\)\")",
+      "Bash(pip show *)",
+      "Bash(.venv/Scripts/python scripts/create_admin.py)"
+    ]
+  }
+}

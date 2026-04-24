@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Offline — Bridge Club{% endblock %}
+
+{% block content %}
+<section class="card offline-card">
+  <h1>Geen internetverbinding</h1>
+  <p>De app heeft een internetverbinding nodig om te werken.</p>
+  <p>Controleer je verbinding en probeer het opnieuw.</p>
+  <button onclick="window.location.reload()" class="btn btn-primary">Opnieuw proberen</button>
+</section>
+{% endblock %}

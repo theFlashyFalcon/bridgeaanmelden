@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Account activeren — Bridge Club{% endblock %}
+
+{% block content %}
+<section class="card login-card" style="max-width: 460px;">
+  <h1>Account activeren</h1>
+  <p style="color: var(--color-muted); margin-bottom: 1.25rem;">
+    Je account wordt aangemaakt voor <strong>{{ invitation.email }}</strong>.
+    Kies een wachtwoord om het te activeren.
+  </p>
+
+  {% if errors %}
+    <div class="alert alert-error">
+      <ul style="margin: 0; padding-left: 1.2rem;">
+        {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form method="post" action="/invite/{{ token }}" class="form-stack">
+    <div class="form-group">
+      <label>E-mailadres</label>
+      <input type="email" value="{{ invitation.email }}" disabled class="input-disabled">
+    </div>
+
+    {% if invitation.account_request %}
+      {# Name and lidnummer come from the approved account request — not editable #}
+      <div class="form-row">
+        <div class="form-group">
+          <label>Voornaam</label>
+          <input type="text" value="{{ invitation.account_request.voornaam }}" disabled class="input-disabled">
+        </div>
+        <div class="form-group">
+          <label>Achternaam</label>
+          <input type="text" value="{{ invitation.account_request.achternaam }}" disabled class="input-disabled">
+        </div>
+      </div>
+    {% else %}
+      <div class="form-row">
+        <div class="form-group">
+          <label for="voornaam">Voornaam</label>
+          <input type="text" id="voornaam" name="voornaam" required autocomplete="given-name"
+                 value="{{ voornaam or '' }}">
+        </div>
+        <div class="form-group">
+          <label for="achternaam">Achternaam</label>
+          <input type="text" id="achternaam" name="achternaam" required autocomplete="family-name"
+                 value="{{ achternaam or '' }}">
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="form-group">
+      <label for="password">Wachtwoord <span class="form-hint">(minimaal 8 tekens)</span></label>
+      <input type="password" id="password" name="password" required minlength="8"
+             autocomplete="new-password" placeholder="••••••••">
+    </div>
+    <div class="form-group">
+      <label for="password2">Wachtwoord bevestigen</label>
+      <input type="password" id="password2" name="password2" required
+             autocomplete="new-password" placeholder="••••••••">
+    </div>
+    <button type="submit" class="btn btn-primary btn-full">Account activeren</button>
+  </form>
+</section>
+{% endblock %}

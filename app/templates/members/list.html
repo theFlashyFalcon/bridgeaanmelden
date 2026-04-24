@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Gebruikers — Bridge Club{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Lijst met gebruikers <span class="badge">{{ members | length }}</span></h1>
+
+  {% if members %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Naam</th>
+          <th>E-mail</th>
+          <th>Lidnummer</th>
+          <th>Label</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in members %}
+        <tr>
+          <td>{{ m.voornaam }} {{ m.achternaam }}</td>
+          <td>{{ m.email or '—' }}</td>
+          <td>{{ m.lidnummer }}</td>
+          <td><span class="role-badge role-{{ m.role }}">{{ m.role }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-state">Geen gebruikers gevonden.</p>
+  {% endif %}
+</section>
+{% endblock %}

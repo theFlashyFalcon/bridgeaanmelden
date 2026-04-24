@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Inkomende verzoeken — Bridge Club{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Inkomende verzoeken
+    {% if pending_count > 0 %}
+      <span class="badge badge-warning" style="font-size:.8rem;vertical-align:middle;">{{ pending_count }} nieuw</span>
+    {% endif %}
+  </h1>
+
+  {% if request.query_params.get('goedgekeurd') %}
+    <div class="alert alert-success">
+      Aanvraag goedgekeurd.
+      {% if request.query_params.get('email_fout') %}
+        <br><strong>Let op:</strong> e-mail kon niet worden verstuurd.
+        {% if request.query_params.get('token') %}
+          Kopieer de link handmatig: <code>/invite/{{ request.query_params.get('token') }}</code>
+        {% endif %}
+      {% endif %}
+    </div>
+  {% elif request.query_params.get('afgewezen') %}
+    <div class="alert alert-info">Aanvraag afgewezen.</div>
+  {% endif %}
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Naam</th>
+        <th>E-mail</th>
+        <th>Lidnummer</th>
+        <th>Ingediend</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in aanvragen %}
+      <tr>
+        <td>{{ a.voornaam }} {{ a.achternaam }}</td>
+        <td>{{ a.email }}</td>
+        <td>{{ a.lidnummer }}</td>
+        <td>{{ a.aangemaakt_op.strftime('%d-%m-%Y') }}</td>
+        <td>
+          {% if a.status == 'wachtend' %}
+            <span class="badge badge-warning">Wachtend</span>
+          {% elif a.status == 'goedgekeurd' %}
+            <span class="badge badge-success">Goedgekeurd</span>
+          {% else %}
+            <span class="badge" style="background:var(--color-muted);">Afgewezen</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if a.status == 'wachtend' %}
+            <div style="display:flex;gap:.35rem;flex-wrap:wrap;">
+              <form method="post" action="/beheer/aanvragen/{{ a.id }}/goedkeuren" style="display:flex;gap:.35rem;align-items:center;">
+                <select name="role" style="padding:.25rem .5rem;border:1px solid #ccc;border-radius:var(--radius);font-size:.8rem;">
+                  {% for role in roles %}
+                    <option value="{{ role }}">{{ role }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary" style="padding:.25rem .6rem;font-size:.8rem;">Goedkeuren</button>
+              </form>
+              <form method="post" action="/beheer/aanvragen/{{ a.id }}/afwijzen">
+                <button type="submit" class="btn btn-danger" style="padding:.25rem .6rem;font-size:.8rem;">Afwijzen</button>
+              </form>
+            </div>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">Nog geen aanvragen ontvangen.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

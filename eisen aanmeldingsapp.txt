@@ -1,0 +1,35 @@
+De deelnemers voor de komende clubavond moeten zichtbaar zijn op de website
+ (liefst op alfabetische volgorde van vaste paren en daarna de losse paren, alfabetisch op voornaam van de eerste van het paar)
+ met een teller hoeveel paren het zijn
+ een losse vermelding van losse aanmeldingen.
+Loslopers zouden niet publiek zichtbaar moeten zijn, 
+ -liefst alleen voor mij/John van V./Simon/Onno.
+ -misschien met een anoniem gemaakte mail naar alle leden.
+
+je kan bij het aanmelden alle clubavonden van het seizoen selecteren
+je kan je ook als vast partnership aanmelden vanaf een bepaalde datum
+ -dit kan ook voor specifiek de trainingsavonden.
+
+Voor het aanmelden:
+Uit een lijst/database kan je je naam zoeken. Of een naam (met lidnummer) toevoegen.
+Hierna kan je aangeven of je je los wilt aanmelden of een partner selecteren (zelfde manier).
+Hierna kan je kiezen uit "aanmelden vast partnership", "aanmelden voor alle trainingsavonden"
+ -of "aanmelden voor losse avonden"
+Hierna krijg je dus de optie om data te selecteren.
+
+
+als je voor een datum bent aangemeld kan je wijzigingen daarvoor doorgeven.
+ -je kan een invaller doorgeven
+ -je kan de aanmelding annuleren
+ -je kan aangeven dat 1 van de 2 beschikbaar is om te spelen
+ -je kan een combipaar doorgeven*
+    -voor combipaar kan je alle vaste paren (ook al zijn ze al afgemeld) selecteren.
+    -je kan ook een paar kiezen dat voor die datum is aangemeld.
+    -het andere paar wordt automatisch afgemeld.
+ -indien van toepassing: je kan je afmelden als vast partnersnip
+
+Voor wijziging:
+Eerst de datum selecteren.
+Dan je paar uit de dropdown menu selecteren.
+Dan welke wijziging je wilt doen
+Daarna de eventuele overige info. Dus in welke samenstelling je speelt/wie beschikbaar is.

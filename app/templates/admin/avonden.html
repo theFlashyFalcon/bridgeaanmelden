@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}Clubagenda beheren — Bridge Club{% endblock %}
+{% block content %}
+
+{% if request.query_params.get('aangemaakt') %}
+  <div class="alert alert-success">Evenement toegevoegd.</div>
+{% elif request.query_params.get('seizoen_aangemaakt') %}
+  <div class="alert alert-success">Seizoen aangemaakt.</div>
+{% elif request.query_params.get('verwijderd') %}
+  <div class="alert alert-info">Evenement verwijderd.</div>
+{% elif request.query_params.get('fout') == 'seizoen' %}
+  <div class="alert alert-error">Vul alle velden in voor het seizoen.</div>
+{% elif request.query_params.get('fout') == 'datum' %}
+  <div class="alert alert-error">De startdatum moet voor de einddatum liggen.</div>
+{% endif %}
+
+{% if errors %}
+  <div class="alert alert-error">
+    <ul style="margin:0;padding-left:1.2rem;">
+      {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+<section class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h1 style="margin:0;">Clubagenda</h1>
+    <div class="aanmaken-dropdown" id="aanmaken-dropdown">
+      <button type="button" class="btn btn-primary" onclick="toggleAanmaken(event)">
+        + Aanmaken &#9660;
+      </button>
+      <div class="aanmaken-menu" id="aanmaken-menu" hidden>
+        <button type="button" onclick="openForm('seizoen')">Seizoen</button>
+        <button type="button" onclick="openForm('clubavond')">Clubavond</button>
+        <button type="button" onclick="openForm('eten')">Eten voor jeugdtraining</button>
+        <button type="button" onclick="openForm('jeugdtraining')">Training</button>
+        <button type="button" onclick="openForm('speciaal')">Speciaal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Seizoen formulier -->
+  <div id="form-seizoen" class="inline-form" {% if open_type != 'seizoen_err' %}hidden{% endif %}>
+    <h2>Seizoen aanmaken</h2>
+    <form method="post" action="/beheer/avonden/seizoen" class="form-stack">
+      <div class="form-group">
+        <label for="s-naam">Naam</label>
+        <input type="text" id="s-naam" name="naam" required placeholder="bijv. Seizoen 2025-2026">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="s-start">Startdatum</label>
+          <input type="date" id="s-start" name="start_datum" required>
+        </div>
+        <div class="form-group">
+          <label for="s-eind">Einddatum</label>
+          <input type="date" id="s-eind" name="eind_datum" required>
+        </div>
+      </div>
+      <div class="action-buttons">
+        <button type="submit" class="btn btn-primary">Aanmaken</button>
+        <button type="button" class="btn btn-secondary" onclick="closeForm('seizoen')">Annuleren</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Evenement formulier -->
+  <div id="form-event" class="inline-form"
+       {% if not open_type or open_type == 'seizoen_err' %}hidden{% endif %}>
+    <h2 id="form-event-title">Evenement aanmaken</h2>
+    <form method="post" action="/beheer/avonden" class="form-stack">
+      <input type="hidden" name="type" id="form-event-type" value="{{ open_type or 'clubavond' }}">
+      <div class="form-group">
+        <label for="e-naam">Naam</label>
+        <input type="text" id="e-naam" name="naam" required
+               placeholder="bijv. Clubavond week 14">
+      </div>
+      <div class="form-group">
+        <label for="e-datum">Datum</label>
+        <input type="date" id="e-datum" name="datum" required>
+        <span class="form-hint">Het seizoen wordt automatisch bepaald op basis van de datum.</span>
+      </div>
+      <div class="action-buttons">
+        <button type="submit" class="btn btn-primary">Aanmaken</button>
+        <button type="button" class="btn btn-secondary" onclick="closeForm('event')">Annuleren</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Geplande evenementen</h2>
+  {% if evenings %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Naam</th>
+          <th>Label</th>
+          <th>Seizoen</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in evenings %}
+        <tr>
+          <td style="white-space:nowrap;">{{ e.datum.strftime('%-d %b %Y') }}</td>
+          <td>{{ e.naam or '—' }}</td>
+          <td><span class="event-label label-{{ e.type | replace(' ', '-') }}">{{ e.type }}</span></td>
+          <td style="font-size:.85rem;color:var(--color-muted);">{{ e.season.naam }}</td>
+          <td>
+            {% if current_user.role == 'admin' %}
+            <form method="post" action="/beheer/avonden/{{ e.id }}/verwijder" style="display:inline;"
+                  onsubmit="return confirm('Evenement verwijderen?')">
+              <button type="submit" class="btn btn-danger btn-sm">Verwijder</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-state">Nog geen evenementen gepland. Gebruik "Aanmaken" om te beginnen.</p>
+  {% endif %}
+</section>
+
+{% if seasons %}
+<section class="card">
+  <h2>Seizoenen</h2>
+  <table class="data-table">
+    <thead>
+      <tr><th>Naam</th><th>Start</th><th>Eind</th><th>Status</th>
+      {% if current_user.role == 'admin' %}<th></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in seasons %}
+      <tr>
+        <td>{{ s.naam }}</td>
+        <td>{{ s.start_datum.strftime('%-d %b %Y') }}</td>
+        <td>{{ s.eind_datum.strftime('%-d %b %Y') }}</td>
+        <td>
+          {% if s.actief %}
+            <span class="badge badge-success">Actief</span>
+          {% else %}
+            <span class="badge" style="background:var(--color-muted);">Inactief</span>
+          {% endif %}
+        </td>
+        {% if current_user.role == 'admin' %}
+        <td>
+          {% if not s.actief %}
+            <form method="post" action="/beheer/seizoenen/{{ s.id }}/activeer" style="display:inline;">
+              <button type="submit" class="btn btn-secondary btn-sm">Activeer</button>
+            </form>
+          {% endif %}
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<script>
+  const LABELS = {
+    clubavond:      'Clubavond aanmaken',
+    eten:           'Eten voor jeugdtraining aanmaken',
+    jeugdtraining:  'Training aanmaken',
+    speciaal:       'Speciaal evenement aanmaken',
+  };
+  const TYPE_VALUES = {
+    clubavond:     'clubavond',
+    eten:          'eten voor jeugdtraining',
+    jeugdtraining: 'jeugdtraining',
+    speciaal:      'speciaal',
+  };
+
+  function toggleAanmaken(e) {
+    e.stopPropagation();
+    const menu = document.getElementById('aanmaken-menu');
+    menu.hidden = !menu.hidden;
+  }
+
+  function openForm(type) {
+    document.getElementById('aanmaken-menu').hidden = true;
+    if (type === 'seizoen') {
+      document.getElementById('form-event').hidden = true;
+      document.getElementById('form-seizoen').hidden = false;
+    } else {
+      document.getElementById('form-seizoen').hidden = true;
+      document.getElementById('form-event-title').textContent = LABELS[type] || 'Evenement aanmaken';
+      document.getElementById('form-event-type').value = TYPE_VALUES[type] || type;
+      document.getElementById('form-event').hidden = false;
+    }
+  }
+
+  function closeForm(type) {
+    document.getElementById('form-' + type).hidden = true;
+  }
+
+  // Close dropdown on outside click
+  document.addEventListener('click', () => {
+    document.getElementById('aanmaken-menu').hidden = true;
+  });
+
+  // Auto-open form if there were validation errors
+  const openType = "{{ open_type or '' }}";
+  if (openType && openType !== 'seizoen_err') {
+    openForm(openType === 'eten voor jeugdtraining' ? 'eten' :
+             openType === 'jeugdtraining' ? 'jeugdtraining' :
+             openType === 'speciaal' ? 'speciaal' : 'clubavond');
+  }
+</script>
+{% endblock %}

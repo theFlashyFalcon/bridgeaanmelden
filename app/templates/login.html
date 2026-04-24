@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Inloggen — Bridge Club{% endblock %}
+
+{% block content %}
+<section class="card login-card">
+  <h1>Bridge Club Aanmeldingsapp</h1>
+
+  {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="/login" class="form-stack">
+    <div class="form-group">
+      <label for="email">E-mailadres</label>
+      <input type="email" id="email" name="email" required autocomplete="email" placeholder="naam@voorbeeld.nl">
+    </div>
+    <div class="form-group">
+      <label for="password">Wachtwoord</label>
+      <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button type="submit" class="btn btn-primary btn-full">Inloggen</button>
+  </form>
+
+  <p class="login-hint">Nog geen account? <a href="/registreren">Account aanmaken</a></p>
+</section>
+
+{% if login_status == 'wachtend' %}
+<div class="modal-overlay" id="status-modal">
+  <div class="modal">
+    <div class="modal-icon">&#9203;</div>
+    <h2>Aanvraag in behandeling</h2>
+    <p>Je aanvraag om een account te maken wordt nog beoordeeld door een beheerder. Je ontvangt een e-mail zodra dit is gedaan.</p>
+    <button class="btn btn-primary" onclick="document.getElementById('status-modal').remove()">Sluiten</button>
+  </div>
+</div>
+{% elif login_status == 'goedgekeurd' %}
+<div class="modal-overlay" id="status-modal">
+  <div class="modal">
+    <div class="modal-icon">&#9993;</div>
+    <h2>Controleer je e-mail</h2>
+    <p>Je aanvraag is goedgekeurd! Controleer je e-mail voor de link om je wachtwoord in te stellen en je account te activeren.</p>
+    <button class="btn btn-primary" onclick="document.getElementById('status-modal').remove()">Sluiten</button>
+  </div>
+</div>
+{% elif login_status == 'afgewezen' %}
+<div class="modal-overlay" id="status-modal">
+  <div class="modal">
+    <div class="modal-icon">&#10060;</div>
+    <h2>Aanvraag afgewezen</h2>
+    <p>Je aanvraag is afgewezen. Stuur ons een mail voor meer toelichting.</p>
+    <button class="btn btn-primary" onclick="document.getElementById('status-modal').remove()">Sluiten</button>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

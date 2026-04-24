@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{{ evening.naam or evening.type }} — Bridge Club{% endblock %}
+{% block content %}
+
+<section class="page-header">
+  <h1>{{ evening.naam or evening.type }}</h1>
+  <p class="subtitle">
+    {{ evening.datum.strftime('%A %-d %B %Y') }} &middot;
+    <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
+  </p>
+</section>
+
+{% set pairs = active | selectattr('person2_id') | list %}
+{% set solo_active = active | rejectattr('person2_id') | list %}
+
+<section class="card">
+  <h2>Aangemelde paren <span class="badge">{{ pairs | length }}</span></h2>
+  {% if pairs %}
+    <ul class="participant-list">
+      {% for reg in pairs | sort(attribute='person1.achternaam') %}
+        <li class="participant-item">
+          {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+          &amp;
+          {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+          {% if reg.status == 'combipaar' %}<em>(combipaar)</em>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">Nog geen paren aangemeld.</p>
+  {% endif %}
+</section>
+
+{% if solo_active %}
+<section class="card">
+  <h2>Losse aanmeldingen <span class="badge">{{ solo_active | length }}</span></h2>
+  <ul class="participant-list">
+    {% for reg in solo_active | sort(attribute='person1.achternaam') %}
+      <li class="participant-item">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if loslopers %}
+<section class="card">
+  <h2>Loslopers <span class="badge badge-warning">{{ loslopers | length }}</span></h2>
+  <p style="color:var(--color-muted);font-size:.875rem;margin-bottom:.75rem;">
+    Aangemeld zonder partner of als beschikbaar losloper.
+  </p>
+  <ul class="participant-list">
+    {% for reg in loslopers %}
+      <li class="participant-item">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Recente wijzigingen</h2>
+  {% if recent_changes %}
+    <table class="data-table">
+      <thead>
+        <tr><th>Naam</th><th>Status</th><th>Gewijzigd</th></tr>
+      </thead>
+      <tbody>
+        {% for reg in recent_changes %}
+        <tr>
+          <td>{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</td>
+          <td>
+            {% if reg.status == 'aangemeld' %}
+              <span class="badge badge-success">Aangemeld</span>
+            {% elif reg.status == 'afgemeld' %}
+              <span class="badge" style="background:var(--color-muted);">Afgemeld</span>
+            {% else %}
+              <span class="badge">{{ reg.status }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size:.85rem;color:var(--color-muted);">
+            {{ reg.gewijzigd_op.strftime('%-d %b %H:%M') }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-state">Geen wijzigingen gevonden.</p>
+  {% endif %}
+</section>
+
+<div class="action-buttons">
+  <a href="/beheer/aanmeldingen" class="btn btn-secondary">Terug</a>
+</div>
+{% endblock %}

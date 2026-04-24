@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Roltoewijzingen — Bridge Club{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Roltoewijzingen</h1>
+  <p style="color: var(--color-muted); margin-bottom: 1rem; font-size: .9rem;">
+    Koppel een rol aan een e-mailadres. De rol wordt automatisch toegepast wanneer iemand inlogt met dat adres.
+  </p>
+
+  {% if request.query_params.get('opgeslagen') %}
+    <div class="alert alert-success">Roltoewijzing opgeslagen.</div>
+  {% endif %}
+  {% if request.query_params.get('error') %}
+    <div class="alert alert-error">Ongeldig e-mailadres of rol.</div>
+  {% endif %}
+
+  <form method="post" action="/beheer/rollen" class="form-inline">
+    <label for="email">E-mailadres</label>
+    <input type="email" id="email" name="email" required placeholder="naam@voorbeeld.nl">
+    <select name="role" style="padding: .5rem .75rem; border: 1px solid #ccc; border-radius: var(--radius); font-size: .95rem;">
+      {% for role in roles %}
+        <option value="{{ role }}">{{ role }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary">Opslaan</button>
+  </form>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>E-mail</th>
+        <th>Rol</th>
+        <th>Aangemaakt</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in assignments %}
+      <tr>
+        <td>{{ a.email }}</td>
+        <td><span class="role-badge role-{{ a.role }}">{{ a.role }}</span></td>
+        <td>{{ a.aangemaakt_op.strftime('%d-%m-%Y') }}</td>
+        <td>
+          <form method="post" action="/beheer/rollen/verwijder" style="display:inline;">
+            <input type="hidden" name="id" value="{{ a.id }}">
+            <button type="submit" class="btn btn-danger" style="padding: .25rem .6rem; font-size: .8rem;">Verwijder</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4">Nog geen roltoewijzingen.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

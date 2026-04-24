@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Loslopers — Bridge Club{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Loslopers</h1>
+  {% for reg in solo_registrations %}
+    <p>{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</p>
+  {% else %}
+    <p>Geen loslopers gevonden.</p>
+  {% endfor %}
+</section>
+{% endblock %}
