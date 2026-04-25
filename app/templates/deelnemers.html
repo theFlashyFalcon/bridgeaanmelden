@@ -5,24 +5,42 @@
 {% block content %}
 <section class="page-header">
   <h1>{{ evening.naam or evening.type }}</h1>
-  <p class="subtitle">{{ evening.datum.strftime('%A %-d %B %Y') }} &middot;
+  <p class="subtitle">{{ evening.datum.strftime('%A %d %B %Y') }} &middot;
     <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
   </p>
 </section>
 
-{% set pairs = registrations | selectattr('person2_id') | list %}
-{% set solo = registrations | rejectattr('person2_id') | list %}
+{% set pairs = [] %}
+{% set solo = [] %}
+{% for reg in registrations %}
+  {% if reg.status != 'afgemeld' %}
+    {% if reg.partner_naam or reg.person2_id %}
+      {% set _ = pairs.append(reg) %}
+    {% else %}
+      {% set _ = solo.append(reg) %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
 
 <section class="card">
-  <h2>Aangemelde paren <span class="badge">{{ pairs | length }}</span></h2>
-  {% if pairs %}
+  <h2>Aangemelde paren <span class="badge">{{ pairs | length + (manual_pairs | length) }}</span></h2>
+  {% if pairs or manual_pairs %}
     <ul class="participant-list">
       {% for reg in pairs | sort(attribute='person1.achternaam') %}
         <li class="participant-item">
           {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
           &amp;
-          {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
-          {% if reg.status == 'combipaar' %}<em>(combipaar)</em>{% endif %}
+          {% if reg.partner_naam %}
+            {{ reg.partner_naam }}
+          {% elif reg.person2 %}
+            {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+          {% endif %}
+        </li>
+      {% endfor %}
+      {% for pair in manual_pairs %}
+        <li class="participant-item">
+          {{ pair.naam_1 }} &amp; {{ pair.naam_2 }}
+          <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig toegevoegd)</em>
         </li>
       {% endfor %}
     </ul>
@@ -38,6 +56,7 @@
     {% for reg in solo | sort(attribute='person1.achternaam') %}
       <li class="participant-item">
         {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+        <em style="font-size:.85rem;color:var(--color-muted);"> — zonder partner</em>
       </li>
     {% endfor %}
   </ul>

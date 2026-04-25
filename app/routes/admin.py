@@ -1,7 +1,10 @@
+import os
 import secrets
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -17,10 +20,14 @@ from app.models import (
     EmailRoleAssignment,
     EveningType,
     Invitation,
+    Lid,
+    ManualPair,
     Member,
     MemberRole,
+    PartnerRequest,
     Registration,
     RegistrationStatus,
+    RegistrationType,
     Season,
 )
 
@@ -339,7 +346,7 @@ async def create_invitation(
     db.add(invitation)
     db.commit()
 
-    base = str(request.base_url).rstrip("/")
+    base = BASE_URL or str(request.base_url).rstrip("/")
     invite_url = f"{base}/invite/{token}"
     try:
         send_invitation_email(email, invite_url)
@@ -425,7 +432,7 @@ async def aanvraag_goedkeuren(
         db.add(Invitation(token=token, email=aanvraag.email, account_request_id=aanvraag.id))
         db.commit()
 
-        base = str(request.base_url).rstrip("/")
+        base = BASE_URL or str(request.base_url).rstrip("/")
         invite_url = f"{base}/invite/{token}"
         try:
             send_invitation_email(aanvraag.email, invite_url)
@@ -511,3 +518,244 @@ async def delete_role(
         db.query(EmailRoleAssignment).filter(EmailRoleAssignment.id == int(assignment_id)).delete()
         db.commit()
     return RedirectResponse(url="/beheer/rollen", status_code=302)
+
+
+# ── Ledenlijst beheren (Admin only) ──────────────────────────────────────────
+
+@router.get("/leden")
+async def leden_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    leden = db.query(Lid).order_by(Lid.achternaam, Lid.voornaam).all()
+    return templates.TemplateResponse(
+        request,
+        "admin/leden.html",
+        {"current_user": current_user, "leden": leden},
+    )
+
+
+@router.post("/leden")
+async def lid_toevoegen(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    form = await request.form()
+    voornaam = form.get("voornaam", "").strip()
+    achternaam = form.get("achternaam", "").strip()
+    nbb_nummer = form.get("nbb_nummer", "").strip() or None
+
+    if voornaam and achternaam:
+        db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb_nummer))
+        db.commit()
+    return RedirectResponse(url="/beheer/leden?toegevoegd=1", status_code=302)
+
+
+@router.post("/leden/{lid_id}/verwijder")
+async def lid_verwijder(
+    lid_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    lid = db.query(Lid).filter(Lid.id == lid_id).first()
+    if lid:
+        db.delete(lid)
+        db.commit()
+    return RedirectResponse(url="/beheer/leden?verwijderd=1", status_code=302)
+
+
+# ── Af/aanmeldingen beheren (Wedstrijdleider + Admin) ────────────────────────
+
+@router.get("/af-aanmeldingen")
+async def af_aanmeldingen_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    evenings = (
+        db.query(ClubEvening)
+        .join(Season)
+        .filter(Season.actief == True, ClubEvening.datum >= date.today())  # noqa: E712
+        .order_by(ClubEvening.datum)
+        .all()
+    )
+    # Count open partner requests per evening
+    open_requests = {}
+    for e in evenings:
+        open_requests[e.id] = (
+            db.query(PartnerRequest)
+            .filter(PartnerRequest.evening_id == e.id, PartnerRequest.status == "wachtend")
+            .count()
+        )
+    return templates.TemplateResponse(
+        request,
+        "admin/af_aanmeldingen.html",
+        {"current_user": current_user, "evenings": evenings, "open_requests": open_requests},
+    )
+
+
+@router.get("/af-aanmeldingen/{event_id}")
+async def af_aanmeldingen_detail(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+    if not evening:
+        raise HTTPException(status_code=404)
+
+    all_regs = (
+        db.query(Registration)
+        .filter(Registration.evening_id == event_id)
+        .all()
+    )
+
+    aangemeld = [r for r in all_regs if r.status == RegistrationStatus.aangemeld]
+    afgemeld = [r for r in all_regs if r.status == RegistrationStatus.afgemeld]
+    loslopers = [
+        r for r in all_regs
+        if r.status == RegistrationStatus.beschikbaar_solo
+        or (r.status == RegistrationStatus.aangemeld and not r.partner_naam and not r.person2_id)
+    ]
+    manual_pairs = (
+        db.query(ManualPair)
+        .filter(ManualPair.evening_id == event_id)
+        .order_by(ManualPair.aangemaakt_op)
+        .all()
+    )
+    verzoeken = (
+        db.query(PartnerRequest)
+        .filter(PartnerRequest.evening_id == event_id)
+        .order_by(PartnerRequest.aangemaakt_op)
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "admin/af_aanmeldingen_detail.html",
+        {
+            "current_user": current_user,
+            "evening": evening,
+            "aangemeld": aangemeld,
+            "afgemeld": afgemeld,
+            "loslopers": loslopers,
+            "manual_pairs": manual_pairs,
+            "verzoeken": verzoeken,
+        },
+    )
+
+
+@router.post("/af-aanmeldingen/{event_id}/toevoegen")
+async def af_aanmeldingen_toevoegen(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+    if not evening:
+        raise HTTPException(status_code=404)
+
+    form = await request.form()
+    naam_1 = form.get("naam_1", "").strip()
+    naam_2 = form.get("naam_2", "").strip()
+
+    if naam_1 and naam_2:
+        db.add(ManualPair(evening_id=event_id, naam_1=naam_1, naam_2=naam_2))
+        db.commit()
+    return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?toegevoegd=1", status_code=302)
+
+
+@router.post("/af-aanmeldingen/{event_id}/manual/{pair_id}/verwijder")
+async def manual_pair_verwijder(
+    event_id: int,
+    pair_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    pair = db.query(ManualPair).filter(ManualPair.id == pair_id).first()
+    if pair:
+        db.delete(pair)
+        db.commit()
+    return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}", status_code=302)
+
+
+@router.post("/verzoeken/{request_id}/goedkeuren")
+async def verzoek_goedkeuren(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    from app.email import send_partner_request_approved_email
+
+    partner_request = db.query(PartnerRequest).filter(PartnerRequest.id == request_id).first()
+    if not partner_request or partner_request.status != "wachtend":
+        return RedirectResponse(url="/beheer/af-aanmeldingen", status_code=302)
+
+    partner_naam = f"{partner_request.partner_voornaam} {partner_request.partner_achternaam}"
+    requester = partner_request.requester
+    evening = partner_request.evening
+
+    # Create registration
+    existing = (
+        db.query(Registration)
+        .filter(
+            Registration.evening_id == partner_request.evening_id,
+            Registration.person1_id == partner_request.requester_id,
+            Registration.status != RegistrationStatus.afgemeld,
+        )
+        .first()
+    )
+    if existing:
+        existing.status = RegistrationStatus.aangemeld
+        existing.partner_naam = partner_naam
+    else:
+        db.add(Registration(
+            evening_id=partner_request.evening_id,
+            person1_id=partner_request.requester_id,
+            partner_naam=partner_naam,
+            type=RegistrationType.los,
+            status=RegistrationStatus.aangemeld,
+        ))
+
+    partner_request.status = "goedgekeurd"
+    db.commit()
+
+    if requester.email:
+        try:
+            send_partner_request_approved_email(
+                requester.email,
+                requester.voornaam,
+                evening.naam or evening.type,
+                partner_naam,
+            )
+        except Exception:
+            pass
+
+    return RedirectResponse(
+        url=f"/beheer/af-aanmeldingen/{partner_request.evening_id}?goedgekeurd=1",
+        status_code=302,
+    )
+
+
+@router.post("/verzoeken/{request_id}/afwijzen")
+async def verzoek_afwijzen(
+    request_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    partner_request = db.query(PartnerRequest).filter(PartnerRequest.id == request_id).first()
+    if partner_request and partner_request.status == "wachtend":
+        partner_request.status = "afgewezen"
+        db.commit()
+    return RedirectResponse(
+        url=f"/beheer/af-aanmeldingen/{partner_request.evening_id}?afgewezen=1",
+        status_code=302,
+    )

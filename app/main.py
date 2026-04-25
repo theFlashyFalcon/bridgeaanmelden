@@ -18,19 +18,46 @@ Base.metadata.create_all(bind=engine)
 # Seed default admin email-role assignment
 def _seed_admin():
     from app.database import SessionLocal
-    from app.models import EmailRoleAssignment, MemberRole
+    from app.models import EmailRoleAssignment, Member, MemberRole
 
     db = SessionLocal()
     try:
-        admin_email = "marieke@summadigita.com"
-        exists = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == admin_email).first()
-        if not exists:
+        admin_email = os.getenv("ADMIN_EMAIL", "marieke@summadigita.com")
+
+        assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == admin_email).first()
+        if assignment:
+            assignment.role = MemberRole.admin
+        else:
             db.add(EmailRoleAssignment(email=admin_email, role=MemberRole.admin))
-            db.commit()
+
+        member = db.query(Member).filter(Member.email == admin_email).first()
+        if member and member.role != MemberRole.admin:
+            member.role = MemberRole.admin
+
+        db.commit()
     finally:
         db.close()
 
 _seed_admin()
+
+
+def _migrate():
+    from sqlalchemy import text
+    from app.database import engine
+
+    migrations = [
+        "ALTER TABLE registrations ADD COLUMN partner_naam TEXT",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                pass  # column/table already exists
+
+
+_migrate()
 
 app = FastAPI(title="Bridge Club Aanmeldingsapp", docs_url=None, redoc_url=None)
 

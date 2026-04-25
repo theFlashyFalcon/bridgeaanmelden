@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Af/aanmeldingen — Bridge Club{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Af/aanmeldingen beheren</h1>
+  <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
+    Selecteer een avond om aanmeldingen te bekijken en partnerkoppelingen te beheren.
+  </p>
+
+  {% if evenings %}
+    <ul class="participant-list">
+      {% for e in evenings %}
+        <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <span>
+            {{ e.datum.strftime('%d %B %Y') }} — {{ e.naam or e.type }}
+            {% set n = open_requests.get(e.id, 0) %}
+            {% if n > 0 %}
+              <span class="badge badge-warning" style="margin-left:.5rem;">{{ n }} verzoek{{ 'en' if n != 1 else '' }}</span>
+            {% endif %}
+          </span>
+          <a href="/beheer/af-aanmeldingen/{{ e.id }}" class="btn btn-secondary btn-sm">Bekijken</a>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty-state">Geen komende avonden gevonden.</p>
+  {% endif %}
+</section>
+{% endblock %}

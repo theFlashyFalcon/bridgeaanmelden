@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_auth
@@ -11,7 +12,9 @@ from app.database import get_db
 from app.models import (
     ClubEvening,
     EveningType,
+    Lid,
     Member,
+    PartnerRequest,
     Registration,
     RegistrationStatus,
     RegistrationType,
@@ -20,12 +23,6 @@ from app.models import (
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
-
-
-def _get_partner(current_user: Member, reg: Registration) -> Member | None:
-    if reg.person1_id == current_user.id:
-        return reg.person2
-    return reg.person1
 
 
 # ── Per-evenement aanmelden ───────────────────────────────────────────────────
@@ -46,22 +43,19 @@ async def registration_form(
         .filter(
             Registration.evening_id == event_id,
             Registration.person1_id == current_user.id,
-        )
-        .first()
-    ) or (
-        db.query(Registration)
-        .filter(
-            Registration.evening_id == event_id,
-            Registration.person2_id == current_user.id,
+            Registration.status != RegistrationStatus.afgemeld,
         )
         .first()
     )
 
-    members = (
-        db.query(Member)
-        .filter(Member.id != current_user.id)
-        .order_by(Member.achternaam, Member.voornaam)
-        .all()
+    pending_request = (
+        db.query(PartnerRequest)
+        .filter(
+            PartnerRequest.evening_id == event_id,
+            PartnerRequest.requester_id == current_user.id,
+            PartnerRequest.status == "wachtend",
+        )
+        .first()
     )
 
     return templates.TemplateResponse(
@@ -71,7 +65,7 @@ async def registration_form(
             "current_user": current_user,
             "evening": evening,
             "existing": existing,
-            "members": members,
+            "pending_request": pending_request,
         },
     )
 
@@ -89,14 +83,15 @@ async def registration_submit(
 
     form = await request.form()
     action = form.get("action", "aanmelden")
-    partner_id_str = form.get("partner_id", "")
-    partner_id = int(partner_id_str) if partner_id_str else None
+    partner_voornaam = form.get("partner_voornaam", "").strip()
+    partner_achternaam = form.get("partner_achternaam", "").strip()
 
     existing = (
         db.query(Registration)
         .filter(
             Registration.evening_id == event_id,
             Registration.person1_id == current_user.id,
+            Registration.status != RegistrationStatus.afgemeld,
         )
         .first()
     )
@@ -104,24 +99,77 @@ async def registration_submit(
     if action == "afmelden":
         if existing:
             existing.status = RegistrationStatus.afgemeld
-            existing.person2_id = None
+            existing.partner_naam = None
             db.commit()
+        # Also cancel pending partner request
+        db.query(PartnerRequest).filter(
+            PartnerRequest.evening_id == event_id,
+            PartnerRequest.requester_id == current_user.id,
+            PartnerRequest.status == "wachtend",
+        ).delete()
+        db.commit()
         return RedirectResponse(url="/", status_code=302)
 
-    if existing:
-        existing.status = RegistrationStatus.aangemeld
-        existing.person2_id = partner_id
-    else:
-        db.add(Registration(
-            evening_id=event_id,
-            person1_id=current_user.id,
-            person2_id=partner_id,
-            type=RegistrationType.los,
-            status=RegistrationStatus.aangemeld,
-        ))
+    # Determine partner name and status
+    if partner_voornaam and partner_achternaam:
+        partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
-    db.commit()
-    return RedirectResponse(url="/", status_code=302)
+        lid = (
+            db.query(Lid)
+            .filter(
+                func.lower(Lid.voornaam) == partner_voornaam.lower(),
+                func.lower(Lid.achternaam) == partner_achternaam.lower(),
+            )
+            .first()
+        )
+
+        if lid:
+            # Partner found in leden DB → direct registration
+            if existing:
+                existing.status = RegistrationStatus.aangemeld
+                existing.partner_naam = partner_naam
+            else:
+                db.add(Registration(
+                    evening_id=event_id,
+                    person1_id=current_user.id,
+                    partner_naam=partner_naam,
+                    type=RegistrationType.los,
+                    status=RegistrationStatus.aangemeld,
+                ))
+            db.commit()
+            return RedirectResponse(url="/?bevestigd=1", status_code=302)
+        else:
+            # Partner not in leden DB → create partner request
+            # Remove existing pending request first
+            db.query(PartnerRequest).filter(
+                PartnerRequest.evening_id == event_id,
+                PartnerRequest.requester_id == current_user.id,
+                PartnerRequest.status == "wachtend",
+            ).delete()
+            db.add(PartnerRequest(
+                evening_id=event_id,
+                requester_id=current_user.id,
+                partner_voornaam=partner_voornaam,
+                partner_achternaam=partner_achternaam,
+            ))
+            db.commit()
+            return RedirectResponse(url="/?verzoek_ingediend=1", status_code=302)
+    else:
+        # Solo registration
+        reg_status = RegistrationStatus.beschikbaar_solo
+        if existing:
+            existing.status = reg_status
+            existing.partner_naam = None
+        else:
+            db.add(Registration(
+                evening_id=event_id,
+                person1_id=current_user.id,
+                partner_naam=None,
+                type=RegistrationType.los,
+                status=reg_status,
+            ))
+        db.commit()
+        return RedirectResponse(url="/?bevestigd=1", status_code=302)
 
 
 # ── Instellingen / bulk aanmelden ─────────────────────────────────────────────
@@ -145,20 +193,12 @@ async def instellingen_form(
         .all()
     )
 
-    members = (
-        db.query(Member)
-        .filter(Member.id != current_user.id)
-        .order_by(Member.achternaam, Member.voornaam)
-        .all()
-    )
-
     return templates.TemplateResponse(
         request,
         "registrations/instellingen.html",
         {
             "current_user": current_user,
             "upcoming_clubavonden": upcoming_clubavonden,
-            "members": members,
         },
     )
 
@@ -170,8 +210,21 @@ async def instellingen_submit(
     current_user: Member = Depends(require_auth),
 ):
     form = await request.form()
-    partner_id_str = form.get("partner_id", "")
-    partner_id = int(partner_id_str) if partner_id_str else None
+    partner_voornaam = form.get("partner_voornaam", "").strip()
+    partner_achternaam = form.get("partner_achternaam", "").strip()
+
+    partner_naam = None
+    if partner_voornaam and partner_achternaam:
+        lid = (
+            db.query(Lid)
+            .filter(
+                func.lower(Lid.voornaam) == partner_voornaam.lower(),
+                func.lower(Lid.achternaam) == partner_achternaam.lower(),
+            )
+            .first()
+        )
+        if lid:
+            partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
     today = date.today()
     upcoming_clubavonden = (
@@ -197,12 +250,13 @@ async def instellingen_submit(
             .first()
         )
         if not existing:
+            status = RegistrationStatus.aangemeld if partner_naam else RegistrationStatus.beschikbaar_solo
             db.add(Registration(
                 evening_id=evening.id,
                 person1_id=current_user.id,
-                person2_id=partner_id,
+                partner_naam=partner_naam,
                 type=RegistrationType.vast,
-                status=RegistrationStatus.aangemeld,
+                status=status,
             ))
             count += 1
 

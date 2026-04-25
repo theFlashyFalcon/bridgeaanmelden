@@ -15,20 +15,24 @@
     </p>
     <ul class="participant-list" style="margin-bottom:1rem;">
       {% for e in upcoming_clubavonden %}
-        <li class="participant-item">{{ e.datum.strftime('%-d %B %Y') }} — {{ e.naam or 'Clubavond' }}</li>
+        <li class="participant-item">{{ e.datum.strftime('%d %B %Y') }} — {{ e.naam or 'Clubavond' }}</li>
       {% endfor %}
     </ul>
 
     <form method="post" action="/instellingen" class="form-stack">
-      <div class="form-group">
-        <label for="partner_id">Vaste partner (optioneel)</label>
-        <select id="partner_id" name="partner_id" class="form-select">
-          <option value="">— Geen partner —</option>
-          {% for m in members %}
-            <option value="{{ m.id }}">{{ m.voornaam }} {{ m.achternaam }}</option>
-          {% endfor %}
-        </select>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="partner_voornaam">Voornaam vaste partner <span class="form-hint">(optioneel)</span></label>
+          <input type="text" id="partner_voornaam" name="partner_voornaam" autocomplete="off" placeholder="Voornaam">
+        </div>
+        <div class="form-group">
+          <label for="partner_achternaam">Achternaam vaste partner</label>
+          <input type="text" id="partner_achternaam" name="partner_achternaam" autocomplete="off" placeholder="Achternaam">
+        </div>
       </div>
+      <p style="font-size:.8rem;color:var(--color-muted);">
+        De partner moet in de ledenlijst staan. Als de naam niet wordt herkend, wordt zonder partner aangemeld.
+      </p>
       <div class="action-buttons">
         <button type="submit" class="btn btn-primary">Aanmelden voor alle clubavonden</button>
         <a href="/" class="btn btn-secondary">Annuleren</a>

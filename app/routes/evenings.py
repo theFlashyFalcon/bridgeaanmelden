@@ -10,6 +10,7 @@ from app.auth import get_current_user, require_auth
 from app.database import get_db
 from app.models import (
     ClubEvening,
+    ManualPair,
     Member,
     Registration,
     RegistrationStatus,
@@ -31,7 +32,7 @@ async def index(
     evenings = (
         db.query(ClubEvening)
         .join(Season)
-        .filter(ClubEvening.datum >= today, Season.actief == True)  # noqa: E712
+        .filter(ClubEvening.datum >= today)
         .order_by(ClubEvening.datum)
         .limit(30)
         .all()
@@ -99,6 +100,12 @@ async def deelnemers(
         .all()
     )
 
+    manual_pairs = (
+        db.query(ManualPair)
+        .filter(ManualPair.evening_id == event_id)
+        .all()
+    )
+
     return templates.TemplateResponse(
         request,
         "deelnemers.html",
@@ -106,5 +113,6 @@ async def deelnemers(
             "current_user": current_user,
             "evening": evening,
             "registrations": registrations,
+            "manual_pairs": manual_pairs,
         },
     )

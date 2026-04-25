@@ -160,6 +160,42 @@ class EmailRoleAssignment(Base):
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
 
 
+class Lid(Base):
+    __tablename__ = "leden"
+
+    id = Column(Integer, primary_key=True, index=True)
+    voornaam = Column(String, nullable=False)
+    achternaam = Column(String, nullable=False)
+    nbb_nummer = Column(String, nullable=True, unique=True, index=True)
+
+
+class PartnerRequest(Base):
+    __tablename__ = "partner_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    evening_id = Column(Integer, ForeignKey("club_evenings.id"), nullable=False)
+    requester_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    partner_voornaam = Column(String, nullable=False)
+    partner_achternaam = Column(String, nullable=False)
+    status = Column(String, default="wachtend", nullable=False)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+
+    evening = relationship("ClubEvening")
+    requester = relationship("Member")
+
+
+class ManualPair(Base):
+    __tablename__ = "manual_pairs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    evening_id = Column(Integer, ForeignKey("club_evenings.id"), nullable=False)
+    naam_1 = Column(String, nullable=False)
+    naam_2 = Column(String, nullable=False)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+
+    evening = relationship("ClubEvening")
+
+
 class Registration(Base):
     __tablename__ = "registrations"
 
@@ -167,6 +203,7 @@ class Registration(Base):
     evening_id = Column(Integer, ForeignKey("club_evenings.id"), nullable=False)
     person1_id = Column(Integer, ForeignKey("members.id"), nullable=False)
     person2_id = Column(Integer, ForeignKey("members.id"), nullable=True)
+    partner_naam = Column(String, nullable=True)
     type = Column(String, nullable=False)
     status = Column(String, default=RegistrationStatus.aangemeld, nullable=False)
     substitute_name = Column(Text, nullable=True)

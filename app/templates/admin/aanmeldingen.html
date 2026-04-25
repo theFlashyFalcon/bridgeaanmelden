@@ -10,7 +10,7 @@
         <li class="participant-item">
           <a href="/beheer/aanmeldingen/{{ e.id }}" style="display:flex; justify-content:space-between; align-items:center; text-decoration:none; color:inherit;">
             <span>
-              <span style="font-weight:600;">{{ e.datum.strftime('%-d %B %Y') }}</span>
+              <span style="font-weight:600;">{{ e.datum.strftime('%d %B %Y') }}</span>
               &nbsp;—&nbsp;{{ e.naam or e.type }}
             </span>
             <span class="event-label label-{{ e.type | replace(' ', '-') }}">{{ e.type }}</span>

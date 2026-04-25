@@ -1,69 +1,28 @@
 {% extends "base.html" %}
 
-{% block title %}Agenda — Bridge Club{% endblock %}
+{% block title %}Agenda — Crash{% endblock %}
 
 {% block content %}
 
-{% if request.query_params.get('bulk_ok') %}
+{% if request.query_params.get('bevestigd') %}
+  <div class="alert alert-success">Wijzigingen bevestigd.</div>
+{% elif request.query_params.get('bulk_ok') %}
   {% set n = request.query_params.get('bulk_ok') %}
   <div class="alert alert-success">
     Je bent aangemeld voor {{ n }} komende clubavond{{ 'en' if n|int != 1 else '' }}.
   </div>
+{% elif request.query_params.get('verzoek_ingediend') %}
+  <div class="alert alert-info">
+    Je verzoek is ingediend. De wedstrijdleider beoordeelt de partnerkoppeling.
+  </div>
 {% endif %}
 
 <section class="page-header">
-  <h1>&#9824; Bridge Club</h1>
+  <h1>&#9824; Crash</h1>
   {% if current_user %}
     <p class="subtitle">Welkom, {{ current_user.voornaam }}</p>
   {% endif %}
 </section>
-
-{% if evenings %}
-  {% for evening in evenings %}
-    {% set reg = user_regs.get(evening.id) %}
-    <section class="card event-card">
-      <div class="event-header">
-        <div>
-          <div class="event-date">{{ evening.datum.strftime('%A %-d %B %Y') }}</div>
-          <div class="event-name">{{ evening.naam or evening.type }}</div>
-        </div>
-        <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
-      </div>
-
-      {% if current_user %}
-        {% if reg %}
-          <div class="event-status event-status--aangemeld">
-            &#10003; Aangemeld
-            {% if reg.person1_id == current_user.id and reg.person2 %}
-              &nbsp;&middot;&nbsp; partner: <strong>{{ reg.person2.voornaam }} {{ reg.person2.achternaam }}</strong>
-            {% elif reg.person2_id == current_user.id and reg.person1 %}
-              &nbsp;&middot;&nbsp; partner: <strong>{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</strong>
-            {% else %}
-              &nbsp;&middot;&nbsp; <em>zonder partner</em>
-            {% endif %}
-          </div>
-        {% else %}
-          <div class="event-status event-status--niet">
-            Niet aangemeld
-          </div>
-        {% endif %}
-      {% endif %}
-
-      <div class="event-actions">
-        <a href="/deelnemers/{{ evening.id }}" class="btn btn-secondary btn-sm">Deelnemers</a>
-        {% if current_user %}
-          <a href="/aanmelden/{{ evening.id }}" class="btn btn-primary btn-sm">
-            {% if reg %}Wijzigen{% else %}Aanmelden{% endif %}
-          </a>
-        {% endif %}
-      </div>
-    </section>
-  {% endfor %}
-{% else %}
-  <section class="card">
-    <p class="empty-state">Er zijn geen komende evenementen gepland.</p>
-  </section>
-{% endif %}
 
 {% if not current_user %}
   <section class="card account-options">
@@ -82,6 +41,54 @@
       </div>
       <a href="/registreren" class="btn btn-secondary">Account aanmaken</a>
     </div>
+  </section>
+{% endif %}
+
+{% if evenings %}
+  {% for evening in evenings %}
+    {% set reg = user_regs.get(evening.id) %}
+    <section class="card event-card">
+      <div class="event-header">
+        <div>
+          <div class="event-date">{{ evening.datum.strftime('%A %d %B %Y') }}</div>
+          <div class="event-name">{{ evening.naam or evening.type }}</div>
+        </div>
+        <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
+      </div>
+
+      {% if current_user %}
+        {% if reg %}
+          <div class="event-status event-status--aangemeld">
+            &#10003; Aangemeld
+            {% if reg.partner_naam %}
+              &nbsp;&middot;&nbsp; partner: <strong>{{ reg.partner_naam }}</strong>
+            {% elif reg.person1_id == current_user.id and reg.person2 %}
+              &nbsp;&middot;&nbsp; partner: <strong>{{ reg.person2.voornaam }} {{ reg.person2.achternaam }}</strong>
+            {% elif reg.person2_id == current_user.id and reg.person1 %}
+              &nbsp;&middot;&nbsp; partner: <strong>{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</strong>
+            {% else %}
+              &nbsp;&middot;&nbsp; <em>zonder partner</em>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="event-status event-status--niet">
+            Niet aangemeld
+          </div>
+        {% endif %}
+      {% endif %}
+
+      <div class="event-actions">
+        {% if current_user %}
+          <a href="/aanmelden/{{ evening.id }}" class="btn btn-primary btn-sm">
+            {% if reg %}Wijzigen{% else %}Aanmelden{% endif %}
+          </a>
+        {% endif %}
+      </div>
+    </section>
+  {% endfor %}
+{% else %}
+  <section class="card">
+    <p class="empty-state">Er zijn geen komende evenementen gepland.</p>
   </section>
 {% endif %}
 

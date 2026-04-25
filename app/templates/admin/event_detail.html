@@ -5,7 +5,7 @@
 <section class="page-header">
   <h1>{{ evening.naam or evening.type }}</h1>
   <p class="subtitle">
-    {{ evening.datum.strftime('%A %-d %B %Y') }} &middot;
+    {{ evening.datum.strftime('%A %d %B %Y') }} &middot;
     <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
   </p>
 </section>
@@ -77,7 +77,7 @@
             {% endif %}
           </td>
           <td style="font-size:.85rem;color:var(--color-muted);">
-            {{ reg.gewijzigd_op.strftime('%-d %b %H:%M') }}
+            {{ reg.gewijzigd_op.strftime('%d %b %H:%M') }}
           </td>
         </tr>
         {% endfor %}

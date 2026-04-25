@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Ledenlijst — Bridge Club{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Ledenlijst <span class="badge">{{ leden | length }}</span></h1>
+
+  {% if request.query_params.get('toegevoegd') %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">Lid toegevoegd.</div>
+  {% elif request.query_params.get('verwijderd') %}
+    <div class="alert alert-info" style="margin-bottom:1rem;">Lid verwijderd.</div>
+  {% endif %}
+
+  <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
+    Dit is de lijst met bridge-clubleden. Leden hier kunnen als partner worden opgegeven bij aanmelding.
+  </p>
+
+  <h2 style="margin-top:1.25rem;">Lid toevoegen</h2>
+  <form method="post" action="/beheer/leden" class="form-stack" style="margin-bottom:1.5rem;">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="voornaam">Voornaam</label>
+        <input type="text" id="voornaam" name="voornaam" required autocomplete="off" placeholder="Voornaam">
+      </div>
+      <div class="form-group">
+        <label for="achternaam">Achternaam</label>
+        <input type="text" id="achternaam" name="achternaam" required autocomplete="off" placeholder="Achternaam">
+      </div>
+      <div class="form-group">
+        <label for="nbb_nummer">NBB-nummer <span class="form-hint">(optioneel)</span></label>
+        <input type="text" id="nbb_nummer" name="nbb_nummer" autocomplete="off" placeholder="bijv. 1234567">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Toevoegen</button>
+  </form>
+
+  {% if leden %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Voornaam</th>
+          <th>Achternaam</th>
+          <th>NBB-nummer</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for lid in leden %}
+        <tr>
+          <td>{{ lid.voornaam }}</td>
+          <td>{{ lid.achternaam }}</td>
+          <td>{{ lid.nbb_nummer or '—' }}</td>
+          <td style="text-align:right;">
+            <form method="post" action="/beheer/leden/{{ lid.id }}/verwijder"
+                  onsubmit="return confirm('Lid verwijderen?')">
+              <button type="submit" class="btn btn-danger" style="padding:.2rem .5rem;font-size:.8rem;">Verwijderen</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-state">Nog geen leden toegevoegd.</p>
+  {% endif %}
+</section>
+{% endblock %}

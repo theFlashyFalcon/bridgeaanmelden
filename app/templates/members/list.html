@@ -8,18 +8,20 @@
     <table class="data-table">
       <thead>
         <tr>
-          <th>Naam</th>
-          <th>E-mail</th>
-          <th>Lidnummer</th>
-          <th>Label</th>
+          <th>Voornaam</th>
+          <th>Achternaam</th>
+          <th>NBB-nummer</th>
+          <th>E-mailadres</th>
+          <th>Rol</th>
         </tr>
       </thead>
       <tbody>
         {% for m in members %}
         <tr>
-          <td>{{ m.voornaam }} {{ m.achternaam }}</td>
+          <td>{{ m.voornaam }}</td>
+          <td>{{ m.achternaam }}</td>
+          <td>{{ m.lidnummer or '—' }}</td>
           <td>{{ m.email or '—' }}</td>
-          <td>{{ m.lidnummer }}</td>
           <td><span class="role-badge role-{{ m.role }}">{{ m.role }}</span></td>
         </tr>
         {% endfor %}

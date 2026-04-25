@@ -62,12 +62,12 @@ def require_role(*roles: str):
 def require_wedstrijdleider(
     current_user: Member = Depends(require_auth),
 ) -> Member:
-    if current_user.role not in (MemberRole.wedstrijdleider, MemberRole.admin):
+    if current_user.role not in (MemberRole.wedstrijdleider.value, MemberRole.admin.value):
         raise HTTPException(status_code=403, detail="Geen toegang")
     return current_user
 
 
 def require_admin(current_user: Member = Depends(require_auth)) -> Member:
-    if current_user.role != MemberRole.admin:
+    if current_user.role != MemberRole.admin.value:
         raise HTTPException(status_code=403, detail="Geen toegang")
     return current_user

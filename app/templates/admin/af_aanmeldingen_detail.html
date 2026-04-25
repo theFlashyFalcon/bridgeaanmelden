@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}{{ evening.naam or evening.type }} — Af/aanmeldingen — Bridge Club{% endblock %}
+{% block content %}
+
+<section class="page-header">
+  <h1>{{ evening.naam or evening.type }}</h1>
+  <p class="subtitle">{{ evening.datum.strftime('%A %d %B %Y') }}</p>
+</section>
+
+{% if request.query_params.get('toegevoegd') %}
+  <div class="alert alert-success">Paar handmatig toegevoegd.</div>
+{% elif request.query_params.get('goedgekeurd') %}
+  <div class="alert alert-success">Verzoek goedgekeurd en aanmelding aangemaakt.</div>
+{% elif request.query_params.get('afgewezen') %}
+  <div class="alert alert-info">Verzoek afgewezen.</div>
+{% endif %}
+
+<div class="afd-grid">
+
+  <!-- Kolom 1: Aanmeldingen -->
+  <section class="card">
+    <h2>Aanmeldingen <span class="badge">{{ aangemeld | length + manual_pairs | length }}</span></h2>
+
+    {% if aangemeld or manual_pairs %}
+      <ul class="participant-list">
+        {% for reg in aangemeld | sort(attribute='person1.achternaam') %}
+          <li class="participant-item">
+            {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+            {% if reg.partner_naam %}
+              &amp; {{ reg.partner_naam }}
+            {% elif reg.person2 %}
+              &amp; {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+            {% else %}
+              <em style="color:var(--color-muted);font-size:.85rem;"> — solo</em>
+            {% endif %}
+          </li>
+        {% endfor %}
+        {% for pair in manual_pairs %}
+          <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+            <span>
+              {{ pair.naam_1 }} &amp; {{ pair.naam_2 }}
+              <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
+            </span>
+            <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/manual/{{ pair.id }}/verwijder"
+                  onsubmit="return confirm('Paar verwijderen?')" style="flex-shrink:0;">
+              <button type="submit" class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;">✕</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-state">Nog geen aanmeldingen.</p>
+    {% endif %}
+
+    <h3 style="margin-top:1.25rem;font-size:1rem;">Paar handmatig toevoegen</h3>
+    <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/toevoegen" class="form-stack">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="naam_1">Naam speler 1</label>
+          <input type="text" id="naam_1" name="naam_1" required autocomplete="off" placeholder="Volledige naam">
+        </div>
+        <div class="form-group">
+          <label for="naam_2">Naam speler 2</label>
+          <input type="text" id="naam_2" name="naam_2" required autocomplete="off" placeholder="Volledige naam">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Toevoegen</button>
+    </form>
+  </section>
+
+  <!-- Kolom 2: Afmeldingen & Loslopers -->
+  <section class="card">
+    <h2>Afmeldingen <span class="badge">{{ afgemeld | length }}</span></h2>
+    {% if afgemeld %}
+      <ul class="participant-list">
+        {% for reg in afgemeld | sort(attribute='person1.achternaam') %}
+          <li class="participant-item">
+            {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-state">Geen afmeldingen.</p>
+    {% endif %}
+
+    {% set solo_list = [] %}
+    {% for reg in aangemeld %}
+      {% if not reg.partner_naam and not reg.person2_id %}
+        {% set _ = solo_list.append(reg) %}
+      {% endif %}
+    {% endfor %}
+
+    {% if solo_list %}
+      <h2 style="margin-top:1.5rem;">Loslopers <span class="badge">{{ solo_list | length }}</span></h2>
+      <ul class="participant-list">
+        {% for reg in solo_list | sort(attribute='person1.achternaam') %}
+          <li class="participant-item">
+            {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+
+  <!-- Kolom 3: Verzoeken -->
+  <section class="card">
+    <h2>Partnerverzoeken
+      {% set wachtend_count = verzoeken | selectattr('status', 'equalto', 'wachtend') | list | length %}
+      {% if wachtend_count > 0 %}
+        <span class="badge badge-warning">{{ wachtend_count }} nieuw</span>
+      {% endif %}
+    </h2>
+
+    {% if verzoeken %}
+      <ul class="participant-list" style="gap:.75rem;">
+        {% for v in verzoeken %}
+          <li class="participant-item" style="flex-direction:column;align-items:flex-start;gap:.35rem;padding:.75rem 0;">
+            <div>
+              <strong>{{ v.requester.voornaam }} {{ v.requester.achternaam }}</strong>
+              vraagt om partner:
+              <strong>{{ v.partner_voornaam }} {{ v.partner_achternaam }}</strong>
+            </div>
+            <div style="font-size:.8rem;color:var(--color-muted);">
+              {{ v.aangemaakt_op.strftime('%d-%m-%Y %H:%M') }}
+            </div>
+            {% if v.status == 'wachtend' %}
+              <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
+                <form method="post" action="/beheer/verzoeken/{{ v.id }}/goedkeuren">
+                  <button type="submit" class="btn btn-primary btn-sm">Goedkeuren</button>
+                </form>
+                <form method="post" action="/beheer/verzoeken/{{ v.id }}/afwijzen">
+                  <button type="submit" class="btn btn-danger btn-sm">Afwijzen</button>
+                </form>
+              </div>
+            {% elif v.status == 'goedgekeurd' %}
+              <span class="badge badge-success">Goedgekeurd</span>
+            {% else %}
+              <span class="badge" style="background:var(--color-muted);">Afgewezen</span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-state">Geen partnerverzoeken.</p>
+    {% endif %}
+  </section>
+
+</div>
+
+<div class="action-buttons" style="margin-top:1rem;">
+  <a href="/beheer/af-aanmeldingen" class="btn btn-secondary">Terug naar overzicht</a>
+</div>
+
+{% endblock %}

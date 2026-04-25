@@ -104,7 +104,7 @@
       <tbody>
         {% for e in evenings %}
         <tr>
-          <td style="white-space:nowrap;">{{ e.datum.strftime('%-d %b %Y') }}</td>
+          <td style="white-space:nowrap;">{{ e.datum.strftime('%d %b %Y') }}</td>
           <td>{{ e.naam or '—' }}</td>
           <td><span class="event-label label-{{ e.type | replace(' ', '-') }}">{{ e.type }}</span></td>
           <td style="font-size:.85rem;color:var(--color-muted);">{{ e.season.naam }}</td>
@@ -138,8 +138,8 @@
       {% for s in seasons %}
       <tr>
         <td>{{ s.naam }}</td>
-        <td>{{ s.start_datum.strftime('%-d %b %Y') }}</td>
-        <td>{{ s.eind_datum.strftime('%-d %b %Y') }}</td>
+        <td>{{ s.start_datum.strftime('%d %b %Y') }}</td>
+        <td>{{ s.eind_datum.strftime('%d %b %Y') }}</td>
         <td>
           {% if s.actief %}
             <span class="badge badge-success">Actief</span>
