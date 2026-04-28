@@ -7,6 +7,12 @@
     Stuur een uitnodigingslink naar een nieuw lid. De ontvanger kan direct een account aanmaken en inloggen.
   </p>
 
+  {% if not smtp_ok %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">
+      <strong>Let op:</strong> SMTP is niet geconfigureerd. Uitnodigingen worden aangemaakt maar e-mails worden <em>niet</em> verstuurd. Stel <code>SMTP_HOST</code> en <code>SMTP_USER</code> in via .env.
+    </div>
+  {% endif %}
+
   {% if request.query_params.get('verstuurd') %}
     <div class="alert alert-success">Uitnodiging aangemaakt en e-mail verstuurd.</div>
   {% elif request.query_params.get('aangemaakt') %}

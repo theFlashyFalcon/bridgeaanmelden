@@ -99,6 +99,16 @@
         el.classList.remove('is-open');
       }, 200);
     });
+    el.querySelector('.nav-dropdown-toggle').addEventListener('click', function(e) {
+      e.stopPropagation();
+      el.classList.toggle('is-open');
+    });
+  });
+
+  document.addEventListener('click', function() {
+    document.querySelectorAll('.nav-dropdown').forEach(function(el) {
+      el.classList.remove('is-open');
+    });
   });
 </script>
 

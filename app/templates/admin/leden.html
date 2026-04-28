@@ -8,11 +8,32 @@
     <div class="alert alert-success" style="margin-bottom:1rem;">Lid toegevoegd.</div>
   {% elif request.query_params.get('verwijderd') %}
     <div class="alert alert-info" style="margin-bottom:1rem;">Lid verwijderd.</div>
+  {% elif request.query_params.get('import_ok') is not none and request.query_params.get('import_ok') != '' %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">
+      Import klaar: <strong>{{ request.query_params.get('import_ok') }}</strong> leden toegevoegd,
+      {{ request.query_params.get('overgeslagen', '0') }} overgeslagen (al aanwezig of onvolledig).
+    </div>
+  {% elif request.query_params.get('import_fout') %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">Upload mislukt. Kies een geldig CSV-bestand.</div>
   {% endif %}
 
   <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
     Dit is de lijst met bridge-clubleden. Leden hier kunnen als partner worden opgegeven bij aanmelding.
   </p>
+
+  <h2 style="margin-top:1.25rem;">Importeer via CSV</h2>
+  <p style="color:var(--color-muted);font-size:.85rem;margin-bottom:.75rem;">
+    Upload een CSV-bestand met kolommen <code>voornaam</code>, <code>achternaam</code> en optioneel <code>nbb_nummer</code>.
+    Bestaande leden worden overgeslagen.
+  </p>
+  <form method="post" action="/beheer/leden/importeer" enctype="multipart/form-data"
+        class="form-stack" style="margin-bottom:1.5rem;">
+    <div class="form-group">
+      <label for="bestand">CSV-bestand</label>
+      <input type="file" id="bestand" name="bestand" accept=".csv,text/csv" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Importeer</button>
+  </form>
 
   <h2 style="margin-top:1.25rem;">Lid toevoegen</h2>
   <form method="post" action="/beheer/leden" class="form-stack" style="margin-bottom:1.5rem;">

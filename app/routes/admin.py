@@ -1,8 +1,11 @@
+import logging
 import os
 import secrets
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 
@@ -392,6 +395,7 @@ async def uitnodigingen(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
+    from app.email import smtp_geconfigureerd
     invitations = db.query(Invitation).order_by(Invitation.aangemaakt_op.desc()).all()
     return templates.TemplateResponse(
         request,
@@ -400,6 +404,7 @@ async def uitnodigingen(
             "current_user": current_user,
             "invitations": invitations,
             "roles": [r.value for r in MemberRole],
+            "smtp_ok": smtp_geconfigureerd(),
         },
     )
 
@@ -437,6 +442,7 @@ async def create_invitation(
         send_invitation_email(email, invite_url)
         return RedirectResponse(url="/beheer/uitnodigingen?verstuurd=1", status_code=302)
     except Exception:
+        logger.exception("E-mail versturen mislukt voor uitnodiging naar %s", email)
         return RedirectResponse(
             url=f"/beheer/uitnodigingen?aangemaakt=1&email_fout=1&token={token}",
             status_code=302,
@@ -457,6 +463,7 @@ async def aanvragen_list(
         .all()
     )
     pending_count = sum(1 for a in aanvragen if a.status == AccountRequestStatus.wachtend)
+    from app.email import smtp_geconfigureerd
     return templates.TemplateResponse(
         request,
         "admin/aanvragen.html",
@@ -465,6 +472,7 @@ async def aanvragen_list(
             "aanvragen": aanvragen,
             "pending_count": pending_count,
             "roles": [r.value for r in MemberRole],
+            "smtp_ok": smtp_geconfigureerd(),
         },
     )
 
@@ -505,6 +513,7 @@ async def aanvraag_goedkeuren(
             send_approval_email(aanvraag.email, aanvraag.voornaam, f"{base}/login")
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1", status_code=302)
         except Exception:
+            logger.exception("E-mail versturen mislukt bij goedkeuren aanvraag %s", aanvraag.email)
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1&email_fout=1", status_code=302)
     else:
         # Legacy: send invite link
@@ -524,6 +533,7 @@ async def aanvraag_goedkeuren(
             send_invitation_email(aanvraag.email, invite_url)
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1", status_code=302)
         except Exception:
+            logger.exception("Uitnodigingsmail mislukt voor aanvraag %s", aanvraag.email)
             return RedirectResponse(
                 url=f"/beheer/aanvragen?goedgekeurd=1&email_fout=1&token={token}",
                 status_code=302,
@@ -651,6 +661,53 @@ async def lid_verwijder(
         db.delete(lid)
         db.commit()
     return RedirectResponse(url="/beheer/leden?verwijderd=1", status_code=302)
+
+
+@router.post("/leden/importeer")
+async def leden_importeer(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    import csv
+    import io
+
+    form = await request.form()
+    bestand = form.get("bestand")
+    if not bestand or not bestand.filename:
+        return RedirectResponse(url="/beheer/leden?import_fout=1", status_code=302)
+
+    inhoud = await bestand.read()
+    try:
+        tekst = inhoud.decode("utf-8-sig")  # utf-8-sig handles Excel BOM
+    except UnicodeDecodeError:
+        tekst = inhoud.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(tekst))
+    toegevoegd = 0
+    overgeslagen = 0
+    for rij in reader:
+        voornaam = (rij.get("voornaam") or rij.get("Voornaam") or "").strip()
+        achternaam = (rij.get("achternaam") or rij.get("Achternaam") or "").strip()
+        nbb = (rij.get("nbb_nummer") or rij.get("NBB") or rij.get("nbb") or "").strip() or None
+        if not voornaam or not achternaam:
+            overgeslagen += 1
+            continue
+        al_aanwezig = (
+            db.query(Lid)
+            .filter(
+                func.lower(Lid.voornaam) == voornaam.lower(),
+                func.lower(Lid.achternaam) == achternaam.lower(),
+            )
+            .first()
+        )
+        if not al_aanwezig:
+            db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb))
+            toegevoegd += 1
+        else:
+            overgeslagen += 1
+    db.commit()
+    return RedirectResponse(url=f"/beheer/leden?import_ok={toegevoegd}&overgeslagen={overgeslagen}", status_code=302)
 
 
 # ── Af/aanmeldingen beheren (Wedstrijdleider + Admin) ────────────────────────
@@ -822,7 +879,7 @@ async def verzoek_goedkeuren(
                 partner_naam,
             )
         except Exception:
-            pass
+            logger.exception("E-mail versturen mislukt bij goedkeuren partnerverzoek voor %s", requester.email)
 
     return RedirectResponse(
         url=f"/beheer/af-aanmeldingen/{partner_request.evening_id}?goedgekeurd=1",
