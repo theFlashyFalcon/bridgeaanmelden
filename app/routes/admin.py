@@ -501,7 +501,8 @@ async def aanvraag_goedkeuren(
         db.add(member)
         db.commit()
         try:
-            send_approval_email(aanvraag.email, aanvraag.voornaam)
+            base = BASE_URL or str(request.base_url).rstrip("/")
+            send_approval_email(aanvraag.email, aanvraag.voornaam, f"{base}/login")
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1", status_code=302)
         except Exception:
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1&email_fout=1", status_code=302)

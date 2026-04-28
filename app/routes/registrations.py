@@ -28,6 +28,14 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templa
 
 # ── Per-evenement aanmelden ───────────────────────────────────────────────────
 
+_TRAINING_TYPES = {EveningType.jeugdtraining, EveningType.jeugdtraining.value,
+                   "eten voor jeugdtraining", EveningType.eten_voor_jeugdtraining}
+
+
+def _is_training(evening: ClubEvening) -> bool:
+    return evening.type in _TRAINING_TYPES
+
+
 @router.get("/aanmelden/{event_id}")
 async def registration_form(
     event_id: int,
@@ -38,6 +46,19 @@ async def registration_form(
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+
+    if _is_training(evening) and not current_user.training_eligible:
+        return templates.TemplateResponse(
+            request,
+            "registrations/start.html",
+            {
+                "current_user": current_user,
+                "evening": evening,
+                "existing": None,
+                "pending_request": None,
+                "training_niet_toegestaan": True,
+            },
+        )
 
     existing = (
         db.query(Registration)
@@ -82,6 +103,9 @@ async def registration_submit(
     if not evening:
         raise HTTPException(status_code=404)
 
+    if _is_training(evening) and not current_user.training_eligible:
+        raise HTTPException(status_code=403, detail="Geen toegang tot trainingsavonden")
+
     form = await request.form()
     action = form.get("action", "aanmelden")
     partner_voornaam = form.get("partner_voornaam", "").strip()
@@ -109,7 +133,7 @@ async def registration_submit(
             PartnerRequest.status == "wachtend",
         ).delete()
         db.commit()
-        return RedirectResponse(url="/", status_code=302)
+        return RedirectResponse(url="/?afgemeld=1", status_code=302)
 
     # Determine partner name and status
     if partner_voornaam and partner_achternaam:
@@ -194,14 +218,46 @@ async def instellingen_form(
         .all()
     )
 
+    herhalingen = (
+        db.query(RecurringRegistration)
+        .filter(
+            RecurringRegistration.member_id == current_user.id,
+            RecurringRegistration.actief == True,  # noqa: E712
+        )
+        .order_by(RecurringRegistration.aangemaakt_op)
+        .all()
+    )
+
     return templates.TemplateResponse(
         request,
         "registrations/instellingen.html",
         {
             "current_user": current_user,
             "upcoming_clubavonden": upcoming_clubavonden,
+            "herhalingen": herhalingen,
         },
     )
+
+
+@router.post("/instellingen/herhaal/{herhaal_id}/stop")
+async def herhaal_stop(
+    herhaal_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_auth),
+):
+    rr = (
+        db.query(RecurringRegistration)
+        .filter(
+            RecurringRegistration.id == herhaal_id,
+            RecurringRegistration.member_id == current_user.id,
+        )
+        .first()
+    )
+    if rr:
+        rr.actief = False
+        db.commit()
+    return RedirectResponse(url="/instellingen?herhaal_gestopt=1", status_code=302)
 
 
 @router.post("/instellingen")

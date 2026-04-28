@@ -4,13 +4,19 @@
 
 {% block content %}
 
-{% if request.query_params.get('bevestigd') %}
-  <div class="alert alert-success">Wijzigingen bevestigd.</div>
+{% if request.query_params.get('afgemeld') %}
+  <div class="alert alert-info">Je bent afgemeld.</div>
+{% elif request.query_params.get('bevestigd') %}
+  <div class="alert alert-success">Aanmelding opgeslagen.</div>
 {% elif request.query_params.get('bulk_ok') %}
   {% set n = request.query_params.get('bulk_ok') %}
-  <div class="alert alert-success">
-    Je bent aangemeld voor {{ n }} komende clubavond{{ 'en' if n|int != 1 else '' }}.
-  </div>
+  {% if n|int == 0 %}
+    <div class="alert alert-info">Je was al aangemeld voor alle komende clubavonden.</div>
+  {% else %}
+    <div class="alert alert-success">
+      Je bent aangemeld voor {{ n }} komende clubavond{{ 'en' if n|int != 1 else '' }}.
+    </div>
+  {% endif %}
 {% elif request.query_params.get('verzoek_ingediend') %}
   <div class="alert alert-info">
     Je verzoek is ingediend. De wedstrijdleider beoordeelt de partnerkoppeling.

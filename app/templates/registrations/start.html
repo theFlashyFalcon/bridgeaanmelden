@@ -5,7 +5,11 @@
   <h1>{{ evening.naam or evening.type }}</h1>
   <p class="event-meta">{{ evening.datum.strftime('%A %d %B %Y') }}</p>
 
-  {% if pending_request %}
+  {% if training_niet_toegestaan %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">
+      Je kunt je niet aanmelden voor dit evenement. Neem contact op met de wedstrijdleider als je denkt dat dit niet klopt.
+    </div>
+  {% elif pending_request %}
     <div class="alert alert-info" style="margin-bottom:1rem;">
       Je hebt een openstaand verzoek ingediend voor partner
       <strong>{{ pending_request.partner_voornaam }} {{ pending_request.partner_achternaam }}</strong>.
@@ -28,6 +32,7 @@
     </div>
   {% endif %}
 
+  {% if not training_niet_toegestaan %}
   <form method="post" action="/aanmelden/{{ evening.id }}" class="form-stack">
     <p style="color:var(--color-muted);font-size:.9rem;">
       Vul de naam van je partner in. Als je geen partner hebt, laat dan beide velden leeg.
@@ -64,6 +69,9 @@
     </div>
   </form>
 
+  {% endif %}{# einde training_niet_toegestaan guard #}
+
+  {% if not training_niet_toegestaan %}
   <div style="margin-top:1.25rem;border-top:1px solid #e0e0e0;padding-top:1rem;">
     <button type="button" class="btn btn-secondary" onclick="toggleHerhaalPaneel()">
       Herhaal mijn aanmelding
@@ -126,6 +134,8 @@
       </form>
     </div>
   </div>
+  </div>
+  {% endif %}{# einde training_niet_toegestaan guard #}
 </section>
 
 <script>

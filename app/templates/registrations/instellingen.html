@@ -1,8 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Instellingen — Bridge Club{% endblock %}
 {% block content %}
+
+{% if request.query_params.get('herhaal_gestopt') %}
+  <div class="alert alert-info">Herhaalaanmelding gestopt.</div>
+{% endif %}
+
 <section class="card">
   <h1>Instellingen</h1>
+
+  {% if herhalingen %}
+  <h2 style="margin-top:1.25rem;">Actieve herhaalaanmeldingen</h2>
+  <p style="color:var(--color-muted); font-size:.9rem; margin-bottom:1rem;">
+    Deze aanmeldingen worden automatisch toegepast op nieuwe avonden van dat type.
+  </p>
+  <ul class="participant-list" style="margin-bottom:1.5rem;">
+    {% for h in herhalingen %}
+    <li class="participant-item" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>
+        <strong>{{ h.event_type }}</strong>
+        {% if h.partner_naam %}&nbsp;&middot;&nbsp; partner: {{ h.partner_naam }}{% endif %}
+        {% if h.herhaal_tot %}&nbsp;&middot;&nbsp; t/m {{ h.herhaal_tot.strftime('%d %B %Y') }}{% endif %}
+      </span>
+      <form method="post" action="/instellingen/herhaal/{{ h.id }}/stop"
+            onsubmit="return confirm('Herhaalaanmelding stoppen?')" style="margin:0;">
+        <button type="submit" class="btn btn-danger" style="padding:.2rem .6rem; font-size:.8rem;">Stop</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 
   <h2 style="margin-top:1.25rem;">Aanmelden voor alle clubavonden</h2>
   <p style="color: var(--color-muted); margin-bottom:1rem;">

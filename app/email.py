@@ -147,7 +147,7 @@ def send_admin_new_request_email(
     _send(to_email, f"Nieuwe accountaanvraag — {aanvrager_voornaam} {aanvrager_achternaam}", html_body, text_body)
 
 
-def send_approval_email(to_email: str, voornaam: str) -> None:
+def send_approval_email(to_email: str, voornaam: str, login_url: str) -> None:
     html_body = f"""
     <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">
       <div style="background: #1e3a5f; padding: 1rem 1.5rem; border-radius: 8px 8px 0 0;">
@@ -157,13 +157,19 @@ def send_approval_email(to_email: str, voornaam: str) -> None:
         <p>Hallo {voornaam},</p>
         <p>Je aanvraag voor de <strong>Bridge Club Aanmeldingsapp</strong> is goedgekeurd!</p>
         <p>Je kunt nu inloggen met je e-mailadres en het wachtwoord dat je hebt opgegeven bij de aanvraag.</p>
-        <p style="font-size: .85rem; color: #666;">Ga naar de app om in te loggen.</p>
+        <p style="text-align: center; margin: 1.5rem 0;">
+          <a href="{login_url}"
+             style="background: #2e6da4; color: #fff; padding: .75rem 1.5rem; border-radius: 8px;
+                    text-decoration: none; font-weight: 600; display: inline-block;">
+            Inloggen
+          </a>
+        </p>
       </div>
     </body></html>
     """
     text_body = (
         f"Hallo {voornaam},\n\n"
         f"Je aanvraag voor de Bridge Club Aanmeldingsapp is goedgekeurd!\n\n"
-        f"Je kunt nu inloggen met je e-mailadres en het wachtwoord dat je hebt opgegeven."
+        f"Je kunt nu inloggen met je e-mailadres en het wachtwoord dat je hebt opgegeven:\n{login_url}"
     )
     _send(to_email, "Aanvraag goedgekeurd — Bridge Club", html_body, text_body)
