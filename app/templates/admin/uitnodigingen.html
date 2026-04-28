@@ -9,8 +9,25 @@
 
   {% if not smtp_ok %}
     <div class="alert alert-error" style="margin-bottom:1rem;">
-      <strong>Let op:</strong> SMTP is niet geconfigureerd. Uitnodigingen worden aangemaakt maar e-mails worden <em>niet</em> verstuurd. Stel <code>SMTP_HOST</code> en <code>SMTP_USER</code> in via .env.
+      <strong>Let op:</strong> SMTP is niet geconfigureerd. Uitnodigingen worden aangemaakt maar e-mails worden <em>niet</em> verstuurd. Stel <code>SMTP_HOST</code> en <code>SMTP_USER</code> in via de environment variables op Render.
     </div>
+  {% else %}
+    <div style="margin-bottom:1rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+      <span style="font-size:.9rem;color:var(--color-muted);">SMTP geconfigureerd.</span>
+      <form method="post" action="/beheer/smtp-test">
+        <button type="submit" class="btn btn-secondary" style="font-size:.85rem;padding:.35rem .8rem;">Stuur testmail naar mezelf</button>
+      </form>
+    </div>
+  {% endif %}
+
+  {% if request.query_params.get('smtp_test') == 'ok' %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">Testmail verstuurd naar je eigen e-mailadres. Controleer ook je spammap.</div>
+  {% elif request.query_params.get('smtp_test') == 'fout' %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">Testmail mislukt. Controleer de Render-logs voor de exacte foutmelding, en controleer of <code>SMTP_HOST</code>, <code>SMTP_USER</code> en <code>SMTP_PASSWORD</code> correct zijn.</div>
+  {% elif request.query_params.get('smtp_test') == 'niet_geconfigureerd' %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">SMTP is niet geconfigureerd. Stel de omgevingsvariabelen in op Render.</div>
+  {% elif request.query_params.get('smtp_test') == 'geen_email' %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">Je eigen account heeft geen e-mailadres opgeslagen, kan geen testmail sturen.</div>
   {% endif %}
 
   {% if request.query_params.get('verstuurd') %}

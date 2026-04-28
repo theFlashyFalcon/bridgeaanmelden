@@ -20,6 +20,7 @@ from app.database import get_db
 from app.models import (
     AccountRequest,
     AccountRequestStatus,
+    AdminBericht,
     ClubEvening,
     EmailRoleAssignment,
     EveningType,
@@ -388,6 +389,34 @@ async def seizoen_activeer(
     return RedirectResponse(url="/beheer/seizoenen", status_code=302)
 
 
+# ── SMTP-test (Admin only) ────────────────────────────────────────────────────
+
+@router.post("/smtp-test")
+async def smtp_test(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    from app.email import _send, smtp_geconfigureerd
+    if not smtp_geconfigureerd():
+        return RedirectResponse(url="/beheer/uitnodigingen?smtp_test=niet_geconfigureerd", status_code=302)
+    to_email = current_user.email or ""
+    if not to_email:
+        return RedirectResponse(url="/beheer/uitnodigingen?smtp_test=geen_email", status_code=302)
+    try:
+        _send(
+            to_email,
+            "SMTP-test Bridge Club",
+            "<p>Dit is een testbericht vanuit de Bridge Club Aanmeldingsapp.</p>",
+            "Dit is een testbericht vanuit de Bridge Club Aanmeldingsapp.",
+        )
+        logger.info("SMTP-test geslaagd, bericht verstuurd naar %s", to_email)
+        return RedirectResponse(url="/beheer/uitnodigingen?smtp_test=ok", status_code=302)
+    except Exception:
+        logger.exception("SMTP-test mislukt")
+        return RedirectResponse(url="/beheer/uitnodigingen?smtp_test=fout", status_code=302)
+
+
 # ── Uitnodigingen (Admin only) ────────────────────────────────────────────────
 
 @router.get("/uitnodigingen")
@@ -497,6 +526,12 @@ async def aanvragen_list(
         .all()
     )
     pending_count = sum(1 for a in aanvragen if a.status == AccountRequestStatus.wachtend)
+    berichten = (
+        db.query(AdminBericht)
+        .order_by(AdminBericht.aangemaakt_op.desc())
+        .all()
+    )
+    ongelezen_berichten = sum(1 for b in berichten if not b.gelezen)
     from app.email import smtp_geconfigureerd
     return templates.TemplateResponse(
         request,
@@ -507,6 +542,8 @@ async def aanvragen_list(
             "pending_count": pending_count,
             "roles": [r.value for r in MemberRole],
             "smtp_ok": smtp_geconfigureerd(),
+            "berichten": berichten,
+            "ongelezen_berichten": ongelezen_berichten,
         },
     )
 
@@ -612,6 +649,21 @@ async def aanvraag_afwijzen(
         aanvraag.beoordeeld_op = datetime.now(timezone.utc)
         db.commit()
     return RedirectResponse(url="/beheer/aanvragen?afgewezen=1", status_code=302)
+
+
+# ── Admin berichten (Admin only) ─────────────────────────────────────────────
+
+@router.post("/berichten/{bericht_id}/gelezen")
+async def bericht_gelezen(
+    bericht_id: int,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    bericht = db.query(AdminBericht).filter(AdminBericht.id == bericht_id).first()
+    if bericht:
+        bericht.gelezen = True
+        db.commit()
+    return RedirectResponse(url="/beheer/aanvragen", status_code=302)
 
 
 # ── Roltoewijzingen (Admin only) ──────────────────────────────────────────────

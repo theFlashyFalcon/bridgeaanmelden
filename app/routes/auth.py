@@ -1,3 +1,4 @@
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -7,6 +8,8 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.auth import get_current_user, hash_password, verify_password
 from app.database import get_db
@@ -380,7 +383,9 @@ async def wachtwoord_vergeten_submit(request: Request, db: Session = Depends(get
     email = form.get("email", "").strip().lower()
 
     member = db.query(Member).filter(Member.email.ilike(email)).first() if email else None
-    if member:
+    if not member:
+        logger.warning("Wachtwoord-reset aangevraagd voor onbekend e-mailadres: %s", email)
+    else:
         token = secrets.token_urlsafe(32)
         db.add(PasswordResetToken(token=token, member_id=member.id))
         db.commit()
@@ -388,7 +393,9 @@ async def wachtwoord_vergeten_submit(request: Request, db: Session = Depends(get
         reset_url = f"{base_url}/wachtwoord-reset/{token}"
         try:
             send_password_reset_email(member.email, member.voornaam, reset_url)
+            logger.info("Wachtwoord-reset e-mail verstuurd naar %s", member.email)
         except Exception:
+            logger.exception("Wachtwoord-reset e-mail mislukt voor %s", member.email)
             return templates.TemplateResponse(
                 request, "wachtwoord_vergeten.html",
                 {"error": "Het versturen van de e-mail is mislukt. Controleer of de SMTP-instellingen correct zijn, of probeer het later opnieuw."},
