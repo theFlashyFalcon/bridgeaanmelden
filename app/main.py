@@ -70,6 +70,7 @@ def _migrate():
         "ALTER TABLE club_evenings ADD COLUMN naam VARCHAR",
         "ALTER TABLE account_requests ADD COLUMN wachtwoord_hash VARCHAR",
         "ALTER TABLE members ADD COLUMN wachtwoord_hash VARCHAR",
+        "ALTER TABLE members ADD COLUMN verwijderd_op DATETIME",
     ]
     with engine.connect() as conn:
         for sql in migrations:
