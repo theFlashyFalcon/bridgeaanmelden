@@ -47,6 +47,8 @@ def _migrate():
 
     migrations = [
         "ALTER TABLE registrations ADD COLUMN partner_naam TEXT",
+        "ALTER TABLE club_evenings ADD COLUMN naam VARCHAR",
+        "ALTER TABLE account_requests ADD COLUMN wachtwoord_hash VARCHAR",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -54,7 +56,10 @@ def _migrate():
                 conn.execute(text(sql))
                 conn.commit()
             except Exception:
-                pass  # column/table already exists
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
 
 _migrate()
