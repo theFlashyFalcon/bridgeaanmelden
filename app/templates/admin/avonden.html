@@ -3,7 +3,10 @@
 {% block content %}
 
 {% if request.query_params.get('aangemaakt') %}
-  <div class="alert alert-success">Evenement toegevoegd.</div>
+  {% set n = request.query_params.get('aangemaakt') | int %}
+  <div class="alert alert-success">
+    {% if n == 1 %}Evenement toegevoegd.{% else %}{{ n }} evenementen toegevoegd.{% endif %}
+  </div>
 {% elif request.query_params.get('seizoen_aangemaakt') %}
   <div class="alert alert-success">Seizoen aangemaakt.</div>
 {% elif request.query_params.get('verwijderd') %}
@@ -80,8 +83,33 @@
         <input type="date" id="e-datum" name="datum" required>
         <span class="form-hint">Het seizoen wordt automatisch bepaald op basis van de datum.</span>
       </div>
-      <div class="action-buttons">
+
+      <!-- Herhaal-paneel (verborgen) -->
+      <div id="herhaal-paneel" hidden style="border:1px solid var(--color-secondary);border-radius:var(--radius);padding:1rem;margin-top:.5rem;background:var(--color-bg);">
+        <p style="font-weight:600;margin-bottom:.75rem;">Herhaal deze gebeurtenis</p>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;">
+          <label for="herhaal-elke" style="white-space:nowrap;">Herhaal elke</label>
+          <input type="number" id="herhaal-elke" name="herhaal_elke" min="1" max="365"
+                 style="width:5rem;" placeholder="1">
+          <div class="herhaal-eenheid-keuze">
+            <button type="button" id="herhaal-eenheid-btn" class="btn btn-secondary btn-sm"
+                    onclick="toggleEenheid()" style="min-width:5rem;">
+              weken
+            </button>
+            <input type="hidden" id="herhaal-eenheid" name="herhaal_eenheid" value="weken">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+          <label for="herhaal-tot" style="white-space:nowrap;">Herhaal tot</label>
+          <input type="date" id="herhaal-tot" name="herhaal_tot">
+        </div>
+      </div>
+
+      <div class="action-buttons" style="flex-wrap:wrap;">
         <button type="submit" class="btn btn-primary">Aanmaken</button>
+        <button type="button" class="btn btn-secondary" onclick="toggleHerhaalPaneel()">
+          Herhaal deze gebeurtenis
+        </button>
         <button type="button" class="btn btn-secondary" onclick="closeForm('event')">Annuleren</button>
       </div>
     </form>
@@ -198,6 +226,24 @@
 
   function closeForm(type) {
     document.getElementById('form-' + type).hidden = true;
+    document.getElementById('herhaal-paneel').hidden = true;
+  }
+
+  function toggleHerhaalPaneel() {
+    const p = document.getElementById('herhaal-paneel');
+    p.hidden = !p.hidden;
+  }
+
+  function toggleEenheid() {
+    const hidden = document.getElementById('herhaal-eenheid');
+    const btn = document.getElementById('herhaal-eenheid-btn');
+    if (hidden.value === 'weken') {
+      hidden.value = 'dagen';
+      btn.textContent = 'dagen';
+    } else {
+      hidden.value = 'weken';
+      btn.textContent = 'weken';
+    }
   }
 
   // Close dropdown on outside click

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Nieuw wachtwoord instellen — Bridge Club{% endblock %}
+
+{% block content %}
+<section class="card login-card">
+  <h1>Nieuw wachtwoord instellen</h1>
+
+  {% if gelukt %}
+    <div class="alert alert-success">
+      Je wachtwoord is succesvol gewijzigd. Je kunt nu inloggen.
+    </div>
+    <p class="login-hint"><a href="/login">Naar inloggen</a></p>
+  {% else %}
+    {% if errors %}
+      {% for e in errors %}
+        <div class="alert alert-error">{{ e }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post" action="/wachtwoord-reset/{{ token }}" class="form-stack">
+      <div class="form-group">
+        <label for="password">Nieuw wachtwoord</label>
+        <input type="password" id="password" name="password" required autocomplete="new-password" placeholder="Minimaal 8 tekens">
+      </div>
+      <div class="form-group">
+        <label for="password2">Herhaal wachtwoord</label>
+        <input type="password" id="password2" name="password2" required autocomplete="new-password" placeholder="••••••••">
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Wachtwoord opslaan</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

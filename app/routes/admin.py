@@ -1,6 +1,6 @@
 import os
 import secrets
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +25,7 @@ from app.models import (
     Member,
     MemberRole,
     PartnerRequest,
+    RecurringRegistration,
     Registration,
     RegistrationStatus,
     RegistrationType,
@@ -40,6 +41,50 @@ EVENING_TYPES = [
     ("eten voor jeugdtraining", "Eten voor jeugdtraining"),
     ("speciaal", "Speciaal"),
 ]
+
+
+def _apply_recurring_registrations(db: Session, event: ClubEvening) -> None:
+    recurring_regs = (
+        db.query(RecurringRegistration)
+        .filter(
+            RecurringRegistration.event_type == event.type,
+            RecurringRegistration.actief == True,  # noqa: E712
+        )
+        .all()
+    )
+    for rr in recurring_regs:
+        if rr.herhaal_tot and rr.herhaal_tot < event.datum:
+            continue
+        if rr.interval > 1:
+            count = (
+                db.query(ClubEvening)
+                .filter(
+                    ClubEvening.type == event.type,
+                    ClubEvening.datum >= rr.referentie_datum,
+                    ClubEvening.datum < event.datum,
+                )
+                .count()
+            )
+            if count % rr.interval != 0:
+                continue
+        existing = (
+            db.query(Registration)
+            .filter(
+                Registration.evening_id == event.id,
+                Registration.person1_id == rr.member_id,
+                Registration.status != RegistrationStatus.afgemeld,
+            )
+            .first()
+        )
+        if not existing:
+            status = RegistrationStatus.aangemeld if rr.partner_naam else RegistrationStatus.beschikbaar_solo
+            db.add(Registration(
+                evening_id=event.id,
+                person1_id=rr.member_id,
+                partner_naam=rr.partner_naam,
+                type=RegistrationType.vast,
+                status=status,
+            ))
 
 
 # ── Avonden (Wedstrijdleider + Admin) ─────────────────────────────────────────
@@ -143,9 +188,49 @@ async def avonden_add(
             status_code=422,
         )
 
-    db.add(ClubEvening(naam=naam, datum=datum, type=type_, season_id=season.id))
+    herhaal_elke_str = form.get("herhaal_elke", "").strip()
+    herhaal_eenheid = form.get("herhaal_eenheid", "weken")
+    herhaal_tot_str = form.get("herhaal_tot", "").strip()
+
+    new_events = []
+    first_event = ClubEvening(naam=naam, datum=datum, type=type_, season_id=season.id)
+    db.add(first_event)
+    db.flush()
+    new_events.append(first_event)
+
+    if herhaal_elke_str and herhaal_tot_str:
+        try:
+            herhaal_elke = int(herhaal_elke_str)
+            herhaal_tot = date.fromisoformat(herhaal_tot_str)
+            if herhaal_eenheid == "dagen":
+                delta = timedelta(days=herhaal_elke)
+            else:
+                delta = timedelta(weeks=herhaal_elke)
+
+            next_datum = datum + delta
+            while next_datum <= herhaal_tot:
+                next_season = (
+                    db.query(Season)
+                    .filter(Season.start_datum <= next_datum, Season.eind_datum >= next_datum)
+                    .first()
+                )
+                if next_season:
+                    evt = ClubEvening(naam=naam, datum=next_datum, type=type_, season_id=next_season.id)
+                    db.add(evt)
+                    db.flush()
+                    new_events.append(evt)
+                next_datum += delta
+        except (ValueError, TypeError):
+            pass
+
     db.commit()
-    return RedirectResponse(url="/beheer/avonden?aangemaakt=1", status_code=302)
+
+    for evt in new_events:
+        _apply_recurring_registrations(db, evt)
+    db.commit()
+
+    aantal = len(new_events)
+    return RedirectResponse(url=f"/beheer/avonden?aangemaakt={aantal}", status_code=302)
 
 
 @router.post("/avonden/{event_id}/verwijder")

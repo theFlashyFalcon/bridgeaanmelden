@@ -77,6 +77,36 @@ def send_partner_request_approved_email(to_email: str, voornaam: str, event_naam
     _send(to_email, f"Verzoek goedgekeurd — {event_naam}", html_body, text_body)
 
 
+def send_password_reset_email(to_email: str, voornaam: str, reset_url: str) -> None:
+    html_body = f"""
+    <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">
+      <div style="background: #1e3a5f; padding: 1rem 1.5rem; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 1.3rem;">&#9824; Bridge Club</h1>
+      </div>
+      <div style="background: #fff; padding: 1.5rem; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hallo {voornaam},</p>
+        <p>We hebben een verzoek ontvangen om je wachtwoord te resetten voor de <strong>Bridge Club Aanmeldingsapp</strong>.</p>
+        <p>Klik op de knop hieronder om een nieuw wachtwoord in te stellen:</p>
+        <p style="text-align: center; margin: 1.5rem 0;">
+          <a href="{reset_url}"
+             style="background: #2e6da4; color: #fff; padding: .75rem 1.5rem; border-radius: 8px;
+                    text-decoration: none; font-weight: 600; display: inline-block;">
+            Wachtwoord resetten
+          </a>
+        </p>
+        <p style="font-size: .85rem; color: #666;">Of kopieer deze link: <span style="word-break: break-all;">{reset_url}</span></p>
+        <p style="font-size: .85rem; color: #666;">Deze link is 1 uur geldig. Heb je dit niet aangevraagd? Dan kun je deze mail negeren.</p>
+      </div>
+    </body></html>
+    """
+    text_body = (
+        f"Hallo {voornaam},\n\n"
+        f"Klik op de volgende link om je wachtwoord te resetten:\n{reset_url}\n\n"
+        f"Deze link is 1 uur geldig. Heb je dit niet aangevraagd? Negeer dan deze mail."
+    )
+    _send(to_email, "Wachtwoord resetten — Bridge Club", html_body, text_body)
+
+
 def send_approval_email(to_email: str, voornaam: str) -> None:
     html_body = f"""
     <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">

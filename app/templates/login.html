@@ -11,16 +11,65 @@
   {% endif %}
 
   <form method="post" action="/login" class="form-stack">
-    <div class="form-group">
-      <label for="email">E-mailadres</label>
-      <input type="email" id="email" name="email" required autocomplete="email" placeholder="naam@voorbeeld.nl">
+    <div class="login-method-tabs">
+      <label class="login-tab active" id="tab-naam">
+        <input type="radio" name="login_method" value="naam" checked onchange="toggleLoginMethod('naam')">
+        Voor- en achternaam
+      </label>
+      <label class="login-tab" id="tab-email">
+        <input type="radio" name="login_method" value="email" onchange="toggleLoginMethod('email')">
+        E-mailadres
+      </label>
     </div>
+
+    <div id="veld-naam" class="form-group">
+      <label for="voornaam">Voor- en achternaam</label>
+      <input type="text" id="voornaam" name="voornaam" required autocomplete="given-name" placeholder="Voornaam">
+      <input type="text" id="achternaam" name="achternaam" required autocomplete="family-name" placeholder="Achternaam" style="margin-top:.5rem">
+    </div>
+
+    <div id="veld-email" class="form-group" style="display:none">
+      <label for="email">E-mailadres</label>
+      <input type="email" id="email" name="email" autocomplete="email" placeholder="naam@voorbeeld.nl">
+    </div>
+
     <div class="form-group">
       <label for="password">Wachtwoord</label>
       <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
     </div>
     <button type="submit" class="btn btn-primary btn-full">Inloggen</button>
+    <a href="/wachtwoord-vergeten" class="btn btn-secondary btn-full">Wachtwoord vergeten?</a>
   </form>
+
+  <script>
+    function toggleLoginMethod(method) {
+      const emailVeld = document.getElementById('veld-email');
+      const naamVeld  = document.getElementById('veld-naam');
+      const tabEmail  = document.getElementById('tab-email');
+      const tabNaam   = document.getElementById('tab-naam');
+      const emailInput      = document.getElementById('email');
+      const voornaamInput   = document.getElementById('voornaam');
+      const achternaamInput = document.getElementById('achternaam');
+
+      if (method === 'naam') {
+        naamVeld.style.display  = '';
+        emailVeld.style.display = 'none';
+        voornaamInput.setAttribute('required', '');
+        achternaamInput.setAttribute('required', '');
+        emailInput.removeAttribute('required');
+        tabNaam.classList.add('active');
+        tabEmail.classList.remove('active');
+      } else {
+        emailVeld.style.display = '';
+        naamVeld.style.display  = 'none';
+        emailInput.setAttribute('required', '');
+        voornaamInput.removeAttribute('required');
+        achternaamInput.removeAttribute('required');
+        tabEmail.classList.add('active');
+        tabNaam.classList.remove('active');
+      }
+    }
+  </script>
 
   <p class="login-hint">Nog geen account? <a href="/registreren">Account aanmaken</a></p>
 </section>

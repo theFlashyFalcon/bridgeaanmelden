@@ -112,6 +112,18 @@ class Invitation(Base):
     account_request = relationship("AccountRequest")
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, nullable=False, index=True)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+    gebruikt_op = Column(DateTime, nullable=True)
+
+    member = relationship("Member")
+
+
 class Season(Base):
     __tablename__ = "seasons"
 
@@ -194,6 +206,22 @@ class ManualPair(Base):
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
 
     evening = relationship("ClubEvening")
+
+
+class RecurringRegistration(Base):
+    __tablename__ = "recurring_registrations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    event_type = Column(String, nullable=False)
+    partner_naam = Column(String, nullable=True)
+    interval = Column(Integer, default=1, nullable=False)
+    herhaal_tot = Column(Date, nullable=True)
+    actief = Column(Boolean, default=True, nullable=False)
+    referentie_datum = Column(Date, nullable=False)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+
+    member = relationship("Member")
 
 
 class Registration(Base):

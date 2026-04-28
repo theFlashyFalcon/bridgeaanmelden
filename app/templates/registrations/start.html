@@ -63,5 +63,92 @@
       <a href="/" class="btn btn-secondary">Terug naar agenda</a>
     </div>
   </form>
+
+  <div style="margin-top:1.25rem;border-top:1px solid #e0e0e0;padding-top:1rem;">
+    <button type="button" class="btn btn-secondary" onclick="toggleHerhaalPaneel()">
+      Herhaal mijn aanmelding
+    </button>
+
+    <div id="herhaal-paneel" hidden style="margin-top:1rem;border:1px solid var(--color-secondary);border-radius:var(--radius);padding:1rem;background:var(--color-bg);">
+      <form method="post" action="/aanmelden/{{ evening.id }}/herhaal" class="form-stack" id="herhaal-form">
+
+        <!-- Optie 1: aanmelden voor alle evenementen van dit type -->
+        <div style="margin-bottom:1rem;">
+          <label style="display:flex;align-items:flex-start;gap:.6rem;cursor:pointer;">
+            <input type="checkbox" name="alles" id="alles-checkbox"
+                   style="margin-top:.2rem;width:1.1rem;height:1.1rem;flex-shrink:0;"
+                   onchange="toggleAllesOptie()">
+            <span>
+              Meld mij aan voor alle
+              <strong>{{ evening.type }}</strong>
+              evenementen tot
+              <input type="date" name="alles_tot" id="alles-tot"
+                     style="display:inline-block;margin-left:.25rem;vertical-align:middle;">
+              <span style="font-size:.8rem;color:var(--color-muted);display:block;margin-top:.2rem;">
+                Laat de datum leeg om ook automatisch aangemeld te worden voor nieuwe evenementen van dit type.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        <!-- Optie 2: elke N evenementen -->
+        <div id="elke-optie">
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;">
+            <span>Herhaal mijn aanmelding elke</span>
+            <input type="number" name="elke" id="elke-input" min="1" max="52"
+                   style="width:4.5rem;" placeholder="1">
+            <span><strong>{{ evening.type }}</strong> evenement(en)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+            <label for="herhaal-tot">Herhaal tot</label>
+            <input type="date" name="herhaal_tot" id="herhaal-tot">
+          </div>
+        </div>
+
+        <!-- Partner meegeven -->
+        <div class="form-row" style="margin-top:.75rem;">
+          <div class="form-group">
+            <label for="h-partner-voornaam">Voornaam partner</label>
+            <input type="text" id="h-partner-voornaam" name="partner_voornaam"
+                   autocomplete="off" placeholder="Voornaam">
+          </div>
+          <div class="form-group">
+            <label for="h-partner-achternaam">Achternaam partner</label>
+            <input type="text" id="h-partner-achternaam" name="partner_achternaam"
+                   autocomplete="off" placeholder="Achternaam">
+          </div>
+        </div>
+
+        <div class="action-buttons" style="margin-top:.75rem;">
+          <button type="submit" class="btn btn-primary">Bevestigen</button>
+          <button type="button" class="btn btn-secondary" onclick="toggleHerhaalPaneel()">Annuleren</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </section>
+
+<script>
+  function toggleHerhaalPaneel() {
+    const p = document.getElementById('herhaal-paneel');
+    p.hidden = !p.hidden;
+    if (!p.hidden) {
+      // Pre-fill partner from main form
+      const vn = document.getElementById('partner_voornaam').value;
+      const an = document.getElementById('partner_achternaam').value;
+      document.getElementById('h-partner-voornaam').value = vn;
+      document.getElementById('h-partner-achternaam').value = an;
+    }
+  }
+
+  function toggleAllesOptie() {
+    const checked = document.getElementById('alles-checkbox').checked;
+    document.getElementById('elke-optie').style.opacity = checked ? '.4' : '1';
+    document.getElementById('elke-optie').style.pointerEvents = checked ? 'none' : '';
+    if (checked) {
+      document.getElementById('elke-input').value = '';
+      document.getElementById('herhaal-tot').value = '';
+    }
+  }
+</script>
 {% endblock %}

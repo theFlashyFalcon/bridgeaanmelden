@@ -15,6 +15,7 @@ from app.models import (
     Lid,
     Member,
     PartnerRequest,
+    RecurringRegistration,
     Registration,
     RegistrationStatus,
     RegistrationType,
@@ -262,6 +263,133 @@ async def instellingen_submit(
 
     db.commit()
     return RedirectResponse(url=f"/?bulk_ok={count}", status_code=302)
+
+
+# ── Herhaal-aanmelding ────────────────────────────────────────────────────────
+
+@router.post("/aanmelden/{event_id}/herhaal")
+async def registration_herhaal(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_auth),
+):
+    evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+    if not evening:
+        raise HTTPException(status_code=404)
+
+    form = await request.form()
+    alles = form.get("alles") == "on"
+    alles_tot_str = form.get("alles_tot", "").strip()
+    elke_str = form.get("elke", "").strip()
+    herhaal_tot_str = form.get("herhaal_tot", "").strip()
+    partner_voornaam = form.get("partner_voornaam", "").strip()
+    partner_achternaam = form.get("partner_achternaam", "").strip()
+
+    partner_naam = None
+    if partner_voornaam and partner_achternaam:
+        lid = (
+            db.query(Lid)
+            .filter(
+                func.lower(Lid.voornaam) == partner_voornaam.lower(),
+                func.lower(Lid.achternaam) == partner_achternaam.lower(),
+            )
+            .first()
+        )
+        if lid:
+            partner_naam = f"{partner_voornaam} {partner_achternaam}"
+
+    today = date.today()
+
+    def _register_for_events(events):
+        count = 0
+        for evt in events:
+            existing = (
+                db.query(Registration)
+                .filter(
+                    Registration.evening_id == evt.id,
+                    Registration.person1_id == current_user.id,
+                    Registration.status != RegistrationStatus.afgemeld,
+                )
+                .first()
+            )
+            if not existing:
+                status = RegistrationStatus.aangemeld if partner_naam else RegistrationStatus.beschikbaar_solo
+                db.add(Registration(
+                    evening_id=evt.id,
+                    person1_id=current_user.id,
+                    partner_naam=partner_naam,
+                    type=RegistrationType.vast,
+                    status=status,
+                ))
+                count += 1
+        return count
+
+    if alles:
+        alles_tot = date.fromisoformat(alles_tot_str) if alles_tot_str else None
+
+        query = (
+            db.query(ClubEvening)
+            .join(Season)
+            .filter(
+                ClubEvening.type == evening.type,
+                ClubEvening.datum >= today,
+                Season.actief == True,  # noqa: E712
+            )
+        )
+        if alles_tot:
+            query = query.filter(ClubEvening.datum <= alles_tot)
+
+        future_events = query.order_by(ClubEvening.datum).all()
+        count = _register_for_events(future_events)
+
+        # Without end date: store recurring registration for auto-apply on new events
+        if not alles_tot:
+            db.query(RecurringRegistration).filter(
+                RecurringRegistration.member_id == current_user.id,
+                RecurringRegistration.event_type == evening.type,
+                RecurringRegistration.actief == True,  # noqa: E712
+            ).update({"actief": False})
+            db.add(RecurringRegistration(
+                member_id=current_user.id,
+                event_type=evening.type,
+                partner_naam=partner_naam,
+                interval=1,
+                herhaal_tot=None,
+                referentie_datum=today,
+            ))
+
+        db.commit()
+        return RedirectResponse(url=f"/?bulk_ok={count}", status_code=302)
+
+    elif elke_str:
+        try:
+            elke = max(1, int(elke_str))
+        except ValueError:
+            elke = 1
+
+        herhaal_tot = date.fromisoformat(herhaal_tot_str) if herhaal_tot_str else None
+
+        query = (
+            db.query(ClubEvening)
+            .join(Season)
+            .filter(
+                ClubEvening.type == evening.type,
+                ClubEvening.datum >= today,
+                Season.actief == True,  # noqa: E712
+            )
+        )
+        if herhaal_tot:
+            query = query.filter(ClubEvening.datum <= herhaal_tot)
+
+        future_events = query.order_by(ClubEvening.datum).all()
+        selected = [evt for i, evt in enumerate(future_events) if i % elke == 0]
+        count = _register_for_events(selected)
+
+        db.commit()
+        return RedirectResponse(url=f"/?bulk_ok={count}", status_code=302)
+
+    return RedirectResponse(url=f"/aanmelden/{event_id}", status_code=302)
 
 
 # ── Wijzigen (redirect) ───────────────────────────────────────────────────────
