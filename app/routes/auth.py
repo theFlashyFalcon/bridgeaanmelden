@@ -61,6 +61,11 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
         email = form.get("email", "").strip().lower()
         member = db.query(Member).filter(Member.email.ilike(email)).first()
 
+    if member and member.verwijderd_op is not None:
+        return templates.TemplateResponse(
+            request, "login.html", {"login_status": "verwijderd"}, status_code=401
+        )
+
     if member and member.wachtwoord_hash and verify_password(password, member.wachtwoord_hash):
         request.session["user_id"] = member.id
         request.session["welkom"] = True
@@ -379,12 +384,15 @@ async def wachtwoord_vergeten_submit(request: Request, db: Session = Depends(get
         token = secrets.token_urlsafe(32)
         db.add(PasswordResetToken(token=token, member_id=member.id))
         db.commit()
-        base_url = str(request.base_url).rstrip("/")
+        base_url = os.getenv("BASE_URL", "").rstrip("/") or str(request.base_url).rstrip("/")
         reset_url = f"{base_url}/wachtwoord-reset/{token}"
         try:
             send_password_reset_email(member.email, member.voornaam, reset_url)
         except Exception:
-            pass  # stille fout — toon altijd de bevestigingspagina
+            return templates.TemplateResponse(
+                request, "wachtwoord_vergeten.html",
+                {"error": "Het versturen van de e-mail is mislukt. Controleer of de SMTP-instellingen correct zijn, of probeer het later opnieuw."},
+            )
 
     return templates.TemplateResponse(
         request, "wachtwoord_vergeten.html", {"verzonden": True}
@@ -452,6 +460,25 @@ def _get_valid_reset_token(token: str, db: Session):
     if datetime.now(timezone.utc) > geldig_tot:
         return None
     return reset_token
+
+
+# ── Admin bericht (publiek) ───────────────────────────────────────────────────
+
+@router.post("/admin-bericht")
+async def admin_bericht_submit(request: Request, db: Session = Depends(get_db)):
+    from app.models import AdminBericht
+    form = await request.form()
+    naam = form.get("naam", "").strip() or None
+    email_val = form.get("email", "").strip() or None
+    bericht = form.get("bericht", "").strip()
+    type_ = form.get("type", "contact")
+
+    if not bericht:
+        return RedirectResponse(url="/login?bericht_fout=1", status_code=302)
+
+    db.add(AdminBericht(naam=naam, email=email_val, bericht=bericht, type=type_))
+    db.commit()
+    return RedirectResponse(url="/login?bericht_verstuurd=1", status_code=302)
 
 
 # ── Logout & misc ──────────────────────────────────────────────────────────────
