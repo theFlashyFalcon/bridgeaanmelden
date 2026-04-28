@@ -64,6 +64,26 @@ def _migrate():
 
 _migrate()
 
+
+def _seed_crash_leden():
+    from app.database import SessionLocal
+    from app.models import Lid
+
+    db = SessionLocal()
+    try:
+        if db.query(Lid).first() is None:
+            from scripts.seed_crash_leden import seed
+            n = seed(db)
+            if n:
+                print(f"[startup] {n} leden van Crash geladen.")
+    except Exception as e:
+        print(f"[startup] Seed crash-leden mislukt: {e}")
+    finally:
+        db.close()
+
+
+_seed_crash_leden()
+
 app = FastAPI(title="Bridge Club Aanmeldingsapp", docs_url=None, redoc_url=None)
 
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)

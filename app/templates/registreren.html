@@ -6,7 +6,16 @@
 <section class="card login-card" style="max-width: 460px;">
   <h1>Account aanmaken</h1>
 
-  {% if verzonden %}
+  {# ── Eindstaten: geen formulier meer nodig ── #}
+  {% if melding == "geen_lid_crash" %}
+    <div class="alert alert-warning">
+      Volgens onze database ben je geen lid van Crash, een admin moet je aanvraag goedkeuren voordat je de app kunt gebruiken. U krijgt een mail als uw aanvraag goed gekeurd is.
+    </div>
+    <p style="text-align:center; margin-top: 1rem;">
+      <a href="/" class="btn btn-secondary">Terug naar home</a>
+    </p>
+
+  {% elif melding == "aanvraag_ontvangen" %}
     <div class="alert alert-success">
       <strong>Aanvraag ingediend!</strong><br>
       Je aanvraag is ontvangen. Je krijgt een e-mail zodra een beheerder je account heeft goedgekeurd.
@@ -14,10 +23,22 @@
     <p style="text-align:center; margin-top: 1rem;">
       <a href="/" class="btn btn-secondary">Terug naar home</a>
     </p>
+
   {% else %}
     <p style="color: var(--color-muted); margin-bottom: 1.25rem;">
-      Vul je gegevens in. Een beheerder beoordeelt je aanvraag en stuurt je een e-mail om je account te activeren.
+      Vul je gegevens in. Leden van Crash kunnen direct een account aanmaken; anderen worden beoordeeld door een beheerder.
     </p>
+
+    {# ── Specifieke foutmeldingen ── #}
+    {% if melding == "al_account" %}
+      <div class="alert alert-error">
+        Volgens onze database heb je al een account. Klik op <a href="/wachtwoord-vergeten">"wachtwoord vergeten"</a>
+      </div>
+    {% elif melding == "naam_mismatch" %}
+      <div class="alert alert-error">
+        NBB-nummer en naam matchen niet, controleer op typfouten
+      </div>
+    {% endif %}
 
     {% if errors %}
       <div class="alert alert-error">
@@ -35,9 +56,9 @@
                  value="{{ voornaam or '' }}">
         </div>
         <div class="form-group">
-          <label for="achternaam">Achternaam</label>
+          <label for="achternaam">Achternaam <span class="form-hint">(inclusief tussenvoegsel)</span></label>
           <input type="text" id="achternaam" name="achternaam" required autocomplete="family-name"
-                 value="{{ achternaam or '' }}">
+                 placeholder="bijv. van den Berg" value="{{ achternaam or '' }}">
         </div>
       </div>
       <div class="form-group">
@@ -46,9 +67,9 @@
                placeholder="naam@voorbeeld.nl" value="{{ email or '' }}">
       </div>
       <div class="form-group">
-        <label for="lidnummer">NBB-nummer <span class="form-hint">(reeks cijfers, bekend bij de beheerders)</span></label>
+        <label for="lidnummer">NBB-nummer</label>
         <input type="text" id="lidnummer" name="lidnummer" required
-               placeholder="bijv. 1234567" value="{{ lidnummer or '' }}">
+               placeholder="bijv. 669660" value="{{ lidnummer or '' }}">
       </div>
       <div class="form-group">
         <label for="password">Wachtwoord</label>
@@ -60,7 +81,7 @@
         <input type="password" id="password2" name="password2" required
                autocomplete="new-password" minlength="8" placeholder="Herhaal wachtwoord">
       </div>
-      <button type="submit" class="btn btn-primary btn-full">Aanvraag indienen</button>
+      <button type="submit" class="btn btn-primary btn-full">Account aanmaken</button>
     </form>
 
     <p class="login-hint">Al een account? <a href="/login">Inloggen</a></p>

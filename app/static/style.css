@@ -256,6 +256,23 @@ a:hover { text-decoration: underline; }
 .form-group input:focus { outline: none; border-color: var(--color-secondary); }
 .input-disabled { background: #f0f0f0; color: var(--color-muted); cursor: not-allowed; }
 
+.password-wrapper { position: relative; }
+.password-wrapper input { padding-right: 2.5rem; box-sizing: border-box; }
+.password-toggle {
+  position: absolute;
+  right: .65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-muted);
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+.password-toggle:hover { color: var(--color-text); }
+
 .form-hint { font-weight: 400; color: var(--color-muted); font-size: .8rem; }
 .btn-full { width: 100%; text-align: center; margin-top: .25rem; }
 

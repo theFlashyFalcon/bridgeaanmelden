@@ -107,6 +107,46 @@ def send_password_reset_email(to_email: str, voornaam: str, reset_url: str) -> N
     _send(to_email, "Wachtwoord resetten — Bridge Club", html_body, text_body)
 
 
+def send_admin_new_request_email(
+    to_email: str,
+    aanvrager_voornaam: str,
+    aanvrager_achternaam: str,
+    aanvrager_email: str,
+    reden: str,
+    base_url: str,
+) -> None:
+    beheer_url = f"{base_url}/beheer/aanvragen"
+    html_body = f"""
+    <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">
+      <div style="background: #1e3a5f; padding: 1rem 1.5rem; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 1.3rem;">&#9824; Bridge Club</h1>
+      </div>
+      <div style="background: #fff; padding: 1.5rem; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hallo beheerder,</p>
+        <p>Er is een nieuwe accountaanvraag binnengekomen die jouw goedkeuring vereist.</p>
+        <table style="border-collapse: collapse; width: 100%; margin: 1rem 0;">
+          <tr><td style="padding: .3rem .6rem; font-weight: 600;">Naam</td><td style="padding: .3rem .6rem;">{aanvrager_voornaam} {aanvrager_achternaam}</td></tr>
+          <tr style="background:#f5f5f5"><td style="padding: .3rem .6rem; font-weight: 600;">E-mail</td><td style="padding: .3rem .6rem;">{aanvrager_email}</td></tr>
+          <tr><td style="padding: .3rem .6rem; font-weight: 600;">Reden</td><td style="padding: .3rem .6rem;">{reden}</td></tr>
+        </table>
+        <p style="text-align: center; margin: 1.5rem 0;">
+          <a href="{beheer_url}"
+             style="background: #2e6da4; color: #fff; padding: .75rem 1.5rem; border-radius: 8px;
+                    text-decoration: none; font-weight: 600; display: inline-block;">
+            Aanvraag beoordelen
+          </a>
+        </p>
+      </div>
+    </body></html>
+    """
+    text_body = (
+        f"Nieuwe accountaanvraag van {aanvrager_voornaam} {aanvrager_achternaam} ({aanvrager_email}).\n"
+        f"Reden: {reden}\n\n"
+        f"Beoordeel de aanvraag op: {beheer_url}"
+    )
+    _send(to_email, f"Nieuwe accountaanvraag — {aanvrager_voornaam} {aanvrager_achternaam}", html_body, text_body)
+
+
 def send_approval_email(to_email: str, voornaam: str) -> None:
     html_body = f"""
     <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">

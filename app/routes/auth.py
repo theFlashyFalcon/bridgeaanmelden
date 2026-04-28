@@ -1,3 +1,4 @@
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,6 +15,7 @@ from app.models import (
     AccountRequestStatus,
     EmailRoleAssignment,
     Invitation,
+    Lid,
     Member,
     MemberRole,
     PasswordResetToken,
@@ -101,14 +103,31 @@ async def registreren_form(request: Request):
 
 @router.post("/registreren")
 async def registreren_submit(request: Request, db: Session = Depends(get_db)):
+    from app.email import send_admin_new_request_email
+
     form = await request.form()
     voornaam = form.get("voornaam", "").strip()
     achternaam = form.get("achternaam", "").strip()
     email = form.get("email", "").strip().lower()
-    lidnummer = form.get("lidnummer", "").strip()
+    nbb_nummer = form.get("lidnummer", "").strip()
     password = form.get("password", "")
     password2 = form.get("password2", "")
 
+    def _render(extra: dict, status: int = 422):
+        return templates.TemplateResponse(
+            request,
+            "registreren.html",
+            {
+                "voornaam": voornaam,
+                "achternaam": achternaam,
+                "email": email,
+                "lidnummer": nbb_nummer,
+                **extra,
+            },
+            status_code=status,
+        )
+
+    # ── Basisvalidatie ────────────────────────────────────────────────────────
     errors = []
     if not voornaam:
         errors.append("Voornaam is verplicht.")
@@ -116,49 +135,119 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         errors.append("Achternaam is verplicht.")
     if not email:
         errors.append("E-mailadres is verplicht.")
-    if not lidnummer:
-        errors.append("Lidnummer is verplicht.")
+    if not nbb_nummer:
+        errors.append("NBB-nummer is verplicht.")
     if len(password) < 8:
         errors.append("Wachtwoord moet minimaal 8 tekens bevatten.")
     if password != password2:
         errors.append("Wachtwoorden komen niet overeen.")
-
-    if not errors:
-        if db.query(Member).filter(Member.email == email).first():
-            errors.append("Er bestaat al een account met dit e-mailadres.")
-        elif (
-            db.query(AccountRequest)
-            .filter(
-                AccountRequest.email == email,
-                AccountRequest.status != AccountRequestStatus.afgewezen,
-            )
-            .first()
-        ):
-            errors.append("Er loopt al een aanvraag voor dit e-mailadres.")
-
     if errors:
-        return templates.TemplateResponse(
-            request,
-            "registreren.html",
-            {
-                "errors": errors,
-                "voornaam": voornaam,
-                "achternaam": achternaam,
-                "email": email,
-                "lidnummer": lidnummer,
-            },
-            status_code=422,
-        )
+        return _render({"errors": errors})
 
-    db.add(AccountRequest(
+    # ── Controleer: account bestaat al ───────────────────────────────────────
+    bestaand_op_email = db.query(Member).filter(Member.email == email).first()
+    bestaand_op_nbb = db.query(Member).filter(Member.lidnummer == nbb_nummer).first()
+    if bestaand_op_email or bestaand_op_nbb:
+        return _render({"melding": "al_account"})
+
+    # ── Controleer: lopende aanvraag ──────────────────────────────────────────
+    if (
+        db.query(AccountRequest)
+        .filter(
+            AccountRequest.email == email,
+            AccountRequest.status != AccountRequestStatus.afgewezen,
+        )
+        .first()
+    ):
+        errors.append("Er loopt al een aanvraag voor dit e-mailadres.")
+        return _render({"errors": errors})
+
+    # ── Sla op voor admin-notificatie ─────────────────────────────────────────
+    def _stuur_admin_mail(reden: str) -> None:
+        admin_email = os.getenv("ADMIN_EMAIL", "")
+        if not admin_email:
+            return
+        base_url = str(request.base_url).rstrip("/")
+        try:
+            send_admin_new_request_email(
+                to_email=admin_email,
+                aanvrager_voornaam=voornaam,
+                aanvrager_achternaam=achternaam,
+                aanvrager_email=email,
+                reden=reden,
+                base_url=base_url,
+            )
+        except Exception:
+            pass
+
+    # ── Zoek in Crash-ledenlijst ──────────────────────────────────────────────
+    crash_lid = db.query(Lid).filter(Lid.nbb_nummer == nbb_nummer).first()
+
+    if crash_lid is None:
+        # Niet gevonden in Crash-database → aanvraag aanmaken, admin beslist
+        db.add(AccountRequest(
+            voornaam=voornaam,
+            achternaam=achternaam,
+            email=email,
+            lidnummer=nbb_nummer,
+            wachtwoord_hash=hash_password(password),
+        ))
+        db.commit()
+        _stuur_admin_mail("Aanvrager staat niet in de Crash-ledenlijst.")
+        return _render({"melding": "geen_lid_crash"}, status=200)
+
+    # ── Controleer naamovereenkomst ───────────────────────────────────────────
+    voornaam_klopt = crash_lid.voornaam.strip().lower() == voornaam.lower()
+    achternaam_klopt = crash_lid.achternaam.strip().lower() == achternaam.lower()
+
+    if not (voornaam_klopt and achternaam_klopt):
+        # NBB-nummer gevonden maar naam klopt niet → geen aanvraag aanmaken
+        return _render({"melding": "naam_mismatch"})
+
+    # ── Crash-lid: controleer of naam al in gebruik is ────────────────────────
+    naam_al_in_gebruik = (
+        db.query(Member)
+        .filter(
+            Member.voornaam.ilike(voornaam),
+            Member.achternaam.ilike(achternaam),
+        )
+        .first()
+    )
+
+    if naam_al_in_gebruik:
+        # Mogelijke dubbelganger → admin beslist
+        db.add(AccountRequest(
+            voornaam=voornaam,
+            achternaam=achternaam,
+            email=email,
+            lidnummer=nbb_nummer,
+            wachtwoord_hash=hash_password(password),
+        ))
+        db.commit()
+        _stuur_admin_mail(
+            "Crash-lid, maar er bestaat al een account met dezelfde voor- en achternaam."
+        )
+        return _render({"melding": "aanvraag_ontvangen"}, status=200)
+
+    # ── Crash-lid geverifieerd: account direct aanmaken ───────────────────────
+    assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == email).first()
+    role = assignment.role if assignment else MemberRole.lid
+
+    member = Member(
         voornaam=voornaam,
         achternaam=achternaam,
+        lidnummer=nbb_nummer,
         email=email,
-        lidnummer=lidnummer,
         wachtwoord_hash=hash_password(password),
-    ))
+        role=role,
+    )
+    db.add(member)
     db.commit()
-    return templates.TemplateResponse(request, "registreren.html", {"verzonden": True})
+    db.refresh(member)
+
+    request.session["user_id"] = member.id
+    request.session["welkom"] = True
+    return RedirectResponse(url="/", status_code=302)
 
 
 # ── Invitation-based registration ─────────────────────────────────────────────
