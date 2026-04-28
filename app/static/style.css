@@ -205,6 +205,59 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 
+/* ── Aanvraag-notificatie toast ─────────────────────────────────────────────── */
+.aanvraag-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+  max-width: 320px;
+  width: calc(100vw - 3rem);
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  z-index: 300;
+  animation: toast-in .25s ease;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(1rem); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.aanvraag-toast-icon { font-size: 1.4rem; flex-shrink: 0; }
+.aanvraag-toast-body { flex: 1; }
+.aanvraag-toast-body strong { display: block; font-size: .95rem; }
+.aanvraag-toast-body small { font-size: .8rem; opacity: .85; }
+.aanvraag-toast-actions { display: flex; gap: .5rem; margin-top: .5rem; }
+.aanvraag-toast-actions a,
+.aanvraag-toast-actions button {
+  background: rgba(255,255,255,.2);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius);
+  padding: .3rem .65rem;
+  font-size: .8rem;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.aanvraag-toast-actions a:hover,
+.aanvraag-toast-actions button:hover { background: rgba(255,255,255,.35); }
+.aanvraag-toast-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,.7);
+  font-size: 1.1rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 1;
+}
+.aanvraag-toast-close:hover { color: #fff; }
+
 /* ── Login / offline cards ──────────────────────────────────────────────────── */
 .login-card, .offline-card { max-width: 420px; margin: 2rem auto; }
 .login-card p, .offline-card p { color: var(--color-muted); margin: .75rem 0; }
@@ -397,6 +450,18 @@ footer {
 }
 .inline-form h2 { margin-bottom: .75rem; }
 
+/* ── Events grid (agenda) ────────────────────────────────────────────────────── */
+.events-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .events-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Event cards (agenda) ────────────────────────────────────────────────────── */
 .event-card { padding: 1rem 1.25rem; }
 .event-header {
@@ -464,7 +529,95 @@ footer {
   .afd-grid { grid-template-columns: 1fr; }
 }
 
-/* ── Mobile: scrollable tables & stacked form rows ───────────────────────────── */
+/* ── Hamburger button ────────────────────────────────────────────────────────── */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: .4rem;
+  color: #fff;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+}
+.nav-toggle span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #fff;
+  border-radius: 2px;
+  transition: transform .2s, opacity .2s;
+}
+
+/* ── Mobile nav ──────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .nav-toggle { display: flex; }
+
+  .nav-links {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    align-items: flex-start;
+    gap: 0;
+    padding-top: .5rem;
+    border-top: 1px solid rgba(255,255,255,.2);
+    order: 3;
+  }
+  .nav-links.is-open { display: flex; }
+
+  .navbar { flex-wrap: wrap; }
+
+  .nav-links > a,
+  .nav-dropdown-toggle,
+  .nav-links > .nav-user {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: .75rem 0;
+    font-size: 1rem;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+  }
+  .nav-links > a:last-child { border-bottom: none; }
+
+  .nav-dropdown { width: 100%; }
+
+  .nav-dropdown-menu {
+    position: static;
+    box-shadow: none;
+    border-radius: 0;
+    background: rgba(0,0,0,.2);
+    min-width: unset;
+    width: 100%;
+  }
+  .nav-dropdown-menu a {
+    color: rgba(255,255,255,.85);
+    padding-left: 1.5rem;
+    border-bottom-color: rgba(255,255,255,.07);
+  }
+  .nav-dropdown-menu a:hover { background: rgba(255,255,255,.08); }
+
+  /* Larger touch targets for small buttons */
+  .btn-sm { padding: .55rem 1rem; font-size: .9rem; min-height: 36px; }
+
+  /* Fix form-inline on narrow screens */
+  .form-inline input { min-width: 0; width: 100%; }
+
+  /* Stack form rows */
+  .form-row { flex-direction: column; }
+
+  /* Scrollable tables */
+  .data-table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Mobile: scrollable tables & stacked form rows (legacy breakpoint) ───────── */
 @media (max-width: 600px) {
   .data-table {
     display: block;

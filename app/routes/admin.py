@@ -12,6 +12,7 @@ BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_admin, require_wedstrijdleider
@@ -449,6 +450,39 @@ async def create_invitation(
         )
 
 
+@router.post("/uitnodigingen/verwijder-alle")
+async def delete_all_invitations(
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    db.query(Invitation).delete()
+    db.commit()
+    return RedirectResponse(url="/beheer/uitnodigingen?verwijderd=1", status_code=302)
+
+
+@router.post("/uitnodigingen/verwijder-afgehandeld")
+async def delete_handled_invitations(
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    db.query(Invitation).filter(Invitation.gebruikt_op.isnot(None)).delete()
+    db.commit()
+    return RedirectResponse(url="/beheer/uitnodigingen?verwijderd=1", status_code=302)
+
+
+@router.post("/uitnodigingen/{invitation_id}/verwijder")
+async def delete_invitation(
+    invitation_id: int,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    invitation = db.query(Invitation).filter(Invitation.id == invitation_id).first()
+    if invitation:
+        db.delete(invitation)
+        db.commit()
+    return RedirectResponse(url="/beheer/uitnodigingen?verwijderd=1", status_code=302)
+
+
 # ── Accountaanvragen (Admin only) ────────────────────────────────────────────
 
 @router.get("/aanvragen")
@@ -477,6 +511,20 @@ async def aanvragen_list(
     )
 
 
+@router.get("/aanvragen/telling")
+async def aanvragen_telling(
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    from fastapi.responses import JSONResponse
+    count = (
+        db.query(AccountRequest)
+        .filter(AccountRequest.status == AccountRequestStatus.wachtend)
+        .count()
+    )
+    return JSONResponse({"pending": count})
+
+
 @router.post("/aanvragen/{aanvraag_id}/goedkeuren")
 async def aanvraag_goedkeuren(
     aanvraag_id: int,
@@ -498,6 +546,17 @@ async def aanvraag_goedkeuren(
 
     if aanvraag.wachtwoord_hash:
         # User provided a password during registration — create member directly
+        al_bestaat = (
+            db.query(Member)
+            .filter(
+                (Member.email == aanvraag.email) | (Member.lidnummer == aanvraag.lidnummer)
+            )
+            .first()
+        )
+        if al_bestaat:
+            db.commit()
+            return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1", status_code=302)
+
         member = Member(
             voornaam=aanvraag.voornaam,
             achternaam=aanvraag.achternaam,
@@ -895,7 +954,9 @@ async def verzoek_afwijzen(
     current_user: Member = Depends(require_wedstrijdleider),
 ):
     partner_request = db.query(PartnerRequest).filter(PartnerRequest.id == request_id).first()
-    if partner_request and partner_request.status == "wachtend":
+    if not partner_request:
+        return RedirectResponse(url="/beheer/af-aanmeldingen", status_code=302)
+    if partner_request.status == "wachtend":
         partner_request.status = "afgewezen"
         db.commit()
     return RedirectResponse(

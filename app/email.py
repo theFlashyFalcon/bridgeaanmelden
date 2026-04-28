@@ -1,29 +1,35 @@
+import logging
 import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-SMTP_HOST = os.getenv("SMTP_HOST", "")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SMTP_FROM = os.getenv("SMTP_FROM", SMTP_USER)
+logger = logging.getLogger(__name__)
+
+def smtp_geconfigureerd() -> bool:
+    return bool(os.getenv("SMTP_HOST") and os.getenv("SMTP_USER"))
 
 
 def _send(to_email: str, subject: str, html_body: str, text_body: str) -> None:
-    if not SMTP_HOST or not SMTP_USER:
+    host = os.getenv("SMTP_HOST", "")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    user = os.getenv("SMTP_USER", "")
+    password = os.getenv("SMTP_PASSWORD", "")
+    from_addr = os.getenv("SMTP_FROM", user)
+
+    if not host or not user:
         raise RuntimeError("SMTP niet geconfigureerd. Stel SMTP_HOST en SMTP_USER in via .env.")
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
+    msg["From"] = from_addr
     msg["To"] = to_email
     msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+    with smtplib.SMTP(host, port) as server:
         server.ehlo()
         server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_FROM, to_email, msg.as_string())
+        server.login(user, password)
+        server.sendmail(from_addr, to_email, msg.as_string())
 
 
 def send_invitation_email(to_email: str, invite_url: str) -> None:

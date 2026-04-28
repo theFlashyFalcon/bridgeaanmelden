@@ -119,12 +119,21 @@
     <button class="btn btn-primary" onclick="document.getElementById('status-modal').remove()">Sluiten</button>
   </div>
 </div>
+{% elif login_status == 'account_klaar' %}
+<div class="modal-overlay" id="status-modal">
+  <div class="modal">
+    <div class="modal-icon">&#9989;</div>
+    <h2>Account actief</h2>
+    <p>Je aanvraag is goedgekeurd en je account is actief. Controleer of je naam en wachtwoord correct zijn. Wachtwoord vergeten? Gebruik de knop <strong>Wachtwoord vergeten?</strong> op de loginpagina.</p>
+    <button class="btn btn-primary" onclick="document.getElementById('status-modal').remove()">Sluiten</button>
+  </div>
+</div>
 {% elif login_status == 'goedgekeurd' %}
 <div class="modal-overlay" id="status-modal">
   <div class="modal">
     <div class="modal-icon">&#9993;</div>
     <h2>Controleer je e-mail</h2>
-    <p>Je aanvraag is goedgekeurd! Controleer je e-mail voor de link om je wachtwoord in te stellen en je account te activeren.</p>
+    <p>Je aanvraag is goedgekeurd! Je ontvangt een e-mail met een link om je account te activeren.</p>
     <button class="btn btn-primary" onclick="document.getElementById('status-modal').remove()">Sluiten</button>
   </div>
 </div>

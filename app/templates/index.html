@@ -51,6 +51,7 @@
 {% endif %}
 
 {% if evenings %}
+  <div class="events-grid">
   {% for evening in evenings %}
     {% set reg = user_regs.get(evening.id) %}
     <section class="card event-card">
@@ -88,10 +89,14 @@
           <a href="/aanmelden/{{ evening.id }}" class="btn btn-primary btn-sm">
             {% if reg %}Wijzigen{% else %}Aanmelden{% endif %}
           </a>
+          {% if current_user.role in ['wedstrijdleider', 'admin'] %}
+            <a href="/beheer/aanmeldingen/{{ evening.id }}" class="btn btn-secondary btn-sm">Bekijk aanmeldingen</a>
+          {% endif %}
         {% endif %}
       </div>
     </section>
   {% endfor %}
+  </div>
 {% else %}
   <section class="card">
     <p class="empty-state">Er zijn geen komende evenementen gepland.</p>

@@ -24,6 +24,8 @@
     </div>
   {% elif request.query_params.get('error') %}
     <div class="alert alert-error">Voer een geldig e-mailadres in.</div>
+  {% elif request.query_params.get('verwijderd') %}
+    <div class="alert alert-success">Uitnodiging(en) verwijderd.</div>
   {% endif %}
 
   <form method="post" action="/beheer/uitnodigingen" class="form-stack" style="margin-bottom:1.5rem;">
@@ -43,6 +45,18 @@
   </form>
 
   <h2>Verzonden uitnodigingen</h2>
+
+  {% if invitations %}
+  <div style="display:flex;gap:.5rem;margin-bottom:1rem;">
+    <form method="post" action="/beheer/uitnodigingen/verwijder-afgehandeld" onsubmit="return confirm('Alle afgehandelde uitnodigingen verwijderen?');">
+      <button type="submit" class="btn btn-secondary">Verwijder alle afgehandelde uitnodigingen</button>
+    </form>
+    <form method="post" action="/beheer/uitnodigingen/verwijder-alle" onsubmit="return confirm('Weet je zeker dat je de hele lijst wilt verwijderen?');">
+      <button type="submit" class="btn btn-danger">Verwijder hele lijst</button>
+    </form>
+  </div>
+  {% endif %}
+
   <table class="data-table">
     <thead>
       <tr>
@@ -50,6 +64,7 @@
         <th>Aangemaakt</th>
         <th>Status</th>
         <th>Link</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -71,9 +86,14 @@
             —
           {% endif %}
         </td>
+        <td>
+          <form method="post" action="/beheer/uitnodigingen/{{ inv.id }}/verwijder" onsubmit="return confirm('Uitnodiging voor {{ inv.email }} verwijderen?');">
+            <button type="submit" class="btn btn-danger" style="padding:.25rem .6rem;font-size:.8rem;">Verwijder</button>
+          </form>
+        </td>
       </tr>
       {% else %}
-      <tr><td colspan="4">Nog geen uitnodigingen verstuurd.</td></tr>
+      <tr><td colspan="5">Nog geen uitnodigingen verstuurd.</td></tr>
       {% endfor %}
     </tbody>
   </table>

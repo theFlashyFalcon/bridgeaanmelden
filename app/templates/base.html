@@ -14,7 +14,10 @@
 <header>
   <nav class="navbar">
     <a href="/" class="nav-brand">&#9824; Crash</a>
-    <div class="nav-links">
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu openen" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="nav-links" id="nav-links">
       {% if current_user %}
         <span class="nav-user">
           {{ current_user.voornaam }}
@@ -88,16 +91,24 @@
     sessionStorage.setItem('ios-prompt-shown', '1');
   }
 
+  const navToggle = document.getElementById('nav-toggle');
+  const navLinks = document.getElementById('nav-links');
+  if (navToggle) {
+    navToggle.addEventListener('click', function() {
+      const isOpen = navLinks.classList.toggle('is-open');
+      navToggle.setAttribute('aria-expanded', isOpen);
+    });
+  }
+
   document.querySelectorAll('.nav-dropdown').forEach(function(el) {
     var timer;
     el.addEventListener('mouseenter', function() {
-      clearTimeout(timer);
-      el.classList.add('is-open');
+      if (window.innerWidth > 640) { clearTimeout(timer); el.classList.add('is-open'); }
     });
     el.addEventListener('mouseleave', function() {
-      timer = setTimeout(function() {
-        el.classList.remove('is-open');
-      }, 200);
+      if (window.innerWidth > 640) {
+        timer = setTimeout(function() { el.classList.remove('is-open'); }, 200);
+      }
     });
     el.querySelector('.nav-dropdown-toggle').addEventListener('click', function(e) {
       e.stopPropagation();
@@ -113,5 +124,68 @@
 </script>
 
 {% block extra_scripts %}{% endblock %}
+
+{% if current_user and current_user.role == 'admin' %}
+<script>
+(function() {
+  var STORAGE_KEY = 'aanvraag_last_seen';
+  var POLL_MS = 30000;
+  var toastEl = null;
+
+  // Als we op de aanvragen-pagina zijn, sla de actuele telling op als "gezien"
+  if (window.location.pathname === '/beheer/aanvragen') {
+    fetch('/beheer/aanvragen/telling')
+      .then(function(r) { return r.json(); })
+      .then(function(data) { localStorage.setItem(STORAGE_KEY, data.pending); });
+    return;
+  }
+
+  function showToast(count) {
+    if (toastEl) return; // al zichtbaar
+    toastEl = document.createElement('div');
+    toastEl.className = 'aanvraag-toast';
+    toastEl.innerHTML =
+      '<span class="aanvraag-toast-icon">&#128276;</span>' +
+      '<div class="aanvraag-toast-body">' +
+        '<strong>Nieuw verzoek</strong>' +
+        '<small>' + count + ' openstaand' + (count !== 1 ? 'e' : '') + ' aanmelding' + (count !== 1 ? 'en' : '') + '</small>' +
+        '<div class="aanvraag-toast-actions">' +
+          '<a href="/beheer/aanvragen">Bekijken</a>' +
+          '<button class="dismiss-btn">Negeren</button>' +
+        '</div>' +
+      '</div>' +
+      '<button class="aanvraag-toast-close" aria-label="Sluiten">&times;</button>';
+
+    function dismiss() {
+      fetch('/beheer/aanvragen/telling')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { localStorage.setItem(STORAGE_KEY, data.pending); });
+      toastEl.remove();
+      toastEl = null;
+    }
+
+    toastEl.querySelector('.aanvraag-toast-close').addEventListener('click', dismiss);
+    toastEl.querySelector('.dismiss-btn').addEventListener('click', dismiss);
+    document.body.appendChild(toastEl);
+  }
+
+  function check() {
+    fetch('/beheer/aanvragen/telling')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data) return;
+        var lastSeen = parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10);
+        if (data.pending > lastSeen) {
+          showToast(data.pending);
+        }
+      })
+      .catch(function() {}); // stil falen bij netwerkfout
+  }
+
+  check();
+  setInterval(check, POLL_MS);
+})();
+</script>
+{% endif %}
 </body>
 </html>

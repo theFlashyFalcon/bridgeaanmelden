@@ -59,7 +59,7 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
             email = member.email or ""
     else:
         email = form.get("email", "").strip().lower()
-        member = db.query(Member).filter(Member.email == email).first()
+        member = db.query(Member).filter(Member.email.ilike(email)).first()
 
     if member and member.wachtwoord_hash and verify_password(password, member.wachtwoord_hash):
         request.session["user_id"] = member.id
@@ -78,8 +78,13 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
             request, "login.html", {"login_status": "wachtend"}, status_code=401
         )
     if account_request and account_request.status == AccountRequestStatus.goedgekeurd:
+        # Distinguish: account already created (new flow) vs invite still pending (old flow)
+        account_bestaat = member is not None or (
+            email and db.query(Member).filter(Member.email.ilike(email)).first()
+        )
+        login_status = "account_klaar" if account_bestaat else "goedgekeurd"
         return templates.TemplateResponse(
-            request, "login.html", {"login_status": "goedgekeurd"}, status_code=401
+            request, "login.html", {"login_status": login_status}, status_code=401
         )
     if account_request and account_request.status == AccountRequestStatus.afgewezen:
         return templates.TemplateResponse(
@@ -369,8 +374,8 @@ async def wachtwoord_vergeten_submit(request: Request, db: Session = Depends(get
     form = await request.form()
     email = form.get("email", "").strip().lower()
 
-    member = db.query(Member).filter(Member.email == email).first() if email else None
-    if member and member.wachtwoord_hash:
+    member = db.query(Member).filter(Member.email.ilike(email)).first() if email else None
+    if member:
         token = secrets.token_urlsafe(32)
         db.add(PasswordResetToken(token=token, member_id=member.id))
         db.commit()

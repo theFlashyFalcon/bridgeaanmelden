@@ -32,7 +32,7 @@ async def index(
     evenings = (
         db.query(ClubEvening)
         .join(Season)
-        .filter(ClubEvening.datum >= today)
+        .filter(Season.actief == True, ClubEvening.datum >= today)  # noqa: E712
         .order_by(ClubEvening.datum)
         .limit(30)
         .all()

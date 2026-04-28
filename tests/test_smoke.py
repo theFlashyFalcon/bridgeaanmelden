@@ -15,17 +15,17 @@ async def test_homepage_shows_no_evening_when_none_planned(client):
     """When no evenings are scheduled the homepage renders without errors."""
     response = await client.get("/")
     assert response.status_code == 200
-    assert "Geen komende avonden" in response.text
+    assert "Er zijn geen komende evenementen gepland." in response.text
 
 
 async def test_homepage_shows_next_evening(client, db_session):
-    """When an active season and evening exist, the date appears on the homepage."""
+    """When an active season and evening exist, an event card appears on the homepage."""
     season = make_season(db_session)
     make_evening(db_session, season_id=season.id)
 
     response = await client.get("/")
     assert response.status_code == 200
-    assert "Volgende avond" in response.text
+    assert "event-card" in response.text
 
 
 async def test_offline_page_returns_200(client):
