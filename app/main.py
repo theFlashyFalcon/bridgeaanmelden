@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 
@@ -9,6 +10,11 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 from app.auth import SECRET_KEY  # noqa: E402 — must be after load_dotenv
 from app.database import Base, engine  # noqa: E402
@@ -35,31 +41,6 @@ def _get_user_for_request(request: Request):
 # Create all tables (no-op if they already exist; Alembic handles migrations)
 Base.metadata.create_all(bind=engine)
 
-# Seed default admin email-role assignment
-def _seed_admin():
-    from app.database import SessionLocal
-    from app.models import EmailRoleAssignment, Member, MemberRole
-
-    db = SessionLocal()
-    try:
-        admin_email = os.getenv("ADMIN_EMAIL", "marieke@summadigita.com")
-
-        assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == admin_email).first()
-        if assignment:
-            assignment.role = MemberRole.admin
-        else:
-            db.add(EmailRoleAssignment(email=admin_email, role=MemberRole.admin))
-
-        member = db.query(Member).filter(Member.email == admin_email).first()
-        if member and member.role != MemberRole.admin:
-            member.role = MemberRole.admin
-
-        db.commit()
-    finally:
-        db.close()
-
-_seed_admin()
-
 
 def _migrate():
     from sqlalchemy import text
@@ -85,6 +66,32 @@ def _migrate():
 
 
 _migrate()
+
+
+def _seed_admin():
+    from app.database import SessionLocal
+    from app.models import EmailRoleAssignment, Member, MemberRole
+
+    db = SessionLocal()
+    try:
+        admin_email = os.getenv("ADMIN_EMAIL", "marieke@summadigita.com")
+
+        assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == admin_email).first()
+        if assignment:
+            assignment.role = MemberRole.admin
+        else:
+            db.add(EmailRoleAssignment(email=admin_email, role=MemberRole.admin))
+
+        member = db.query(Member).filter(Member.email == admin_email).first()
+        if member and member.role != MemberRole.admin:
+            member.role = MemberRole.admin
+
+        db.commit()
+    finally:
+        db.close()
+
+
+_seed_admin()
 
 
 def _seed_crash_leden():
