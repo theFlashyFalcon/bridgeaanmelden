@@ -39,7 +39,11 @@ def get_current_user(
     user_id = request.session.get("user_id")
     if not user_id:
         return None
-    return db.query(Member).filter(Member.id == user_id).first()
+    member = db.query(Member).filter(Member.id == user_id).first()
+    if member and member.verwijderd_op is not None:
+        request.session.clear()
+        return None
+    return member
 
 
 def require_auth(

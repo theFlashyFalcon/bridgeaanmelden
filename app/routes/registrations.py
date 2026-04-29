@@ -47,6 +47,9 @@ async def registration_form(
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
 
+    if evening.datum < date.today():
+        return RedirectResponse(url="/", status_code=302)
+
     if _is_training(evening) and not current_user.training_eligible:
         return templates.TemplateResponse(
             request,
@@ -102,6 +105,9 @@ async def registration_submit(
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404)
+
+    if evening.datum < date.today():
+        return RedirectResponse(url="/", status_code=302)
 
     if _is_training(evening) and not current_user.training_eligible:
         raise HTTPException(status_code=403, detail="Geen toegang tot trainingsavonden")
@@ -333,6 +339,9 @@ async def registration_herhaal(
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404)
+
+    if _is_training(evening) and not current_user.training_eligible:
+        raise HTTPException(status_code=403, detail="Geen toegang tot trainingsavonden")
 
     form = await request.form()
     alles = form.get("alles") == "on"

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}{{ member.voornaam }} {{ member.achternaam }} — Bridge Club{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:.75rem;">
+  <a href="/leden" style="color:var(--color-muted);font-size:.9rem;">&#8592; Terug naar gebruikers</a>
+</div>
+
+<section class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.75rem;">
+    <div>
+      <h1 style="margin-bottom:.25rem;">{{ member.voornaam }} {{ member.achternaam }}</h1>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        <span class="role-badge-tabel role-{{ member.role }}">{{ member.role }}</span>
+        {% if lid_match %}
+          <span class="badge badge-lid">Crash-lid</span>
+        {% endif %}
+        {% if member.verwijderd_op %}
+          <span class="badge badge-danger">Verwijderd</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if member.id != current_user.id and not member.verwijderd_op %}
+    <form method="post" action="/leden/{{ member.id }}/verwijder" onsubmit="return confirm('Weet je zeker dat je dit account wilt verwijderen?')">
+      <button type="submit" class="btn btn-danger">Account verwijderen</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card">
+  <h2>Accountgegevens</h2>
+  <dl class="detail-list">
+    <dt>Voornaam</dt>
+    <dd>{{ member.voornaam }}</dd>
+    <dt>Achternaam</dt>
+    <dd>{{ member.achternaam }}</dd>
+    <dt>NBB-nummer</dt>
+    <dd>{{ member.lidnummer or '—' }}</dd>
+    <dt>E-mailadres</dt>
+    <dd>{{ member.email or '—' }}</dd>
+    <dt>Rol</dt>
+    <dd>{{ member.role }}</dd>
+    <dt>Training toegestaan</dt>
+    <dd>{{ 'Ja' if member.training_eligible else 'Nee' }}</dd>
+    <dt>Crash-lid (NBB-lijst)</dt>
+    <dd>
+      {% if lid_match %}
+        Ja — {{ lid_match.voornaam }} {{ lid_match.achternaam }}
+      {% else %}
+        Nee
+      {% endif %}
+    </dd>
+    {% if member.verwijderd_op %}
+    <dt>Verwijderd op</dt>
+    <dd>{{ member.verwijderd_op.strftime('%d-%m-%Y %H:%M') }}</dd>
+    {% endif %}
+  </dl>
+</section>
+
+<section class="card">
+  <h2>Aanmeldingen <span class="badge">{{ registrations | length }}</span></h2>
+  {% if registrations %}
+    <table class="data-table" style="font-size:.85rem;">
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Avond</th>
+          <th>Type</th>
+          <th>Status</th>
+          <th>Partner</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in registrations %}
+        <tr>
+          <td>{{ r.evening.datum.strftime('%d-%m-%Y') }}</td>
+          <td>{{ r.evening.naam or r.evening.type }}</td>
+          <td>{{ r.type }}</td>
+          <td>
+            {% if r.status == 'aangemeld' %}<span class="badge badge-success">Aangemeld</span>
+            {% elif r.status == 'afgemeld' %}<span class="badge" style="background:var(--color-muted);">Afgemeld</span>
+            {% elif r.status == 'beschikbaar_solo' %}<span class="badge badge-warning">Solo</span>
+            {% else %}<span class="badge">{{ r.status }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.person1_id == member.id %}
+              {{ r.partner_naam or (r.person2.voornaam ~ ' ' ~ r.person2.achternaam if r.person2 else '—') }}
+            {% else %}
+              {{ r.person1.voornaam }} {{ r.person1.achternaam }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty-state">Geen aanmeldingen gevonden.</p>
+  {% endif %}
+</section>
+
+{% endblock %}

@@ -63,6 +63,7 @@ class Member(Base):
     oauth_sub = Column(String, unique=True, nullable=True, index=True)
     email = Column(String, nullable=True, index=True)
     wachtwoord_hash = Column(String, nullable=True)
+    verwijderd_op = Column(DateTime, nullable=True)
 
     invitations = relationship("Invitation", back_populates="member")
     registrations_as_person1 = relationship(
@@ -222,6 +223,18 @@ class RecurringRegistration(Base):
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
 
     member = relationship("Member")
+
+
+class AdminBericht(Base):
+    __tablename__ = "admin_berichten"
+
+    id = Column(Integer, primary_key=True, index=True)
+    naam = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    bericht = Column(Text, nullable=False)
+    type = Column(String, default="contact", nullable=False)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+    gelezen = Column(Boolean, default=False, nullable=False)
 
 
 class Registration(Base):

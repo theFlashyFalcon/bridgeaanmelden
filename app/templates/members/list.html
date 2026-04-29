@@ -2,27 +2,59 @@
 {% block title %}Gebruikers — Bridge Club{% endblock %}
 {% block content %}
 <section class="card">
-  <h1>Lijst met gebruikers <span class="badge">{{ members | length }}</span></h1>
+  <div class="gebruikers-header">
+    <h1>Lijst met gebruikers <span class="badge">{{ members | length }}</span></h1>
+    <div class="gebruikers-acties">
+      <div class="sort-container">
+        <button type="button" class="btn btn-secondary btn-sm" id="sort-btn" onclick="toggleSortMenu()">&#9660; Sorteren</button>
+        <div class="sort-menu" id="sort-menu">
+          <p class="sort-menu-label">Sorteren op</p>
+          <label class="sort-option"><input type="radio" name="sort_keuze" value="naam" {% if sort_by == 'naam' %}checked{% endif %}> Naam</label>
+          <label class="sort-option"><input type="radio" name="sort_keuze" value="nummer" {% if sort_by == 'nummer' %}checked{% endif %}> Nummer</label>
+          <label class="sort-option"><input type="radio" name="sort_keuze" value="mail" {% if sort_by == 'mail' %}checked{% endif %}> E-mail</label>
+          <div class="sort-menu-actions">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleSortMenu()">Annuleren</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="applySort()">Bevestigen</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if request.query_params.get('verwijderd') %}
+    <div class="alert alert-success">Gebruiker verwijderd.</div>
+  {% endif %}
 
   {% if members %}
-    <table class="data-table">
+    <table class="data-table gebruikers-table">
       <thead>
         <tr>
-          <th>Voornaam</th>
-          <th>Achternaam</th>
+          <th>Naam</th>
           <th>NBB-nummer</th>
           <th>E-mailadres</th>
           <th>Rol</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for m in members %}
-        <tr>
-          <td>{{ m.voornaam }}</td>
-          <td>{{ m.achternaam }}</td>
+        <tr class="gebruiker-rij" onclick="window.location='/leden/{{ m.id }}'" title="Bekijk details">
+          <td>
+            <span class="gebruiker-naam">{{ m.voornaam }} {{ m.achternaam }}</span>
+            {% if m.lidnummer in lid_nummers %}
+              <span class="badge badge-lid">lid</span>
+            {% endif %}
+          </td>
           <td>{{ m.lidnummer or '—' }}</td>
           <td>{{ m.email or '—' }}</td>
-          <td><span class="role-badge role-{{ m.role }}">{{ m.role }}</span></td>
+          <td><span class="role-badge-tabel role-{{ m.role }}">{{ m.role }}</span></td>
+          <td onclick="event.stopPropagation()">
+            {% if m.id != current_user.id %}
+            <form method="post" action="/leden/{{ m.id }}/verwijder" onsubmit="return bevestigVerwijder('{{ m.voornaam }} {{ m.achternaam }}')">
+              <button type="submit" class="btn btn-danger btn-sm">Verwijderen</button>
+            </form>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -31,4 +63,33 @@
     <p class="empty-state">Geen gebruikers gevonden.</p>
   {% endif %}
 </section>
+
+<script>
+  function toggleSortMenu() {
+    const menu = document.getElementById('sort-menu');
+    const btn = document.getElementById('sort-btn');
+    const open = menu.classList.toggle('is-open');
+    btn.setAttribute('aria-expanded', open);
+  }
+
+  function applySort() {
+    const selected = document.querySelector('input[name="sort_keuze"]:checked');
+    if (selected) {
+      window.location.href = '/leden?sort=' + selected.value;
+    }
+    toggleSortMenu();
+  }
+
+  function bevestigVerwijder(naam) {
+    return confirm('Weet je zeker dat je ' + naam + ' wilt verwijderen? Het account kan niet meer inloggen.');
+  }
+
+  document.addEventListener('click', function(e) {
+    const menu = document.getElementById('sort-menu');
+    const btn = document.getElementById('sort-btn');
+    if (menu && !menu.contains(e.target) && e.target !== btn) {
+      menu.classList.remove('is-open');
+    }
+  });
+</script>
 {% endblock %}
