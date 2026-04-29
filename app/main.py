@@ -69,12 +69,14 @@ _migrate()
 
 
 def _seed_admin():
+    from app.auth import hash_password
     from app.database import SessionLocal
     from app.models import EmailRoleAssignment, Member, MemberRole
 
     db = SessionLocal()
     try:
         admin_email = os.getenv("ADMIN_EMAIL", "marieke@summadigita.com")
+        admin_password = os.getenv("ADMIN_PASSWORD", "")
 
         assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == admin_email).first()
         if assignment:
@@ -83,8 +85,20 @@ def _seed_admin():
             db.add(EmailRoleAssignment(email=admin_email, role=MemberRole.admin))
 
         member = db.query(Member).filter(Member.email == admin_email).first()
-        if member and member.role != MemberRole.admin:
-            member.role = MemberRole.admin
+        if member:
+            if member.role != MemberRole.admin:
+                member.role = MemberRole.admin
+        elif admin_password:
+            # Maak admin-account aan als ADMIN_PASSWORD is ingesteld en account nog niet bestaat
+            db.add(Member(
+                voornaam="Admin",
+                achternaam="",
+                lidnummer=f"admin_{admin_email.split('@')[0]}",
+                email=admin_email,
+                wachtwoord_hash=hash_password(admin_password),
+                role=MemberRole.admin,
+            ))
+            print(f"[seed_admin] Admin-account aangemaakt voor {admin_email}", flush=True)
 
         db.commit()
     finally:
