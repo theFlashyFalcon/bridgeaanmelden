@@ -7,7 +7,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = os.getenv("BASE_URL", "").rstrip("/")
+def _base_url(request: Request) -> str:
+    configured = os.getenv("BASE_URL", "").rstrip("/")
+    return configured or str(request.base_url).rstrip("/")
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -412,9 +414,10 @@ async def smtp_test(
         )
         logger.info("SMTP-test geslaagd, bericht verstuurd naar %s", to_email)
         return RedirectResponse(url="/beheer/uitnodigingen?smtp_test=ok", status_code=302)
-    except Exception:
+    except Exception as exc:
         logger.exception("SMTP-test mislukt")
-        return RedirectResponse(url="/beheer/uitnodigingen?smtp_test=fout", status_code=302)
+        from urllib.parse import quote
+        return RedirectResponse(url=f"/beheer/uitnodigingen?smtp_test=fout&fout={quote(str(exc))}", status_code=302)
 
 
 # ── Uitnodigingen (Admin only) ────────────────────────────────────────────────
@@ -466,15 +469,16 @@ async def create_invitation(
     db.add(invitation)
     db.commit()
 
-    base = BASE_URL or str(request.base_url).rstrip("/")
+    base = _base_url(request)
     invite_url = f"{base}/invite/{token}"
     try:
         send_invitation_email(email, invite_url)
         return RedirectResponse(url="/beheer/uitnodigingen?verstuurd=1", status_code=302)
-    except Exception:
+    except Exception as exc:
         logger.exception("E-mail versturen mislukt voor uitnodiging naar %s", email)
+        from urllib.parse import quote
         return RedirectResponse(
-            url=f"/beheer/uitnodigingen?aangemaakt=1&email_fout=1&token={token}",
+            url=f"/beheer/uitnodigingen?aangemaakt=1&email_fout=1&token={token}&fout={quote(str(exc))}",
             status_code=302,
         )
 
@@ -605,12 +609,12 @@ async def aanvraag_goedkeuren(
         db.add(member)
         db.commit()
         try:
-            base = BASE_URL or str(request.base_url).rstrip("/")
-            send_approval_email(aanvraag.email, aanvraag.voornaam, f"{base}/login")
+            send_approval_email(aanvraag.email, aanvraag.voornaam, f"{_base_url(request)}/login")
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1", status_code=302)
-        except Exception:
+        except Exception as exc:
             logger.exception("E-mail versturen mislukt bij goedkeuren aanvraag %s", aanvraag.email)
-            return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1&email_fout=1", status_code=302)
+            from urllib.parse import quote
+            return RedirectResponse(url=f"/beheer/aanvragen?goedgekeurd=1&email_fout=1&fout={quote(str(exc))}", status_code=302)
     else:
         # Legacy: send invite link
         assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == aanvraag.email).first()
@@ -623,15 +627,15 @@ async def aanvraag_goedkeuren(
         db.add(Invitation(token=token, email=aanvraag.email, account_request_id=aanvraag.id))
         db.commit()
 
-        base = BASE_URL or str(request.base_url).rstrip("/")
-        invite_url = f"{base}/invite/{token}"
+        invite_url = f"{_base_url(request)}/invite/{token}"
         try:
             send_invitation_email(aanvraag.email, invite_url)
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1", status_code=302)
-        except Exception:
+        except Exception as exc:
             logger.exception("Uitnodigingsmail mislukt voor aanvraag %s", aanvraag.email)
+            from urllib.parse import quote
             return RedirectResponse(
-                url=f"/beheer/aanvragen?goedgekeurd=1&email_fout=1&token={token}",
+                url=f"/beheer/aanvragen?goedgekeurd=1&email_fout=1&token={token}&fout={quote(str(exc))}",
                 status_code=302,
             )
 

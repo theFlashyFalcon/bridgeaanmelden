@@ -23,7 +23,12 @@
   {% if request.query_params.get('smtp_test') == 'ok' %}
     <div class="alert alert-success" style="margin-bottom:1rem;">Testmail verstuurd naar je eigen e-mailadres. Controleer ook je spammap.</div>
   {% elif request.query_params.get('smtp_test') == 'fout' %}
-    <div class="alert alert-error" style="margin-bottom:1rem;">Testmail mislukt. Controleer de Render-logs voor de exacte foutmelding, en controleer of <code>SMTP_HOST</code>, <code>SMTP_USER</code> en <code>SMTP_PASSWORD</code> correct zijn.</div>
+    <div class="alert alert-error" style="margin-bottom:1rem;">
+      Testmail mislukt. Controleer of <code>SMTP_HOST</code>, <code>SMTP_USER</code> en <code>SMTP_PASSWORD</code> correct zijn.
+      {% if request.query_params.get('fout') %}
+        <br><strong>Fout:</strong> <code>{{ request.query_params.get('fout') }}</code>
+      {% endif %}
+    </div>
   {% elif request.query_params.get('smtp_test') == 'niet_geconfigureerd' %}
     <div class="alert alert-error" style="margin-bottom:1rem;">SMTP is niet geconfigureerd. Stel de omgevingsvariabelen in op Render.</div>
   {% elif request.query_params.get('smtp_test') == 'geen_email' %}
@@ -35,8 +40,11 @@
   {% elif request.query_params.get('aangemaakt') %}
     <div class="alert alert-info">
       Uitnodiging aangemaakt, maar e-mail kon niet worden verstuurd.
+      {% if request.query_params.get('fout') %}
+        <br><strong>Fout:</strong> <code>{{ request.query_params.get('fout') }}</code>
+      {% endif %}
       {% if request.query_params.get('token') %}
-        <br>Kopieer de link handmatig: <code>/invite/{{ request.query_params.get('token') }}</code>
+        <br>Kopieer de link handmatig: <code>{{ request.base_url }}invite/{{ request.query_params.get('token') }}</code>
       {% endif %}
     </div>
   {% elif request.query_params.get('error') %}
@@ -98,7 +106,7 @@
         </td>
         <td>
           {% if not inv.gebruikt_op %}
-            <code style="font-size:.8rem;word-break:break-all;">/invite/{{ inv.token }}</code>
+            <code style="font-size:.8rem;word-break:break-all;">{{ request.base_url }}invite/{{ inv.token }}</code>
           {% else %}
             —
           {% endif %}
