@@ -205,6 +205,21 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 
+/* ── Weergave-modus banner ───────────────────────────────────────────────────── */
+.weergave-banner {
+  background: var(--color-accent);
+  color: #1a1a1a;
+  text-align: center;
+  padding: .45rem 1rem;
+  font-size: .875rem;
+}
+.weergave-banner a { color: #1a1a1a; font-weight: 700; text-decoration: underline; }
+.weergave-banner a:hover { opacity: .75; }
+
+.weergave-toggle { color: var(--color-accent); }
+.weergave-toggle.weergave-actief { color: var(--color-accent); font-weight: 700; }
+.weergave-actief-item { font-weight: 700; }
+
 /* ── Aanvraag-notificatie toast ─────────────────────────────────────────────── */
 .aanvraag-toast {
   position: fixed;
@@ -736,3 +751,85 @@ footer {
 .bericht-datum { font-size: .75rem; color: var(--color-muted); margin-left: auto; }
 .bericht-email { font-size: .8rem; color: var(--color-secondary); margin-bottom: .3rem; }
 .bericht-tekst { font-size: .9rem; color: var(--color-text); margin: .25rem 0 .4rem; white-space: pre-wrap; word-break: break-word; }
+
+/* ── Filter tabs (agenda) ────────────────────────────────────────────────────── */
+.filter-tabs {
+  display: flex;
+  gap: .4rem;
+  flex-wrap: wrap;
+  margin-bottom: .75rem;
+}
+
+.filter-tab {
+  display: inline-block;
+  padding: .35rem .85rem;
+  border-radius: 20px;
+  font-size: .875rem;
+  font-weight: 600;
+  border: 2px solid transparent;
+  background: #e8e8e8;
+  color: var(--color-text);
+  text-decoration: none;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.filter-tab:hover { background: #d0d0d0; text-decoration: none; }
+
+.filter-tab--active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+.filter-tab--active:hover { background: var(--color-primary); opacity: .88; }
+
+.filter-tab--clubavond.filter-tab--active  { background: #1d4ed8; border-color: #1d4ed8; }
+.filter-tab--avondeten.filter-tab--active  { background: #854d0e; border-color: #854d0e; }
+.filter-tab--training.filter-tab--active   { background: #166534; border-color: #166534; }
+.filter-tab--speciaal.filter-tab--active   { background: #6b21a8; border-color: #6b21a8; }
+
+/* ── Definitief aanmelden card ───────────────────────────────────────────────── */
+.definitief-card {
+  background: #eaf3fb;
+  border: 1px solid #aed6f1;
+}
+.definitief-hint {
+  font-size: .82rem;
+  color: var(--color-muted);
+  margin-top: .45rem;
+}
+
+/* ── Weergave-instellingen (collapsible) ─────────────────────────────────────── */
+.weergave-instellingen {
+  padding: .9rem 1.25rem;
+  cursor: default;
+}
+.weergave-instellingen-toggle {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--color-secondary);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.weergave-instellingen-toggle::-webkit-details-marker { display: none; }
+.weergave-instellingen-toggle::before { content: '▸ '; }
+details[open] .weergave-instellingen-toggle::before { content: '▾ '; }
+
+.weergave-instellingen-hint {
+  font-size: .85rem;
+  color: var(--color-muted);
+  margin-bottom: .6rem;
+}
+
+.toggle-list {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .9rem;
+  cursor: pointer;
+}
+.toggle-item input[type="checkbox"] { width: 1rem; height: 1rem; cursor: pointer; }

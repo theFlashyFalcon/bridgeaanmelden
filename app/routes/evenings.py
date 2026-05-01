@@ -20,6 +20,14 @@ from app.models import (
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
 
+# Mapping URL-type-sleutel → DB-waarden
+_TYPE_MAP: dict[str, list[str]] = {
+    "clubavond": ["clubavond", "regulier"],
+    "avondeten": ["eten voor jeugdtraining"],
+    "training": ["jeugdtraining", "training"],
+    "speciaal": ["speciaal"],
+}
+
 
 @router.get("/")
 async def index(
@@ -28,15 +36,28 @@ async def index(
     current_user: Optional[Member] = Depends(get_current_user),
 ):
     today = date.today()
+    active_filter = request.query_params.get("type", "")
 
-    evenings = (
+    hidden_types: list[str] = []
+    if current_user and current_user.verborgen_types:
+        hidden_types = [t for t in current_user.verborgen_types.split(",") if t]
+
+    query = (
         db.query(ClubEvening)
         .join(Season)
         .filter(Season.actief == True, ClubEvening.datum >= today)  # noqa: E712
-        .order_by(ClubEvening.datum)
-        .limit(30)
-        .all()
     )
+
+    if active_filter and active_filter in _TYPE_MAP:
+        query = query.filter(ClubEvening.type.in_(_TYPE_MAP[active_filter]))
+    elif not active_filter and hidden_types:
+        all_hidden_db: list[str] = []
+        for key in hidden_types:
+            all_hidden_db.extend(_TYPE_MAP.get(key, []))
+        if all_hidden_db:
+            query = query.filter(ClubEvening.type.notin_(all_hidden_db))
+
+    evenings = query.order_by(ClubEvening.datum).limit(30).all()
 
     user_regs: dict[int, Registration] = {}
     if current_user:
@@ -71,6 +92,8 @@ async def index(
             "evenings": evenings,
             "user_regs": user_regs,
             "welkom": welkom,
+            "active_filter": active_filter,
+            "hidden_types": hidden_types,
         },
     )
 

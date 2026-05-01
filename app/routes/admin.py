@@ -160,6 +160,7 @@ async def avonden_add(
     naam = form.get("naam", "").strip()
     datum_str = form.get("datum", "")
     type_ = form.get("type", "clubavond")
+    deelnemers_type = form.get("deelnemers_type", "paren")
 
     errors = []
     if not naam:
@@ -200,7 +201,7 @@ async def avonden_add(
     herhaal_tot_str = form.get("herhaal_tot", "").strip()
 
     new_events = []
-    first_event = ClubEvening(naam=naam, datum=datum, type=type_, season_id=season.id)
+    first_event = ClubEvening(naam=naam, datum=datum, type=type_, deelnemers_type=deelnemers_type, season_id=season.id)
     db.add(first_event)
     db.flush()
     new_events.append(first_event)
@@ -222,7 +223,7 @@ async def avonden_add(
                     .first()
                 )
                 if next_season:
-                    evt = ClubEvening(naam=naam, datum=next_datum, type=type_, season_id=next_season.id)
+                    evt = ClubEvening(naam=naam, datum=next_datum, type=type_, deelnemers_type=deelnemers_type, season_id=next_season.id)
                     db.add(evt)
                     db.flush()
                     new_events.append(evt)
@@ -1019,3 +1020,20 @@ async def verzoek_afwijzen(
         url=f"/beheer/af-aanmeldingen/{partner_request.evening_id}?afgewezen=1",
         status_code=302,
     )
+
+
+@router.get("/weergave/{rol}")
+async def set_weergave(
+    rol: str,
+    request: Request,
+    current_user: Member = Depends(require_admin),
+):
+    if rol == "reset":
+        request.session.pop("view_as_role", None)
+    elif rol in ("lid", "wedstrijdleider"):
+        request.session["view_as_role"] = rol
+    else:
+        raise HTTPException(status_code=400, detail="Ongeldige rol")
+
+    referer = request.headers.get("referer", "/")
+    return RedirectResponse(url=referer, status_code=302)

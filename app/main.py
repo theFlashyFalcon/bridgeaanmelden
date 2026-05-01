@@ -52,6 +52,7 @@ def _migrate():
         "ALTER TABLE account_requests ADD COLUMN wachtwoord_hash VARCHAR",
         "ALTER TABLE members ADD COLUMN wachtwoord_hash VARCHAR",
         "ALTER TABLE members ADD COLUMN verwijderd_op TIMESTAMP",
+        "ALTER TABLE members ADD COLUMN verborgen_types VARCHAR",
     ]
     with engine.connect() as conn:
         for sql in migrations:

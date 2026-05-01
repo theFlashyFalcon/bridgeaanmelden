@@ -32,6 +32,12 @@ class EveningType(str, enum.Enum):
     training = "training"
 
 
+class DeelnemersType(str, enum.Enum):
+    individueel = "individueel"
+    paren = "paren"
+    viertallen = "viertallen"
+
+
 class PartnershipScope(str, enum.Enum):
     all = "all"
     training_only = "training_only"
@@ -64,6 +70,7 @@ class Member(Base):
     email = Column(String, nullable=True, index=True)
     wachtwoord_hash = Column(String, nullable=True)
     verwijderd_op = Column(DateTime, nullable=True)
+    verborgen_types = Column(String, nullable=True)
 
     invitations = relationship("Invitation", back_populates="member")
     registrations_as_person1 = relationship(
@@ -144,6 +151,7 @@ class ClubEvening(Base):
     naam = Column(String, nullable=True, default="")
     datum = Column(Date, nullable=False)
     type = Column(String, nullable=False, default=EveningType.clubavond)
+    deelnemers_type = Column(String, nullable=False, default=DeelnemersType.paren)
     season_id = Column(Integer, ForeignKey("seasons.id"), nullable=False)
 
     season = relationship("Season", back_populates="club_evenings")
@@ -245,6 +253,8 @@ class Registration(Base):
     person1_id = Column(Integer, ForeignKey("members.id"), nullable=False)
     person2_id = Column(Integer, ForeignKey("members.id"), nullable=True)
     partner_naam = Column(String, nullable=True)
+    partner2_naam = Column(String, nullable=True)
+    partner3_naam = Column(String, nullable=True)
     type = Column(String, nullable=False)
     status = Column(String, default=RegistrationStatus.aangemeld, nullable=False)
     substitute_name = Column(Text, nullable=True)

@@ -8,19 +8,25 @@
   <div class="alert alert-info">Je bent afgemeld.</div>
 {% elif request.query_params.get('bevestigd') %}
   <div class="alert alert-success">Aanmelding opgeslagen.</div>
+{% elif request.query_params.get('aangemeld_zonder_partner') %}
+  <div class="alert alert-info">Je hebt je opgegeven zonder partner, de wedstrijdleider neemt contact met je op om een partner te vinden.</div>
+{% elif request.query_params.get('aangemeld_onvolledig_team') %}
+  <div class="alert alert-info">Je hebt je opgegeven zonder volledig team, de wedstrijdleider neemt contact met je op om het team aan te vullen.</div>
 {% elif request.query_params.get('bulk_ok') %}
   {% set n = request.query_params.get('bulk_ok') %}
   {% if n|int == 0 %}
-    <div class="alert alert-info">Je was al aangemeld voor alle komende clubavonden.</div>
+    <div class="alert alert-info">Je was al aangemeld voor alle komende evenementen van dit type.</div>
   {% else %}
     <div class="alert alert-success">
-      Je bent aangemeld voor {{ n }} komende clubavond{{ 'en' if n|int != 1 else '' }}.
+      Je bent aangemeld voor {{ n }} komend{{ 'e' if n|int != 1 else '' }} evenement{{ 'en' if n|int != 1 else '' }}.
     </div>
   {% endif %}
 {% elif request.query_params.get('verzoek_ingediend') %}
   <div class="alert alert-info">
     Je verzoek is ingediend. De wedstrijdleider beoordeelt de partnerkoppeling.
   </div>
+{% elif request.query_params.get('voorkeuren_opgeslagen') %}
+  <div class="alert alert-success">Agendaweergave opgeslagen.</div>
 {% endif %}
 
 <section class="page-header">
@@ -50,6 +56,80 @@
   </section>
 {% endif %}
 
+{# ── Filter tabs ──────────────────────────────────────────────────────────── #}
+{% set type_labels = {
+  'clubavond': 'Clubavond',
+  'avondeten': 'Avondeten',
+  'training': 'Training',
+  'speciaal': 'Speciaal',
+} %}
+{% set type_plural = {
+  'clubavond': 'clubavonden',
+  'avondeten': 'maaltijden',
+  'training': 'trainingen',
+  'speciaal': 'speciale evenementen',
+} %}
+
+<div class="filter-tabs">
+  <a href="/" class="filter-tab {% if not active_filter %}filter-tab--active{% endif %}">Alle</a>
+  <a href="/?type=clubavond" class="filter-tab filter-tab--clubavond {% if active_filter == 'clubavond' %}filter-tab--active{% endif %}">Clubavond</a>
+  <a href="/?type=avondeten" class="filter-tab filter-tab--avondeten {% if active_filter == 'avondeten' %}filter-tab--active{% endif %}">Avondeten</a>
+  <a href="/?type=training"  class="filter-tab filter-tab--training  {% if active_filter == 'training'  %}filter-tab--active{% endif %}">Training</a>
+  <a href="/?type=speciaal"  class="filter-tab filter-tab--speciaal  {% if active_filter == 'speciaal'  %}filter-tab--active{% endif %}">Speciaal</a>
+</div>
+
+{# ── Definitief aanmelden (zichtbaar bij gefilterd type) ─────────────────── #}
+{% if current_user and active_filter and active_filter in type_plural %}
+  <div class="card definitief-card">
+    <form method="post" action="/definitief-aanmelden/{{ active_filter }}"
+          onsubmit="return confirm('Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.')">
+      <button type="submit" class="btn btn-primary">
+        Meld mij definitief aan voor alle {{ type_plural[active_filter] }}
+      </button>
+      <p class="definitief-hint">
+        Je wordt zonder partner aangemeld voor alle toekomstige {{ type_plural[active_filter] }}, ook nieuw geplande.
+        Je kunt dit later aanpassen via de aanmeldknop bij elk evenement.
+      </p>
+    </form>
+  </div>
+{% endif %}
+
+{# ── Weergave-instellingen (alleen zonder filter, voor ingelogde gebruikers) #}
+{% if current_user and not active_filter %}
+  <details class="card weergave-instellingen">
+    <summary class="weergave-instellingen-toggle">Agendaweergave aanpassen</summary>
+    <form method="post" action="/instellingen/verborgen-types" style="margin-top:.9rem;">
+      <p class="weergave-instellingen-hint">Vink aan welke soorten evenementen je in de agenda wilt zien.</p>
+      <div class="toggle-list">
+        <label class="toggle-item">
+          <input type="checkbox" name="toon_clubavond" value="1"
+                 {% if 'clubavond' not in hidden_types %}checked{% endif %}>
+          Clubavonden
+        </label>
+        <label class="toggle-item">
+          <input type="checkbox" name="toon_avondeten" value="1"
+                 {% if 'avondeten' not in hidden_types %}checked{% endif %}>
+          Avondeten
+        </label>
+        <label class="toggle-item">
+          <input type="checkbox" name="toon_training" value="1"
+                 {% if 'training' not in hidden_types %}checked{% endif %}>
+          Trainingen
+        </label>
+        <label class="toggle-item">
+          <input type="checkbox" name="toon_speciaal" value="1"
+                 {% if 'speciaal' not in hidden_types %}checked{% endif %}>
+          Speciale evenementen
+        </label>
+      </div>
+      <div class="action-buttons" style="margin-top:.75rem;">
+        <button type="submit" class="btn btn-primary btn-sm">Opslaan</button>
+      </div>
+    </form>
+  </details>
+{% endif %}
+
+{# ── Evenementenraster ────────────────────────────────────────────────────── #}
 {% if evenings %}
   <div class="events-grid">
   {% for evening in evenings %}
@@ -99,7 +179,11 @@
   </div>
 {% else %}
   <section class="card">
-    <p class="empty-state">Er zijn geen komende evenementen gepland.</p>
+    {% if active_filter %}
+      <p class="empty-state">Er zijn geen komende evenementen van dit type gepland.</p>
+    {% else %}
+      <p class="empty-state">Er zijn geen komende evenementen gepland.</p>
+    {% endif %}
   </section>
 {% endif %}
 

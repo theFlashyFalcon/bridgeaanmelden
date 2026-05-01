@@ -83,6 +83,20 @@
         <input type="date" id="e-datum" name="datum" required>
         <span class="form-hint">Het seizoen wordt automatisch bepaald op basis van de datum.</span>
       </div>
+      <div class="form-group">
+        <label>Aanmelden als</label>
+        <div style="display:flex;gap:1.5rem;margin-top:.25rem;">
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+            <input type="radio" name="deelnemers_type" value="individueel"> Individueel
+          </label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+            <input type="radio" name="deelnemers_type" value="paren" checked> Paren
+          </label>
+          <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;">
+            <input type="radio" name="deelnemers_type" value="viertallen"> Viertallen
+          </label>
+        </div>
+      </div>
 
       <!-- Herhaal-paneel (verborgen) -->
       <div id="herhaal-paneel" hidden style="border:1px solid var(--color-secondary);border-radius:var(--radius);padding:1rem;margin-top:.5rem;background:var(--color-bg);">

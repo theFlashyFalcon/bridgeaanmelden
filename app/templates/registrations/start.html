@@ -18,7 +18,17 @@
   {% elif existing and existing.status != 'afgemeld' %}
     <div class="alert alert-success" style="margin-bottom:1rem;">
       Je bent aangemeld
-      {% if existing.partner_naam %}
+      {% if evening.deelnemers_type == 'viertallen' %}
+        {% set partners = [] %}
+        {% if existing.partner_naam %}{% set _ = partners.append(existing.partner_naam) %}{% endif %}
+        {% if existing.partner2_naam %}{% set _ = partners.append(existing.partner2_naam) %}{% endif %}
+        {% if existing.partner3_naam %}{% set _ = partners.append(existing.partner3_naam) %}{% endif %}
+        {% if partners %}
+          met teamgenoten <strong>{{ partners | join(', ') }}</strong>
+        {% else %}
+          <em>zonder teamgenoten</em>
+        {% endif %}
+      {% elif existing.partner_naam %}
         met partner <strong>{{ existing.partner_naam }}</strong>
       {% elif existing.person2 %}
         met partner <strong>{{ existing.person2.voornaam }} {{ existing.person2.achternaam }}</strong>
@@ -34,26 +44,82 @@
 
   {% if not training_niet_toegestaan %}
   <form method="post" action="/aanmelden/{{ evening.id }}" class="form-stack">
-    <p style="color:var(--color-muted);font-size:.9rem;">
-      Vul de naam van je partner in. Als je geen partner hebt, laat dan beide velden leeg.
-    </p>
-    <div class="form-row">
-      <div class="form-group">
-        <label for="partner_voornaam">Voornaam partner</label>
-        <input type="text" id="partner_voornaam" name="partner_voornaam"
-               autocomplete="off" placeholder="Voornaam"
-               value="{% if existing and existing.partner_naam %}{{ existing.partner_naam.split(' ')[0] }}{% elif existing and existing.person2 %}{{ existing.person2.voornaam }}{% endif %}">
+
+    {% if evening.deelnemers_type == 'individueel' %}
+      {# Geen partnervelden nodig #}
+
+    {% elif evening.deelnemers_type == 'viertallen' %}
+      <p style="color:var(--color-muted);font-size:.9rem;">
+        Vul de namen van je teamgenoten in. Je hoeft niet alle plekken in te vullen.
+      </p>
+      {% set p1 = existing.partner_naam if existing and existing.partner_naam else '' %}
+      {% set p2 = existing.partner2_naam if existing and existing.partner2_naam else '' %}
+      {% set p3 = existing.partner3_naam if existing and existing.partner3_naam else '' %}
+      <div class="form-row">
+        <div class="form-group">
+          <label for="partner_voornaam">Voornaam teamgenoot 1</label>
+          <input type="text" id="partner_voornaam" name="partner_voornaam"
+                 autocomplete="off" placeholder="Voornaam"
+                 value="{{ p1.split(' ')[0] if p1 else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="partner_achternaam">Achternaam teamgenoot 1</label>
+          <input type="text" id="partner_achternaam" name="partner_achternaam"
+                 autocomplete="off" placeholder="Achternaam"
+                 value="{{ p1.split(' ', 1)[1] if p1 and ' ' in p1 else '' }}">
+        </div>
       </div>
-      <div class="form-group">
-        <label for="partner_achternaam">Achternaam partner</label>
-        <input type="text" id="partner_achternaam" name="partner_achternaam"
-               autocomplete="off" placeholder="Achternaam"
-               value="{% if existing and existing.partner_naam and ' ' in existing.partner_naam %}{{ existing.partner_naam.split(' ', 1)[1] }}{% elif existing and existing.person2 %}{{ existing.person2.achternaam }}{% endif %}">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="partner2_voornaam">Voornaam teamgenoot 2</label>
+          <input type="text" id="partner2_voornaam" name="partner2_voornaam"
+                 autocomplete="off" placeholder="Voornaam"
+                 value="{{ p2.split(' ')[0] if p2 else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="partner2_achternaam">Achternaam teamgenoot 2</label>
+          <input type="text" id="partner2_achternaam" name="partner2_achternaam"
+                 autocomplete="off" placeholder="Achternaam"
+                 value="{{ p2.split(' ', 1)[1] if p2 and ' ' in p2 else '' }}">
+        </div>
       </div>
-    </div>
-    <p style="font-size:.8rem;color:var(--color-muted);">
-      Als de partner niet in de ledenlijst staat, gaat er een verzoek naar de wedstrijdleider.
-    </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="partner3_voornaam">Voornaam teamgenoot 3</label>
+          <input type="text" id="partner3_voornaam" name="partner3_voornaam"
+                 autocomplete="off" placeholder="Voornaam"
+                 value="{{ p3.split(' ')[0] if p3 else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="partner3_achternaam">Achternaam teamgenoot 3</label>
+          <input type="text" id="partner3_achternaam" name="partner3_achternaam"
+                 autocomplete="off" placeholder="Achternaam"
+                 value="{{ p3.split(' ', 1)[1] if p3 and ' ' in p3 else '' }}">
+        </div>
+      </div>
+
+    {% else %}{# paren (standaard) #}
+      <p style="color:var(--color-muted);font-size:.9rem;">
+        Vul de naam van je partner in. Als je geen partner hebt, laat dan beide velden leeg.
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="partner_voornaam">Voornaam partner</label>
+          <input type="text" id="partner_voornaam" name="partner_voornaam"
+                 autocomplete="off" placeholder="Voornaam"
+                 value="{% if existing and existing.partner_naam %}{{ existing.partner_naam.split(' ')[0] }}{% elif existing and existing.person2 %}{{ existing.person2.voornaam }}{% endif %}">
+        </div>
+        <div class="form-group">
+          <label for="partner_achternaam">Achternaam partner</label>
+          <input type="text" id="partner_achternaam" name="partner_achternaam"
+                 autocomplete="off" placeholder="Achternaam"
+                 value="{% if existing and existing.partner_naam and ' ' in existing.partner_naam %}{{ existing.partner_naam.split(' ', 1)[1] }}{% elif existing and existing.person2 %}{{ existing.person2.achternaam }}{% endif %}">
+        </div>
+      </div>
+      <p style="font-size:.8rem;color:var(--color-muted);">
+        Als de partner niet in de ledenlijst staat, gaat er een verzoek naar de wedstrijdleider.
+      </p>
+    {% endif %}
 
     <div class="action-buttons">
       <button type="submit" name="action" value="aanmelden" class="btn btn-primary">
@@ -71,7 +137,7 @@
 
   {% endif %}{# einde training_niet_toegestaan guard #}
 
-  {% if not training_niet_toegestaan %}
+  {% if not training_niet_toegestaan and evening.deelnemers_type != 'individueel' %}
   <div style="margin-top:1.25rem;border-top:1px solid #e0e0e0;padding-top:1rem;">
     <button type="button" class="btn btn-secondary" onclick="toggleHerhaalPaneel()">
       Herhaal mijn aanmelding

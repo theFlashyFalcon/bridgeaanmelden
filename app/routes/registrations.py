@@ -131,6 +131,8 @@ async def registration_submit(
         if existing:
             existing.status = RegistrationStatus.afgemeld
             existing.partner_naam = None
+            existing.partner2_naam = None
+            existing.partner3_naam = None
             db.commit()
         # Also cancel pending partner request
         db.query(PartnerRequest).filter(
@@ -141,7 +143,61 @@ async def registration_submit(
         db.commit()
         return RedirectResponse(url="/?afgemeld=1", status_code=302)
 
-    # Determine partner name and status
+    deelnemers_type = evening.deelnemers_type or "paren"
+
+    # Individueel: geen partner nodig
+    if deelnemers_type == "individueel":
+        if existing:
+            existing.status = RegistrationStatus.aangemeld
+            existing.partner_naam = None
+            existing.partner2_naam = None
+            existing.partner3_naam = None
+        else:
+            db.add(Registration(
+                evening_id=event_id,
+                person1_id=current_user.id,
+                partner_naam=None,
+                type=RegistrationType.los,
+                status=RegistrationStatus.aangemeld,
+            ))
+        db.commit()
+        return RedirectResponse(url="/?bevestigd=1", status_code=302)
+
+    # Viertallen: tot 3 teamgenoten opgeven
+    if deelnemers_type == "viertallen":
+        partner2_voornaam = form.get("partner2_voornaam", "").strip()
+        partner2_achternaam = form.get("partner2_achternaam", "").strip()
+        partner3_voornaam = form.get("partner3_voornaam", "").strip()
+        partner3_achternaam = form.get("partner3_achternaam", "").strip()
+
+        p1 = f"{partner_voornaam} {partner_achternaam}".strip() if partner_voornaam and partner_achternaam else None
+        p2 = f"{partner2_voornaam} {partner2_achternaam}".strip() if partner2_voornaam and partner2_achternaam else None
+        p3 = f"{partner3_voornaam} {partner3_achternaam}".strip() if partner3_voornaam and partner3_achternaam else None
+
+        volledig = bool(p1 and p2 and p3)
+
+        if existing:
+            existing.status = RegistrationStatus.aangemeld
+            existing.partner_naam = p1
+            existing.partner2_naam = p2
+            existing.partner3_naam = p3
+        else:
+            db.add(Registration(
+                evening_id=event_id,
+                person1_id=current_user.id,
+                partner_naam=p1,
+                partner2_naam=p2,
+                partner3_naam=p3,
+                type=RegistrationType.los,
+                status=RegistrationStatus.aangemeld,
+            ))
+        db.commit()
+
+        if volledig:
+            return RedirectResponse(url="/?bevestigd=1", status_code=302)
+        return RedirectResponse(url="/?aangemeld_onvolledig_team=1", status_code=302)
+
+    # Paren (standaard): één partner opgeven
     if partner_voornaam and partner_achternaam:
         partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
@@ -159,6 +215,8 @@ async def registration_submit(
             if existing:
                 existing.status = RegistrationStatus.aangemeld
                 existing.partner_naam = partner_naam
+                existing.partner2_naam = None
+                existing.partner3_naam = None
             else:
                 db.add(Registration(
                     evening_id=event_id,
@@ -186,21 +244,22 @@ async def registration_submit(
             db.commit()
             return RedirectResponse(url="/?verzoek_ingediend=1", status_code=302)
     else:
-        # Solo registration
-        reg_status = RegistrationStatus.beschikbaar_solo
+        # Geen partner opgegeven bij paren
         if existing:
-            existing.status = reg_status
+            existing.status = RegistrationStatus.beschikbaar_solo
             existing.partner_naam = None
+            existing.partner2_naam = None
+            existing.partner3_naam = None
         else:
             db.add(Registration(
                 evening_id=event_id,
                 person1_id=current_user.id,
                 partner_naam=None,
                 type=RegistrationType.los,
-                status=reg_status,
+                status=RegistrationStatus.beschikbaar_solo,
             ))
         db.commit()
-        return RedirectResponse(url="/?bevestigd=1", status_code=302)
+        return RedirectResponse(url="/?aangemeld_zonder_partner=1", status_code=302)
 
 
 # ── Instellingen / bulk aanmelden ─────────────────────────────────────────────
@@ -455,6 +514,103 @@ async def registration_herhaal(
         return RedirectResponse(url=f"/?bulk_ok={count}", status_code=302)
 
     return RedirectResponse(url=f"/aanmelden/{event_id}", status_code=302)
+
+
+# ── Definitief aanmelden voor alle evenementen van een type ───────────────────
+
+_TYPE_MAP: dict[str, list[str]] = {
+    "clubavond": ["clubavond", "regulier"],
+    "avondeten": ["eten voor jeugdtraining"],
+    "training": ["jeugdtraining", "training"],
+    "speciaal": ["speciaal"],
+}
+
+_TRAINING_KEYS = {"training"}
+
+
+@router.post("/definitief-aanmelden/{event_type}")
+async def definitief_aanmelden(
+    event_type: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_auth),
+):
+    if event_type not in _TYPE_MAP:
+        raise HTTPException(status_code=400, detail="Onbekend type")
+
+    if event_type in _TRAINING_KEYS and not current_user.training_eligible:
+        raise HTTPException(status_code=403, detail="Geen toegang tot trainingsavonden")
+
+    db_types = _TYPE_MAP[event_type]
+    today = date.today()
+
+    future_events = (
+        db.query(ClubEvening)
+        .join(Season)
+        .filter(
+            ClubEvening.type.in_(db_types),
+            ClubEvening.datum >= today,
+            Season.actief == True,  # noqa: E712
+        )
+        .order_by(ClubEvening.datum)
+        .all()
+    )
+
+    count = 0
+    for evt in future_events:
+        existing = (
+            db.query(Registration)
+            .filter(
+                Registration.evening_id == evt.id,
+                Registration.person1_id == current_user.id,
+                Registration.status != RegistrationStatus.afgemeld,
+            )
+            .first()
+        )
+        if not existing:
+            db.add(Registration(
+                evening_id=evt.id,
+                person1_id=current_user.id,
+                partner_naam=None,
+                type=RegistrationType.vast,
+                status=RegistrationStatus.beschikbaar_solo,
+            ))
+            count += 1
+
+    # Sla op als herhaalaanmelding (zonder einddatum) zodat nieuwe avonden automatisch worden toegevoegd
+    primary_type = db_types[0]
+    db.query(RecurringRegistration).filter(
+        RecurringRegistration.member_id == current_user.id,
+        RecurringRegistration.event_type == primary_type,
+        RecurringRegistration.actief == True,  # noqa: E712
+    ).update({"actief": False})
+    db.add(RecurringRegistration(
+        member_id=current_user.id,
+        event_type=primary_type,
+        partner_naam=None,
+        interval=1,
+        herhaal_tot=None,
+        referentie_datum=today,
+    ))
+
+    db.commit()
+    return RedirectResponse(url=f"/?type={event_type}&bulk_ok={count}", status_code=302)
+
+
+# ── Weergave-voorkeuren opslaan ───────────────────────────────────────────────
+
+@router.post("/instellingen/verborgen-types")
+async def verborgen_types_submit(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_auth),
+):
+    form = await request.form()
+    all_keys = ["clubavond", "avondeten", "training", "speciaal"]
+    hidden = [k for k in all_keys if not form.get(f"toon_{k}")]
+    current_user.verborgen_types = ",".join(hidden)
+    db.commit()
+    return RedirectResponse(url="/?voorkeuren_opgeslagen=1", status_code=302)
 
 
 # ── Wijzigen (redirect) ───────────────────────────────────────────────────────
