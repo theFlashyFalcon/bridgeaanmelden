@@ -21,7 +21,7 @@
       </div>
     </div>
     {% if member.id != current_user.id and not member.verwijderd_op %}
-    <form method="post" action="/leden/{{ member.id }}/verwijder" onsubmit="return confirm('Weet je zeker dat je dit account wilt verwijderen?')">
+    <form method="post" action="/leden/{{ member.id }}/verwijder" data-bevestig="Weet je zeker dat je dit account wilt verwijderen?">
       <button type="submit" class="btn btn-danger">Account verwijderen</button>
     </form>
     {% endif %}

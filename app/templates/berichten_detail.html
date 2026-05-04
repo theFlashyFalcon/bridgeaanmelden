@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if root.onderwerp %}{{ root.onderwerp }}{% else %}Gesprek{% endif %} — Berichtenbox
+{% endblock %}
+{% block content %}
+
+<div style="margin-bottom:1rem;">
+  <a href="/berichten" style="color:var(--primary,#1e3a5f);">&larr; Terug naar berichtenbox</a>
+</div>
+
+<div class="card">
+  <h1 style="margin-top:0;font-size:1.25rem;">
+    {% if root.onderwerp %}
+      {{ root.onderwerp }}
+    {% else %}
+      <em style="color:var(--text-muted,#888);">Geen onderwerp</em>
+    {% endif %}
+  </h1>
+
+  <!-- Eerste bericht (root) -->
+  {% set is_own = root.afzender_id == current_user.id %}
+  <div class="bericht-blok {% if is_own %}bericht-eigen{% else %}bericht-ander{% endif %}">
+    <div class="bericht-meta">
+      <strong>
+        {% if is_own %}
+          Jij
+        {% else %}
+          {{ root.afzender.voornaam }} {{ root.afzender.achternaam }}
+        {% endif %}
+      </strong>
+      <span class="bericht-datum">{{ root.aangemaakt_op.strftime('%d-%m-%Y om %H:%M') }}</span>
+    </div>
+    <div class="bericht-tekst">{{ root.tekst }}</div>
+  </div>
+
+  <!-- Antwoorden -->
+  {% for reply in replies %}
+    {% set is_own_reply = reply.afzender_id == current_user.id %}
+    <div class="bericht-blok {% if is_own_reply %}bericht-eigen{% else %}bericht-ander{% endif %}">
+      <div class="bericht-meta">
+        <strong>
+          {% if is_own_reply %}
+            Jij
+          {% else %}
+            {{ reply.afzender.voornaam }} {{ reply.afzender.achternaam }}
+          {% endif %}
+        </strong>
+        <span class="bericht-datum">{{ reply.aangemaakt_op.strftime('%d-%m-%Y om %H:%M') }}</span>
+      </div>
+      <div class="bericht-tekst">{{ reply.tekst }}</div>
+    </div>
+  {% endfor %}
+
+  <!-- Antwoordformulier -->
+  {% if request.query_params.get('fout') == 'leeg' %}
+    <div class="alert alert-error" style="margin-top:1rem;">Antwoord mag niet leeg zijn.</div>
+  {% endif %}
+
+  <form method="post" action="/berichten/{{ root.id }}/antwoord" style="margin-top:1.5rem;border-top:1px solid var(--border,#ddd);padding-top:1.25rem;">
+    <label for="tekst-antwoord" style="display:block;font-weight:600;margin-bottom:.5rem;">Antwoorden</label>
+    <textarea name="tekst" id="tekst-antwoord" class="form-control" rows="4"
+              placeholder="Typ hier je antwoord…" required
+              style="margin-bottom:.75rem;"></textarea>
+    <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+      <a href="/berichten" class="btn btn-secondary">Annuleren</a>
+      <button type="submit" class="btn btn-primary">Versturen</button>
+    </div>
+  </form>
+</div>
+
+<style>
+  .bericht-blok {
+    margin-bottom: 1rem;
+    padding: .875rem 1rem;
+    border-radius: .5rem;
+    max-width: 88%;
+  }
+  .bericht-eigen {
+    background: var(--primary-light, #e8f0ff);
+    margin-left: auto;
+  }
+  .bericht-ander {
+    background: var(--bg-alt, #f5f5f5);
+    margin-right: auto;
+  }
+  .bericht-meta {
+    display: flex;
+    align-items: baseline;
+    gap: .75rem;
+    margin-bottom: .4rem;
+  }
+  .bericht-datum {
+    font-size: .8rem;
+    color: var(--text-muted, #888);
+  }
+  .bericht-tekst {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+</style>
+
+{% endblock %}

@@ -40,13 +40,19 @@
 
         <a href="/instellingen">Instellingen</a>
 
+        <a href="/berichten" class="nav-berichten" id="nav-berichten-link">
+          Berichtenbox<span id="nav-berichten-badge" class="badge badge-warning" style="display:none;margin-left:.35rem;vertical-align:middle;font-size:.75rem;"></span>
+        </a>
+
         {% if display_role in ['wedstrijdleider', 'admin'] %}
         <div class="nav-dropdown">
           <span class="nav-dropdown-toggle">Clubagenda &#9660;</span>
           <div class="nav-dropdown-menu">
             <a href="/beheer/avonden">Beheren</a>
-            <a href="/beheer/aanmeldingen">Bekijken</a>
-            <a href="/beheer/af-aanmeldingen">Af/aanmeldingen</a>
+            <a href="/beheer/af-aanmeldingen">Af en aanmeldingen</a>
+            {% if display_role == 'admin' %}
+            <a href="/">Eigen agenda</a>
+            {% endif %}
           </div>
         </div>
         {% endif %}
@@ -145,6 +151,108 @@
 </script>
 
 {% block extra_scripts %}{% endblock %}
+
+{% if current_user %}
+<script>
+(function() {
+  var badge = document.getElementById('nav-berichten-badge');
+  if (!badge) return;
+
+  function updateBadge() {
+    fetch('/berichten/telling')
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (!data) return;
+        if (data.ongelezen > 0) {
+          badge.textContent = data.ongelezen;
+          badge.style.display = '';
+        } else {
+          badge.style.display = 'none';
+        }
+      })
+      .catch(function() {});
+  }
+
+  updateBadge();
+  setInterval(updateBadge, 30000);
+})();
+</script>
+{% endif %}
+
+<div id="bevestig-overlay" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="bevestig-titel">
+  <div class="modal">
+    <div class="modal-icon">&#9888;</div>
+    <h2 id="bevestig-titel">Bevestigen</h2>
+    <p id="bevestig-tekst"></p>
+    <div class="modal-bevestig-acties">
+      <button type="button" id="bevestig-annuleren" class="btn btn-secondary">Annuleren</button>
+      <button type="button" id="bevestig-ok" class="btn btn-danger">Bevestigen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var overlay = document.getElementById('bevestig-overlay');
+  var tekst   = document.getElementById('bevestig-tekst');
+  var okBtn   = document.getElementById('bevestig-ok');
+  var annBtn  = document.getElementById('bevestig-annuleren');
+  var _cb     = null;
+
+  function sluit(ok) {
+    overlay.style.display = 'none';
+    if (_cb) { var fn = _cb; _cb = null; fn(ok); }
+  }
+
+  okBtn.addEventListener('click',  function() { sluit(true);  });
+  annBtn.addEventListener('click', function() { sluit(false); });
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) sluit(false); });
+  document.addEventListener('keydown', function(e) {
+    if (overlay.style.display === 'none') return;
+    if (e.key === 'Escape') sluit(false);
+    if (e.key === 'Enter')  { e.preventDefault(); sluit(true); }
+  });
+
+  window.bevestig = function(bericht, callback) {
+    tekst.textContent = bericht;
+    _cb = callback;
+    overlay.style.display = 'flex';
+    okBtn.focus();
+  };
+
+  document.addEventListener('submit', function(evt) {
+    var form = evt.target;
+    var msg = form.getAttribute('data-bevestig');
+    if (!msg) return;
+    evt.preventDefault();
+    window.bevestig(msg, function(ok) {
+      if (!ok) return;
+      form.removeAttribute('data-bevestig');
+      form.submit();
+    });
+  });
+
+  document.addEventListener('click', function(evt) {
+    var btn = evt.target.closest('button[type="submit"][data-bevestig]');
+    if (!btn) return;
+    evt.preventDefault();
+    var msg = btn.getAttribute('data-bevestig');
+    window.bevestig(msg, function(ok) {
+      if (!ok) return;
+      var form = btn.form || btn.closest('form');
+      if (btn.name) {
+        var hidden = document.createElement('input');
+        hidden.type  = 'hidden';
+        hidden.name  = btn.name;
+        hidden.value = btn.value || '';
+        form.appendChild(hidden);
+      }
+      btn.removeAttribute('data-bevestig');
+      form.submit();
+    });
+  });
+})();
+</script>
 
 {% if current_user and current_user.role == 'admin' %}
 <script>

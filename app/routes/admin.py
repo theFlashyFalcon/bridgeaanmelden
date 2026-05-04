@@ -828,20 +828,31 @@ async def leden_importeer(
 
 # ── Af/aanmeldingen beheren (Wedstrijdleider + Admin) ────────────────────────
 
+_AF_TYPE_MAP: dict[str, list[str]] = {
+    "clubavond": ["clubavond", "regulier"],
+    "avondeten": ["eten voor jeugdtraining"],
+    "training": ["jeugdtraining", "training"],
+    "speciaal": ["speciaal"],
+}
+
+
 @router.get("/af-aanmeldingen")
 async def af_aanmeldingen_list(
     request: Request,
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
-    evenings = (
+    active_filter = request.query_params.get("type", "")
+    query = (
         db.query(ClubEvening)
         .join(Season)
         .filter(Season.actief == True, ClubEvening.datum >= date.today())  # noqa: E712
         .order_by(ClubEvening.datum)
-        .all()
     )
-    # Count open partner requests per evening
+    if active_filter and active_filter in _AF_TYPE_MAP:
+        query = query.filter(ClubEvening.type.in_(_AF_TYPE_MAP[active_filter]))
+    evenings = query.all()
+
     open_requests = {}
     for e in evenings:
         open_requests[e.id] = (
@@ -852,7 +863,12 @@ async def af_aanmeldingen_list(
     return templates.TemplateResponse(
         request,
         "admin/af_aanmeldingen.html",
-        {"current_user": current_user, "evenings": evenings, "open_requests": open_requests},
+        {
+            "current_user": current_user,
+            "evenings": evenings,
+            "open_requests": open_requests,
+            "active_filter": active_filter if active_filter in _AF_TYPE_MAP else "",
+        },
     )
 
 
@@ -873,7 +889,10 @@ async def af_aanmeldingen_detail(
         .all()
     )
 
-    aangemeld = [r for r in all_regs if r.status == RegistrationStatus.aangemeld]
+    volledig_aangemeld = [
+        r for r in all_regs
+        if r.status == RegistrationStatus.aangemeld and (r.partner_naam or r.person2_id)
+    ]
     afgemeld = [r for r in all_regs if r.status == RegistrationStatus.afgemeld]
     loslopers = [
         r for r in all_regs
@@ -899,7 +918,7 @@ async def af_aanmeldingen_detail(
         {
             "current_user": current_user,
             "evening": evening,
-            "aangemeld": aangemeld,
+            "volledig_aangemeld": volledig_aangemeld,
             "afgemeld": afgemeld,
             "loslopers": loslopers,
             "manual_pairs": manual_pairs,

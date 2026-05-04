@@ -82,7 +82,7 @@
 {% if current_user and active_filter and active_filter in type_plural %}
   <div class="card definitief-card">
     <form method="post" action="/definitief-aanmelden/{{ active_filter }}"
-          onsubmit="return confirm('Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.')">
+          data-bevestig="Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.">
       <button type="submit" class="btn btn-primary">
         Meld mij definitief aan voor alle {{ type_plural[active_filter] }}
       </button>

@@ -72,7 +72,7 @@
           <td>{{ lid.nbb_nummer or '—' }}</td>
           <td style="text-align:right;">
             <form method="post" action="/beheer/leden/{{ lid.id }}/verwijder"
-                  onsubmit="return confirm('Lid verwijderen?')">
+                  data-bevestig="Lid verwijderen?">
               <button type="submit" class="btn btn-danger" style="padding:.2rem .5rem;font-size:.8rem;">Verwijderen</button>
             </form>
           </td>

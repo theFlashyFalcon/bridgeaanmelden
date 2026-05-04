@@ -50,7 +50,7 @@
           <td><span class="role-badge-tabel role-{{ m.role }}">{{ m.role }}</span></td>
           <td onclick="event.stopPropagation()">
             {% if m.id != current_user.id %}
-            <form method="post" action="/leden/{{ m.id }}/verwijder" onsubmit="return bevestigVerwijder('{{ m.voornaam }} {{ m.achternaam }}')">
+            <form method="post" action="/leden/{{ m.id }}/verwijder" data-bevestig="Weet je zeker dat je {{ m.voornaam }} {{ m.achternaam }} wilt verwijderen? Het account kan niet meer inloggen.">
               <button type="submit" class="btn btn-danger btn-sm">Verwijderen</button>
             </form>
             {% endif %}
@@ -78,10 +78,6 @@
       window.location.href = '/leden?sort=' + selected.value;
     }
     toggleSortMenu();
-  }
-
-  function bevestigVerwijder(naam) {
-    return confirm('Weet je zeker dat je ' + naam + ' wilt verwijderen? Het account kan niet meer inloggen.');
   }
 
   document.addEventListener('click', function(e) {

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Berichtenbox — Bridge Club{% endblock %}
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:.75rem;">
+  <h1 style="margin:0;">Berichtenbox</h1>
+  <button class="btn btn-primary" onclick="document.getElementById('nieuw-bericht-modal').removeAttribute('hidden')">
+    + Nieuw bericht
+  </button>
+</div>
+
+{% if request.query_params.get('fout') == 'leeg' %}
+  <div class="alert alert-error">Vul een ontvanger en berichttekst in.</div>
+{% elif request.query_params.get('fout') == 'ontvanger' %}
+  <div class="alert alert-error">Ontvanger niet gevonden.</div>
+{% endif %}
+
+{% if not conversations %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--text-muted,#888);">
+    Je hebt nog geen berichten. Stuur een bericht via de knop hierboven.
+  </div>
+{% else %}
+  <div class="card" style="padding:0;overflow:hidden;">
+    <table class="data-table" style="margin:0;">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Van / Aan</th>
+          <th>Onderwerp</th>
+          <th>Berichten</th>
+          <th>Laatste bericht</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for conv in conversations %}
+          {% set root = conv.root %}
+          {% set is_sender = root.afzender_id == current_user.id %}
+          {% set other = root.ontvanger if is_sender else root.afzender %}
+          <tr class="{% if conv.unread > 0 %}bericht-ongelezen{% endif %}" style="cursor:pointer;" onclick="window.location='/berichten/{{ root.id }}'">
+            <td style="width:1.5rem;text-align:center;">
+              {% if conv.unread > 0 %}
+                <span class="badge badge-warning" title="{{ conv.unread }} ongelezen">{{ conv.unread }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if is_sender %}
+                <span style="color:var(--text-muted,#888);font-size:.85em;">Aan:</span>
+              {% else %}
+                <span style="color:var(--text-muted,#888);font-size:.85em;">Van:</span>
+              {% endif %}
+              <strong>{{ other.voornaam }} {{ other.achternaam }}</strong>
+            </td>
+            <td>
+              {% if root.onderwerp %}
+                {{ root.onderwerp }}
+              {% else %}
+                <em style="color:var(--text-muted,#888);">(geen onderwerp)</em>
+              {% endif %}
+            </td>
+            <td>{{ conv.count + 1 }}</td>
+            <td style="white-space:nowrap;">{{ conv.latest.strftime('%d-%m-%Y %H:%M') }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+
+<!-- Modal: Nieuw bericht -->
+<div id="nieuw-bericht-modal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem;">
+  <div class="card" style="width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:1.5rem;position:relative;">
+    <button onclick="document.getElementById('nieuw-bericht-modal').setAttribute('hidden','')"
+            style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;"
+            aria-label="Sluiten">&times;</button>
+    <h2 style="margin-top:0;margin-bottom:1.25rem;">Nieuw bericht</h2>
+    <form method="post" action="/berichten/verstuur">
+      <div class="form-group">
+        <label for="ontvanger_id">Ontvanger</label>
+        <select name="ontvanger_id" id="ontvanger_id" required class="form-control">
+          <option value="">— Kies een ontvanger —</option>
+          {% for m in members %}
+            <option value="{{ m.id }}">{{ m.voornaam }} {{ m.achternaam }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="onderwerp">Onderwerp (optioneel)</label>
+        <input type="text" name="onderwerp" id="onderwerp" class="form-control" placeholder="Onderwerp…" maxlength="200">
+      </div>
+      <div class="form-group">
+        <label for="tekst">Bericht</label>
+        <textarea name="tekst" id="tekst" required class="form-control" rows="5" placeholder="Typ hier je bericht…"></textarea>
+      </div>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1rem;">
+        <button type="button" class="btn btn-secondary"
+                onclick="document.getElementById('nieuw-bericht-modal').setAttribute('hidden','')">
+          Annuleren
+        </button>
+        <button type="submit" class="btn btn-primary">Versturen</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  .bericht-ongelezen td { font-weight: 600; }
+  .bericht-ongelezen:hover td { background: var(--hover-bg, #f0f4ff); }
+  tr[onclick]:hover td { background: var(--hover-bg, #f5f5f5); }
+</style>
+
+{% endblock %}

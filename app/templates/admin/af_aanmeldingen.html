@@ -1,12 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Af/aanmeldingen — Bridge Club{% endblock %}
+{% block title %}Af en aanmeldingen — Bridge Club{% endblock %}
 {% block content %}
-<section class="card">
-  <h1>Af/aanmeldingen beheren</h1>
-  <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
-    Selecteer een avond om aanmeldingen te bekijken en partnerkoppelingen te beheren.
-  </p>
 
+<section class="page-header">
+  <h1>Af en aanmeldingen</h1>
+  <p class="subtitle">Selecteer een avond om aanmeldingen en afmeldingen te beheren.</p>
+</section>
+
+<div class="filter-tabs">
+  <a href="/beheer/af-aanmeldingen" class="filter-tab {% if not active_filter %}filter-tab--active{% endif %}">Alle</a>
+  <a href="/beheer/af-aanmeldingen?type=clubavond" class="filter-tab filter-tab--clubavond {% if active_filter == 'clubavond' %}filter-tab--active{% endif %}">Clubavond</a>
+  <a href="/beheer/af-aanmeldingen?type=avondeten" class="filter-tab filter-tab--avondeten {% if active_filter == 'avondeten' %}filter-tab--active{% endif %}">Avondeten</a>
+  <a href="/beheer/af-aanmeldingen?type=training"  class="filter-tab filter-tab--training  {% if active_filter == 'training'  %}filter-tab--active{% endif %}">Training</a>
+  <a href="/beheer/af-aanmeldingen?type=speciaal"  class="filter-tab filter-tab--speciaal  {% if active_filter == 'speciaal'  %}filter-tab--active{% endif %}">Speciaal</a>
+</div>
+
+<section class="card">
   {% if evenings %}
     <ul class="participant-list">
       {% for e in evenings %}
@@ -26,4 +35,5 @@
     <p class="empty-state">Geen komende avonden gevonden.</p>
   {% endif %}
 </section>
+
 {% endblock %}

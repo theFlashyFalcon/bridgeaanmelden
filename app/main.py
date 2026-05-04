@@ -18,7 +18,7 @@ logging.basicConfig(
 
 from app.auth import SECRET_KEY  # noqa: E402 — must be after load_dotenv
 from app.database import Base, engine  # noqa: E402
-from app.routes import admin, auth, evenings, members, registrations  # noqa: E402
+from app.routes import admin, auth, berichten, evenings, members, registrations  # noqa: E402
 
 _templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -59,6 +59,17 @@ def _migrate():
         "ALTER TABLE registrations ADD COLUMN substitute_name TEXT",
         "ALTER TABLE registrations ADD COLUMN available_person_id INTEGER REFERENCES members(id)",
         "ALTER TABLE registrations ADD COLUMN combo_partner_reg_id INTEGER REFERENCES registrations(id)",
+        (
+            "CREATE TABLE IF NOT EXISTS berichten ("
+            "id INTEGER PRIMARY KEY, "
+            "afzender_id INTEGER NOT NULL REFERENCES members(id), "
+            "ontvanger_id INTEGER NOT NULL REFERENCES members(id), "
+            "onderwerp VARCHAR, "
+            "tekst TEXT NOT NULL, "
+            "aangemaakt_op TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+            "gelezen BOOLEAN NOT NULL DEFAULT 0, "
+            "parent_id INTEGER REFERENCES berichten(id))"
+        ),
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -171,3 +182,4 @@ app.include_router(evenings.router)
 app.include_router(registrations.router)
 app.include_router(members.router)
 app.include_router(admin.router)
+app.include_router(berichten.router)

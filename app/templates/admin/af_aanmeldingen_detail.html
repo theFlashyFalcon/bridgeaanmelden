@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ evening.naam or evening.type }} — Af/aanmeldingen — Bridge Club{% endblock %}
+{% block title %}{{ evening.naam or evening.type }} — Af en aanmeldingen — Bridge Club{% endblock %}
 {% block content %}
 
 <section class="page-header">
@@ -13,25 +13,31 @@
   <div class="alert alert-success">Verzoek goedgekeurd en aanmelding aangemaakt.</div>
 {% elif request.query_params.get('afgewezen') %}
   <div class="alert alert-info">Verzoek afgewezen.</div>
+{% elif request.query_params.get('bericht_verstuurd') %}
+  <div class="alert alert-success">Bericht verstuurd.</div>
 {% endif %}
 
 <div class="afd-grid">
 
-  <!-- Kolom 1: Aanmeldingen -->
+  <!-- Kolom 1: Aangemeld (Paren / Viertallen) -->
   <section class="card">
-    <h2>Aanmeldingen <span class="badge">{{ aangemeld | length + manual_pairs | length }}</span></h2>
+    {% if evening.deelnemers_type == 'viertallen' %}
+      <h2>Viertallen <span class="badge">{{ volledig_aangemeld | length + manual_pairs | length }}</span></h2>
+    {% elif evening.deelnemers_type == 'paren' %}
+      <h2>Paren <span class="badge">{{ volledig_aangemeld | length + manual_pairs | length }}</span></h2>
+    {% else %}
+      <h2>Aangemeld <span class="badge">{{ volledig_aangemeld | length + manual_pairs | length }}</span></h2>
+    {% endif %}
 
-    {% if aangemeld or manual_pairs %}
+    {% if volledig_aangemeld or manual_pairs %}
       <ul class="participant-list">
-        {% for reg in aangemeld | sort(attribute='person1.achternaam') %}
+        {% for reg in volledig_aangemeld | sort(attribute='person1.achternaam') %}
           <li class="participant-item">
             {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
             {% if reg.partner_naam %}
               &amp; {{ reg.partner_naam }}
             {% elif reg.person2 %}
               &amp; {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
-            {% else %}
-              <em style="color:var(--color-muted);font-size:.85rem;"> — solo</em>
             {% endif %}
           </li>
         {% endfor %}
@@ -42,14 +48,14 @@
               <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
             </span>
             <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/manual/{{ pair.id }}/verwijder"
-                  onsubmit="return confirm('Paar verwijderen?')" style="flex-shrink:0;">
-              <button type="submit" class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;">✕</button>
+                  data-bevestig="Paar verwijderen?" style="flex-shrink:0;">
+              <button type="submit" class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;">&#10005;</button>
             </form>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="empty-state">Nog geen aanmeldingen.</p>
+      <p class="empty-state">Nog geen volledige aanmeldingen.</p>
     {% endif %}
 
     <h3 style="margin-top:1.25rem;font-size:1rem;">Paar handmatig toevoegen</h3>
@@ -68,41 +74,30 @@
     </form>
   </section>
 
-  <!-- Kolom 2: Afmeldingen & Loslopers -->
+  <!-- Kolom 2: Loslopers -->
   <section class="card">
-    <h2>Afmeldingen <span class="badge">{{ afgemeld | length }}</span></h2>
-    {% if afgemeld %}
+    <h2>Loslopers <span class="badge">{{ loslopers | length }}</span></h2>
+    {% if loslopers %}
+      <p style="font-size:.85rem;color:var(--color-muted);margin-bottom:.75rem;">
+        Klik op een naam om een bericht te sturen.
+      </p>
       <ul class="participant-list">
-        {% for reg in afgemeld | sort(attribute='person1.achternaam') %}
+        {% for reg in loslopers | sort(attribute='person1.achternaam') %}
           <li class="participant-item">
-            {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+            <button type="button" class="losloper-btn"
+                    data-id="{{ reg.person1.id }}"
+                    data-naam="{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}">
+              {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+            </button>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="empty-state">Geen afmeldingen.</p>
-    {% endif %}
-
-    {% set solo_list = [] %}
-    {% for reg in aangemeld %}
-      {% if not reg.partner_naam and not reg.person2_id %}
-        {% set _ = solo_list.append(reg) %}
-      {% endif %}
-    {% endfor %}
-
-    {% if solo_list %}
-      <h2 style="margin-top:1.5rem;">Loslopers <span class="badge">{{ solo_list | length }}</span></h2>
-      <ul class="participant-list">
-        {% for reg in solo_list | sort(attribute='person1.achternaam') %}
-          <li class="participant-item">
-            {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
-          </li>
-        {% endfor %}
-      </ul>
+      <p class="empty-state">Geen loslopers.</p>
     {% endif %}
   </section>
 
-  <!-- Kolom 3: Verzoeken -->
+  <!-- Kolom 3: Partnerverzoeken -->
   <section class="card">
     <h2>Partnerverzoeken
       {% set wachtend_count = verzoeken | selectattr('status', 'equalto', 'wachtend') | list | length %}
@@ -145,10 +140,104 @@
     {% endif %}
   </section>
 
+  <!-- Kolom 4: Afmeldingen -->
+  <section class="card">
+    <h2>Afmeldingen <span class="badge">{{ afgemeld | length }}</span></h2>
+    {% if afgemeld %}
+      <ul class="participant-list">
+        {% for reg in afgemeld | sort(attribute='person1.achternaam') %}
+          <li class="participant-item">
+            {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-state">Geen afmeldingen.</p>
+    {% endif %}
+  </section>
+
+  {% if current_user.role == 'admin' %}
+  <!-- Eigen agenda (alleen admin) -->
+  <section class="card">
+    <h2>Eigen agenda</h2>
+    <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
+      Bekijk de clubagenda en meld jezelf aan voor evenementen.
+    </p>
+    <a href="/" class="btn btn-secondary">Naar eigen agenda</a>
+  </section>
+  {% endif %}
+
 </div>
 
 <div class="action-buttons" style="margin-top:1rem;">
   <a href="/beheer/af-aanmeldingen" class="btn btn-secondary">Terug naar overzicht</a>
 </div>
 
+<!-- Berichtmodal -->
+<div id="bericht-modal" class="modal-overlay" hidden aria-modal="true" role="dialog">
+  <div class="modal" style="max-width:420px;text-align:left;">
+    <h2>Bericht sturen</h2>
+    <p id="modal-naam-tekst" style="margin-bottom:1rem;font-weight:600;"></p>
+    <form method="post" action="/berichten/verstuur" class="form-stack">
+      <input type="hidden" name="ontvanger_id" id="modal-ontvanger-id">
+      <div class="form-group">
+        <label for="modal-tekst">Bericht</label>
+        <textarea name="tekst" id="modal-tekst" rows="4" required
+                  style="width:100%;padding:.5rem;border:1px solid #ccc;border-radius:var(--radius);font-size:.95rem;resize:vertical;"></textarea>
+      </div>
+      <div class="action-buttons" style="margin-top:.75rem;">
+        <button type="submit" class="btn btn-primary">Verstuur</button>
+        <button type="button" class="btn btn-secondary" id="modal-sluiten">Annuleren</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var modal = document.getElementById('bericht-modal');
+  var ontvangerInput = document.getElementById('modal-ontvanger-id');
+  var naamTekst = document.getElementById('modal-naam-tekst');
+  var tekstveld = document.getElementById('modal-tekst');
+
+  document.querySelectorAll('.losloper-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      ontvangerInput.value = btn.dataset.id;
+      naamTekst.textContent = btn.dataset.naam;
+      tekstveld.value = '';
+      modal.removeAttribute('hidden');
+      tekstveld.focus();
+    });
+  });
+
+  document.getElementById('modal-sluiten').addEventListener('click', function () {
+    modal.setAttribute('hidden', '');
+  });
+
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) modal.setAttribute('hidden', '');
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') modal.setAttribute('hidden', '');
+  });
+})();
+</script>
+
+<style>
+.losloper-btn {
+  background: none;
+  border: none;
+  color: var(--color-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+}
+.losloper-btn:hover { color: var(--color-primary); }
+</style>
 {% endblock %}

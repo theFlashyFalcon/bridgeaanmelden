@@ -127,7 +127,7 @@
       </button>
       {% if existing and existing.status != 'afgemeld' %}
         <button type="submit" name="action" value="afmelden" class="btn btn-danger"
-                onclick="return confirm('Weet je zeker dat je je wilt afmelden?')">
+                data-bevestig="Weet je zeker dat je je wilt afmelden?">
           Afmelden
         </button>
       {% endif %}

@@ -245,6 +245,34 @@ class AdminBericht(Base):
     gelezen = Column(Boolean, default=False, nullable=False)
 
 
+class Bericht(Base):
+    __tablename__ = "berichten"
+
+    id = Column(Integer, primary_key=True, index=True)
+    afzender_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    ontvanger_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    onderwerp = Column(String, nullable=True)
+    tekst = Column(Text, nullable=False)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+    gelezen = Column(Boolean, default=False, nullable=False)
+    parent_id = Column(Integer, ForeignKey("berichten.id"), nullable=True)
+
+    afzender = relationship("Member", foreign_keys=[afzender_id])
+    ontvanger = relationship("Member", foreign_keys=[ontvanger_id])
+    antwoorden = relationship(
+        "Bericht",
+        foreign_keys="Bericht.parent_id",
+        back_populates="parent",
+        order_by="Bericht.aangemaakt_op",
+    )
+    parent = relationship(
+        "Bericht",
+        foreign_keys="Bericht.parent_id",
+        remote_side="Bericht.id",
+        back_populates="antwoorden",
+    )
+
+
 class Registration(Base):
     __tablename__ = "registrations"
 
