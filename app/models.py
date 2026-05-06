@@ -259,18 +259,6 @@ class Bericht(Base):
 
     afzender = relationship("Member", foreign_keys=[afzender_id])
     ontvanger = relationship("Member", foreign_keys=[ontvanger_id])
-    antwoorden = relationship(
-        "Bericht",
-        foreign_keys="Bericht.parent_id",
-        back_populates="parent",
-        order_by="Bericht.aangemaakt_op",
-    )
-    parent = relationship(
-        "Bericht",
-        foreign_keys="Bericht.parent_id",
-        remote_side="Bericht.id",
-        back_populates="antwoorden",
-    )
 
 
 class Registration(Base):
