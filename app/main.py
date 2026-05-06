@@ -18,7 +18,7 @@ logging.basicConfig(
 
 from app.auth import SECRET_KEY  # noqa: E402 — must be after load_dotenv
 from app.database import Base, engine  # noqa: E402
-from app.routes import admin, auth, berichten, evenings, members, registrations  # noqa: E402
+from app.routes import admin, auth, berichten, evenings, members, registrations, rankings, uitslagen  # noqa: E402
 
 _templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -69,6 +69,23 @@ def _migrate():
             "aangemaakt_op TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
             "gelezen BOOLEAN NOT NULL DEFAULT 0, "
             "parent_id INTEGER REFERENCES berichten(id))"
+        ),
+        (
+            "CREATE TABLE IF NOT EXISTS rankings ("
+            "id INTEGER PRIMARY KEY, "
+            "inhoud TEXT NOT NULL, "
+            "bestandsnaam VARCHAR, "
+            "aangemaakt_op TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+            "aangemaakt_door_id INTEGER REFERENCES members(id))"
+        ),
+        (
+            "CREATE TABLE IF NOT EXISTS uitslagen ("
+            "id INTEGER PRIMARY KEY, "
+            "evening_id INTEGER NOT NULL UNIQUE REFERENCES club_evenings(id), "
+            "bestandsnaam VARCHAR, "
+            "inhoud BLOB NOT NULL, "
+            "aangemaakt_op TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
+            "aangemaakt_door_id INTEGER REFERENCES members(id))"
         ),
     ]
     with engine.connect() as conn:
@@ -183,3 +200,5 @@ app.include_router(registrations.router)
 app.include_router(members.router)
 app.include_router(admin.router)
 app.include_router(berichten.router)
+app.include_router(rankings.router)
+app.include_router(uitslagen.router)

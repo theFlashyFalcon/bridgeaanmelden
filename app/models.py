@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
 )
@@ -259,6 +260,32 @@ class Bericht(Base):
 
     afzender = relationship("Member", foreign_keys=[afzender_id])
     ontvanger = relationship("Member", foreign_keys=[ontvanger_id])
+
+
+class Ranking(Base):
+    __tablename__ = "rankings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    inhoud = Column(Text, nullable=False)
+    bestandsnaam = Column(String, nullable=True)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+    aangemaakt_door_id = Column(Integer, ForeignKey("members.id"), nullable=True)
+
+    aangemaakt_door = relationship("Member")
+
+
+class Uitslag(Base):
+    __tablename__ = "uitslagen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    evening_id = Column(Integer, ForeignKey("club_evenings.id"), nullable=False, unique=True)
+    bestandsnaam = Column(String, nullable=True)
+    inhoud = Column(LargeBinary, nullable=False)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+    aangemaakt_door_id = Column(Integer, ForeignKey("members.id"), nullable=True)
+
+    evening = relationship("ClubEvening")
+    aangemaakt_door = relationship("Member")
 
 
 class Registration(Base):

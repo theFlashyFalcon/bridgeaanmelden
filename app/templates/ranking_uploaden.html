@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Rankings uploaden — Crash{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width:540px;">
+  <h1 style="margin-top:0;">Rankings uploaden</h1>
+
+  {% if request.query_params.get('fout') == 'bestand' %}
+    <div class="alert alert-error">Kies een geldig CSV-bestand om te uploaden.</div>
+  {% endif %}
+
+  <p class="alert alert-info" style="margin-bottom:1.5rem;">
+    Let op, het bestand moet in CSV-formaat zijn.
+  </p>
+
+  <form method="post" action="/ranking/uploaden" enctype="multipart/form-data" class="form-stack">
+    <div class="form-group">
+      <label for="bestand">Bestand</label>
+      <input type="file" id="bestand" name="bestand" accept=".csv,text/csv" required>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1.5rem;">
+      <button type="submit" class="btn btn-primary">Bevestigen</button>
+      <span style="color:var(--text-muted,#888);font-size:.9em;">
+        Als u op bevestigen klikt zullen de rankings zichtbaar worden op de site.
+      </span>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

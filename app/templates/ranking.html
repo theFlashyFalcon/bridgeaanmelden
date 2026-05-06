@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Ranking — Crash{% endblock %}
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:.75rem;">
+  <h1 style="margin:0;">Ranking</h1>
+  {% if kan_uploaden %}
+  <a href="/ranking/uploaden" class="btn btn-primary">Uploaden</a>
+  {% endif %}
+</div>
+
+{% if request.query_params.get('upload_ok') %}
+  <div class="alert alert-success">Rankings zijn succesvol geüpload en nu zichtbaar.</div>
+{% endif %}
+
+{% if ranking %}
+  <div class="card" style="padding:0;overflow:hidden;">
+    <table class="data-table" style="margin:0;">
+      <thead>
+        <tr>
+          {% for kop in headers %}
+            <th>{{ kop }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for rij in rijen %}
+          <tr>
+            {% for cel in rij %}
+              <td>{{ cel }}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p style="color:var(--text-muted,#888);font-size:.85em;margin-top:.75rem;">
+    Geüpload op {{ ranking.aangemaakt_op.strftime('%d-%m-%Y om %H:%M') }}
+    {% if ranking.aangemaakt_door %}door {{ ranking.aangemaakt_door.voornaam }} {{ ranking.aangemaakt_door.achternaam }}{% endif %}
+  </p>
+{% else %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--text-muted,#888);">
+    Er zijn nog geen rankings geüpload.
+  </div>
+{% endif %}
+
+{% endblock %}

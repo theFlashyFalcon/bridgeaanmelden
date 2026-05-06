@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Uitslag uploaden — Crash{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width:540px;">
+  <h1 style="margin-top:0;">Uitslag uploaden</h1>
+  <p style="color:var(--text-muted,#888);margin-top:-.25rem;margin-bottom:1.25rem;">
+    <strong>{{ evening.naam if evening.naam else evening.type | capitalize }}</strong>
+    &mdash; {{ evening.datum.strftime('%d/%m/%Y') }}
+  </p>
+
+  {% if request.query_params.get('fout') == 'bestand' %}
+    <div class="alert alert-error">Kies een geldig PDF-bestand om te uploaden.</div>
+  {% endif %}
+
+  {% if bestaande_uitslag %}
+    <div class="alert alert-info" style="margin-bottom:1.25rem;">
+      Er is al een uitslag geüpload ({{ bestaande_uitslag.bestandsnaam }}). Als u een nieuw bestand uploadt wordt de vorige vervangen.
+    </div>
+  {% endif %}
+
+  <form method="post" action="/uitslagen/{{ evening.id }}/uploaden" enctype="multipart/form-data" class="form-stack">
+    <div class="form-group">
+      <label for="bestand">PDF-bestand</label>
+      <input type="file" id="bestand" name="bestand" accept=".pdf,application/pdf" required>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1.5rem;">
+      <button type="submit" class="btn btn-primary">Uploaden</button>
+      <a href="/uitslagen" class="btn btn-secondary">Annuleren</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

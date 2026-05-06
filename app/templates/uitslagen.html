@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Uitslagen — Crash{% endblock %}
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem;">
+  <h1 style="margin:0;">Uitslagen</h1>
+</div>
+
+{% if request.query_params.get('upload_ok') %}
+  <div class="alert alert-success">Uitslag succesvol geüpload.</div>
+{% endif %}
+
+<form method="get" action="/uitslagen" style="margin-bottom:1.5rem;">
+  <div style="display:flex;gap:.5rem;align-items:center;max-width:460px;">
+    <input
+      type="text"
+      name="q"
+      value="{{ q }}"
+      placeholder="zoek op naam of datum (dd/mm/jjjj)"
+      style="flex:1;padding:.55rem .85rem;border:1px solid var(--border,#ccc);border-radius:6px;font-size:.95rem;background:var(--input-bg,#fff);color:var(--text,#222);"
+      autocomplete="off"
+    >
+    <button type="submit" class="btn btn-secondary" style="white-space:nowrap;">Zoeken</button>
+    {% if q %}
+      <a href="/uitslagen" class="btn btn-secondary" style="white-space:nowrap;">Wissen</a>
+    {% endif %}
+  </div>
+</form>
+
+{% if evenings %}
+  <div class="card" style="padding:0;overflow:hidden;">
+    <ul style="list-style:none;margin:0;padding:0;">
+      {% for evening in evenings %}
+        {% set uitslag = uitslagen_map.get(evening.id) %}
+        <li style="display:flex;align-items:center;justify-content:space-between;padding:.85rem 1.25rem;border-bottom:1px solid var(--border,#e0e0e0);flex-wrap:wrap;gap:.5rem;">
+          <div>
+            <strong>{{ evening.naam if evening.naam else evening.type | capitalize }}</strong>
+            <span style="color:var(--text-muted,#888);font-size:.9em;margin-left:.5rem;">
+              {{ evening.datum.strftime('%d/%m/%Y') }}
+            </span>
+          </div>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+            {% if uitslag %}
+              <a href="/uitslagen/{{ evening.id }}/bestand" target="_blank" class="btn btn-primary" style="font-size:.85em;padding:.35rem .9rem;">Uitslagen</a>
+            {% else %}
+              <button
+                type="button"
+                class="btn btn-secondary uitslag-ontbreekt"
+                style="font-size:.85em;padding:.35rem .9rem;opacity:.5;"
+              >Uitslagen</button>
+            {% endif %}
+            {% if kan_uploaden %}
+              <a href="/uitslagen/{{ evening.id }}/uploaden" class="btn btn-secondary" style="font-size:.85em;padding:.35rem .9rem;">Uploaden</a>
+            {% endif %}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% else %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--text-muted,#888);">
+    {% if q %}
+      Geen evenementen gevonden voor "{{ q }}".
+    {% else %}
+      Er zijn nog geen afgelopen evenementen.
+    {% endif %}
+  </div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.querySelectorAll('.uitslag-ontbreekt').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    alert('Uitslagen nog niet geüpload door de WL, probeer later nog eens.');
+  });
+});
+</script>
+{% endblock %}
