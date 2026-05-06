@@ -196,17 +196,28 @@ async def avonden_add(
             status_code=422,
         )
 
-    herhaal_elke_str = form.get("herhaal_elke", "").strip()
+    termijn_waarde_str = form.get("inschrijftermijn_waarde", "").strip()
+    termijn_eenheid = form.get("inschrijftermijn_eenheid", "uren")
+    inschrijftermijn_uren = None
+    if termijn_waarde_str:
+        try:
+            waarde = int(termijn_waarde_str)
+            inschrijftermijn_uren = waarde * 24 if termijn_eenheid == "dagen" else waarde
+        except ValueError:
+            pass
+
+    herhaal_elke_str = (form.get("herhaal_elke", "").strip() or "1")
     herhaal_eenheid = form.get("herhaal_eenheid", "weken")
     herhaal_tot_str = form.get("herhaal_tot", "").strip()
 
     new_events = []
-    first_event = ClubEvening(naam=naam, datum=datum, type=type_, deelnemers_type=deelnemers_type, season_id=season.id)
+    first_event = ClubEvening(naam=naam, datum=datum, type=type_, deelnemers_type=deelnemers_type,
+                               inschrijftermijn_uren=inschrijftermijn_uren, season_id=season.id)
     db.add(first_event)
     db.flush()
     new_events.append(first_event)
 
-    if herhaal_elke_str and herhaal_tot_str:
+    if herhaal_tot_str:
         try:
             herhaal_elke = int(herhaal_elke_str)
             herhaal_tot = date.fromisoformat(herhaal_tot_str)
@@ -223,7 +234,8 @@ async def avonden_add(
                     .first()
                 )
                 if next_season:
-                    evt = ClubEvening(naam=naam, datum=next_datum, type=type_, deelnemers_type=deelnemers_type, season_id=next_season.id)
+                    evt = ClubEvening(naam=naam, datum=next_datum, type=type_, deelnemers_type=deelnemers_type,
+                                      inschrijftermijn_uren=inschrijftermijn_uren, season_id=next_season.id)
                     db.add(evt)
                     db.flush()
                     new_events.append(evt)
@@ -912,6 +924,8 @@ async def af_aanmeldingen_detail(
         .all()
     )
 
+    te_laat_regs = [r for r in all_regs if r.te_laat and r.status != RegistrationStatus.afgemeld]
+
     return templates.TemplateResponse(
         request,
         "admin/af_aanmeldingen_detail.html",
@@ -923,6 +937,7 @@ async def af_aanmeldingen_detail(
             "loslopers": loslopers,
             "manual_pairs": manual_pairs,
             "verzoeken": verzoeken,
+            "te_laat_regs": te_laat_regs,
         },
     )
 
@@ -1037,6 +1052,43 @@ async def verzoek_afwijzen(
         db.commit()
     return RedirectResponse(
         url=f"/beheer/af-aanmeldingen/{partner_request.evening_id}?afgewezen=1",
+        status_code=302,
+    )
+
+
+@router.post("/te-laat/{reg_id}/goedkeuren")
+async def te_laat_goedkeuren(
+    reg_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    reg = db.query(Registration).filter(Registration.id == reg_id).first()
+    if not reg:
+        return RedirectResponse(url="/beheer/af-aanmeldingen", status_code=302)
+    reg.te_laat_goedgekeurd = True
+    db.commit()
+    return RedirectResponse(
+        url=f"/beheer/af-aanmeldingen/{reg.evening_id}?te_laat_goedgekeurd=1",
+        status_code=302,
+    )
+
+
+@router.post("/te-laat/{reg_id}/verwijderen")
+async def te_laat_verwijderen(
+    reg_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    reg = db.query(Registration).filter(Registration.id == reg_id).first()
+    if not reg:
+        return RedirectResponse(url="/beheer/af-aanmeldingen", status_code=302)
+    evening_id = reg.evening_id
+    db.delete(reg)
+    db.commit()
+    return RedirectResponse(
+        url=f"/beheer/af-aanmeldingen/{evening_id}?te_laat_verwijderd=1",
         status_code=302,
     )
 

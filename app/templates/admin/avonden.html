@@ -98,13 +98,27 @@
         </div>
       </div>
 
+      <div class="form-group">
+        <label for="e-termijn-waarde">Inschrijftermijn</label>
+        <div style="display:flex;align-items:center;gap:.5rem;">
+          <input type="number" id="e-termijn-waarde" name="inschrijftermijn_waarde"
+                 min="1" max="8760" style="width:6rem;" placeholder="bijv. 24">
+          <button type="button" id="e-termijn-eenheid-btn" class="btn btn-secondary btn-sm"
+                  onclick="toggleTermijnEenheid()" style="min-width:5rem;color:var(--color-muted);">
+            uren
+          </button>
+          <input type="hidden" id="e-termijn-eenheid" name="inschrijftermijn_eenheid" value="uren">
+        </div>
+        <span class="form-hint">Laat leeg voor geen inschrijftermijn.</span>
+      </div>
+
       <!-- Herhaal-paneel (verborgen) -->
       <div id="herhaal-paneel" hidden style="border:1px solid var(--color-secondary);border-radius:var(--radius);padding:1rem;margin-top:.5rem;background:var(--color-bg);">
         <p style="font-weight:600;margin-bottom:.75rem;">Herhaal deze gebeurtenis</p>
         <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;">
           <label for="herhaal-elke" style="white-space:nowrap;">Herhaal elke</label>
           <input type="number" id="herhaal-elke" name="herhaal_elke" min="1" max="365"
-                 style="width:5rem;" placeholder="1">
+                 style="width:5rem;" value="1">
           <div class="herhaal-eenheid-keuze">
             <button type="button" id="herhaal-eenheid-btn" class="btn btn-secondary btn-sm"
                     onclick="toggleEenheid()" style="min-width:5rem;">
@@ -257,6 +271,18 @@
     } else {
       hidden.value = 'weken';
       btn.textContent = 'weken';
+    }
+  }
+
+  function toggleTermijnEenheid() {
+    const hidden = document.getElementById('e-termijn-eenheid');
+    const btn = document.getElementById('e-termijn-eenheid-btn');
+    if (hidden.value === 'uren') {
+      hidden.value = 'dagen';
+      btn.textContent = 'dagen';
+    } else {
+      hidden.value = 'uren';
+      btn.textContent = 'uren';
     }
   }
 
