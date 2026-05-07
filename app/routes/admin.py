@@ -145,7 +145,10 @@ async def seizoen_add_from_beheren(
     if start >= eind:
         return RedirectResponse(url="/beheer/avonden?fout=datum", status_code=302)
 
-    db.add(Season(naam=naam, start_datum=start, eind_datum=eind, actief=False))
+    actief = form.get("actief") == "on"
+    if actief:
+        db.query(Season).update({"actief": False})
+    db.add(Season(naam=naam, start_datum=start, eind_datum=eind, actief=actief))
     db.commit()
     return RedirectResponse(url="/beheer/avonden?seizoen_aangemaakt=1", status_code=302)
 

@@ -4,6 +4,9 @@
 
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem;">
   <h1 style="margin:0;">Uitslagen</h1>
+  {% if kan_uploaden %}
+    <a href="/uitslagen/uploaden" class="btn btn-primary">Uitslag uploaden</a>
+  {% endif %}
 </div>
 
 {% if request.query_params.get('upload_ok') %}

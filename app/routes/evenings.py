@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -83,6 +83,12 @@ async def index(
         for reg in regs1 + regs2:
             user_regs[reg.evening_id] = reg
 
+    termijn_deadlines: dict[int, datetime] = {}
+    for e in evenings:
+        if e.inschrijftermijn_uren:
+            deadline = datetime.combine(e.datum, datetime.min.time()) - timedelta(hours=e.inschrijftermijn_uren)
+            termijn_deadlines[e.id] = deadline
+
     welkom = request.session.pop("welkom", False)
     return templates.TemplateResponse(
         request,
@@ -94,6 +100,7 @@ async def index(
             "welkom": welkom,
             "active_filter": active_filter,
             "hidden_types": hidden_types,
+            "termijn_deadlines": termijn_deadlines,
         },
     )
 

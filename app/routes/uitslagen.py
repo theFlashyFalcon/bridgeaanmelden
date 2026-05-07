@@ -76,6 +76,85 @@ async def uitslagen_pagina(
     )
 
 
+@router.get("/uploaden")
+async def uitslag_upload_algemeen_form(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    today = date.today()
+    evenings = (
+        db.query(ClubEvening)
+        .filter(ClubEvening.datum < today, ClubEvening.type.notin_(EXCLUDED_TYPES))
+        .order_by(ClubEvening.datum.desc())
+        .all()
+    )
+    uitslagen_ids = {
+        u.evening_id
+        for u in db.query(Uitslag).filter(
+            Uitslag.evening_id.in_([e.id for e in evenings])
+        ).all()
+    }
+    return templates.TemplateResponse(
+        request,
+        "uitslag_uploaden_select.html",
+        {
+            "current_user": current_user,
+            "evenings": evenings,
+            "uitslagen_ids": uitslagen_ids,
+            "welkom": False,
+        },
+    )
+
+
+@router.post("/uploaden")
+async def uitslag_upload_algemeen(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    form = await request.form()
+    evening_id_str = form.get("evening_id")
+    bestand = form.get("bestand")
+
+    if not evening_id_str:
+        return RedirectResponse(url="/uitslagen/uploaden?fout=evening", status_code=302)
+
+    try:
+        event_id = int(evening_id_str)
+    except (ValueError, TypeError):
+        return RedirectResponse(url="/uitslagen/uploaden?fout=evening", status_code=302)
+
+    evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+    if not evening:
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+
+    if not bestand or not bestand.filename:
+        return RedirectResponse(
+            url=f"/uitslagen/uploaden?evening_id={event_id}&fout=bestand", status_code=302
+        )
+
+    inhoud_bytes = await bestand.read()
+
+    bestaande = db.query(Uitslag).filter(Uitslag.evening_id == event_id).first()
+    if bestaande:
+        bestaande.inhoud = inhoud_bytes
+        bestaande.bestandsnaam = bestand.filename
+        bestaande.aangemaakt_door_id = current_user.id
+    else:
+        db.add(
+            Uitslag(
+                evening_id=event_id,
+                bestandsnaam=bestand.filename,
+                inhoud=inhoud_bytes,
+                aangemaakt_door_id=current_user.id,
+            )
+        )
+
+    db.commit()
+    return RedirectResponse(url="/uitslagen?upload_ok=1", status_code=302)
+
+
 @router.get("/{event_id}/bestand")
 async def uitslag_bestand(
     event_id: int,

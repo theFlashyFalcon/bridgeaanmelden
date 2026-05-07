@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Uitslag uploaden — Crash{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width:540px;">
+  <h1 style="margin-top:0;">Uitslag uploaden</h1>
+
+  {% if request.query_params.get('fout') == 'bestand' %}
+    <div class="alert alert-error">Kies een geldig PDF-bestand om te uploaden.</div>
+  {% elif request.query_params.get('fout') == 'evening' %}
+    <div class="alert alert-error">Selecteer een evenement.</div>
+  {% endif %}
+
+  <form method="post" action="/uitslagen/uploaden" enctype="multipart/form-data" class="form-stack">
+    <div class="form-group">
+      <label for="evening_id">Evenement</label>
+      <select id="evening_id" name="evening_id" required
+        style="width:100%;padding:.55rem .85rem;border:1px solid var(--border,#ccc);border-radius:6px;font-size:.95rem;background:var(--input-bg,#fff);color:var(--text,#222);">
+        <option value="">Kies een evenement…</option>
+        {% for evening in evenings %}
+          <option value="{{ evening.id }}"
+            {% if request.query_params.get('evening_id') == evening.id|string %}selected{% endif %}>
+            {{ evening.naam if evening.naam else evening.type | capitalize }}
+            &mdash; {{ evening.datum.strftime('%d/%m/%Y') }}
+            {% if evening.id in uitslagen_ids %}(vervangt bestaande uitslag){% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="bestand">PDF-bestand</label>
+      <input type="file" id="bestand" name="bestand" accept=".pdf,application/pdf" required>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1.5rem;">
+      <button type="submit" class="btn btn-primary">Uploaden</button>
+      <a href="/uitslagen" class="btn btn-secondary">Annuleren</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

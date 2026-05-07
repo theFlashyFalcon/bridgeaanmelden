@@ -87,6 +87,8 @@ def _migrate():
             "aangemaakt_op TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
             "aangemaakt_door_id INTEGER REFERENCES members(id))"
         ),
+        "ALTER TABLE berichten ADD COLUMN is_nieuws BOOLEAN NOT NULL DEFAULT 0",
+        "ALTER TABLE berichten ALTER COLUMN ontvanger_id DROP NOT NULL",
     ]
     with engine.connect() as conn:
         for sql in migrations:

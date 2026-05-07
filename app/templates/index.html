@@ -25,6 +25,8 @@
   <div class="alert alert-info">
     Je verzoek is ingediend. De wedstrijdleider beoordeelt de partnerkoppeling.
   </div>
+{% elif request.query_params.get('te_laat') %}
+  <div class="alert alert-info">Je hebt je ingeschreven na de inschrijftermijn. De wedstrijdleider neemt contact met je op of je nog mee kunt doen.</div>
 {% elif request.query_params.get('voorkeuren_opgeslagen') %}
   <div class="alert alert-success">Agendaweergave opgeslagen.</div>
 {% endif %}
@@ -139,6 +141,12 @@
         <div>
           <div class="event-date">{{ evening.datum.strftime('%A %d %B %Y') }}</div>
           <div class="event-name">{{ evening.naam or evening.type }}</div>
+          {% if termijn_deadlines.get(evening.id) %}
+            {% set dl = termijn_deadlines[evening.id] %}
+            <div class="event-termijn">
+              &#9200; Inschrijven voor {{ dl.strftime('%A %d %B, %H:%M') }}
+            </div>
+          {% endif %}
         </div>
         <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
       </div>

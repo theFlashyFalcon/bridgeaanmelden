@@ -15,6 +15,10 @@
   <div class="alert alert-info">Verzoek afgewezen.</div>
 {% elif request.query_params.get('bericht_verstuurd') %}
   <div class="alert alert-success">Bericht verstuurd.</div>
+{% elif request.query_params.get('te_laat_goedgekeurd') %}
+  <div class="alert alert-success">Te-laat inschrijving goedgekeurd.</div>
+{% elif request.query_params.get('te_laat_verwijderd') %}
+  <div class="alert alert-info">Te-laat inschrijving verwijderd.</div>
 {% endif %}
 
 <div class="afd-grid">
@@ -38,6 +42,9 @@
               &amp; {{ reg.partner_naam }}
             {% elif reg.person2 %}
               &amp; {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+            {% endif %}
+            {% if reg.te_laat and not reg.te_laat_goedgekeurd %}
+              <span class="badge badge-warning" style="margin-left:.4rem;font-size:.7rem;">te laat</span>
             {% endif %}
           </li>
         {% endfor %}
@@ -139,6 +146,49 @@
       <p class="empty-state">Geen partnerverzoeken.</p>
     {% endif %}
   </section>
+
+  <!-- Te laat aangemeld -->
+  {% if te_laat_regs %}
+  <section class="card">
+    <h2>Te laat aangemeld
+      {% set wachtend_te_laat = te_laat_regs | rejectattr('te_laat_goedgekeurd') | list | length %}
+      {% if wachtend_te_laat > 0 %}
+        <span class="badge badge-warning">{{ wachtend_te_laat }} nieuw</span>
+      {% endif %}
+    </h2>
+    <p style="font-size:.85rem;color:var(--color-muted);margin-bottom:.75rem;">
+      Deze inschrijvingen zijn na de inschrijftermijn binnengekomen. Bevestig of verwijder ze.
+    </p>
+    <ul class="participant-list" style="gap:.75rem;">
+      {% for reg in te_laat_regs %}
+        <li class="participant-item" style="flex-direction:column;align-items:flex-start;gap:.35rem;padding:.75rem 0;">
+          <div>
+            <strong>{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</strong>
+            {% if reg.partner_naam %}
+              &amp; {{ reg.partner_naam }}
+            {% endif %}
+          </div>
+          <div style="font-size:.8rem;color:var(--color-muted);">
+            Aangemeld op {{ reg.aangemeld_op.strftime('%d-%m-%Y %H:%M') }}
+          </div>
+          {% if reg.te_laat_goedgekeurd %}
+            <span class="badge badge-success">Goedgekeurd</span>
+          {% else %}
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
+              <form method="post" action="/beheer/te-laat/{{ reg.id }}/goedkeuren">
+                <button type="submit" class="btn btn-primary btn-sm">Goedkeuren</button>
+              </form>
+              <form method="post" action="/beheer/te-laat/{{ reg.id }}/verwijderen"
+                    data-bevestig="Inschrijving verwijderen?">
+                <button type="submit" class="btn btn-danger btn-sm">Verwijderen</button>
+              </form>
+            </div>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
 
   <!-- Kolom 4: Afmeldingen -->
   <section class="card">

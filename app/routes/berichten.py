@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import Bericht, Member
+from app.models import Bericht, Member, MemberRole
 
 router = APIRouter(prefix="/berichten")
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
@@ -22,11 +22,12 @@ def _require_login(request: Request, db: Session):
 
 
 def _get_conversations(db: Session, user_id: int):
-    """Haal alle root-berichten op waarbij de gebruiker betrokken is."""
+    """Haal alle root-berichten op waarbij de gebruiker betrokken is (geen nieuws)."""
     direct = (
         db.query(Bericht)
         .filter(
             Bericht.parent_id == None,  # noqa: E711
+            Bericht.is_nieuws == False,  # noqa: E712
             or_(Bericht.afzender_id == user_id, Bericht.ontvanger_id == user_id),
         )
         .all()
@@ -72,6 +73,17 @@ def _get_conversations(db: Session, user_id: int):
     return result
 
 
+def _get_nieuws(db: Session, limit: int = 30):
+    """Haal de meest recente nieuwsberichten op."""
+    return (
+        db.query(Bericht)
+        .filter(Bericht.is_nieuws == True)  # noqa: E712
+        .order_by(Bericht.aangemaakt_op.desc())
+        .limit(limit)
+        .all()
+    )
+
+
 # ── Ongelezen telling (voor badge in nav) — vóór /{bericht_id} ───────────────
 
 @router.get("/telling")
@@ -93,10 +105,11 @@ async def berichten_telling(request: Request, db: Session = Depends(get_db)):
 async def berichten_inbox(request: Request, db: Session = Depends(get_db)):
     current_user = _require_login(request, db)
     conversations = _get_conversations(db, current_user.id)
+    nieuws_berichten = _get_nieuws(db)
     members = (
         db.query(Member)
         .filter(Member.verwijderd_op == None, Member.id != current_user.id)  # noqa: E711
-        .order_by(Member.voornaam)
+        .order_by(Member.voornaam, Member.achternaam)
         .all()
     )
     return templates.TemplateResponse(
@@ -105,6 +118,7 @@ async def berichten_inbox(request: Request, db: Session = Depends(get_db)):
         {
             "current_user": current_user,
             "conversations": conversations,
+            "nieuws_berichten": nieuws_berichten,
             "members": members,
             "welkom": False,
         },
@@ -117,11 +131,33 @@ async def berichten_inbox(request: Request, db: Session = Depends(get_db)):
 async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
     current_user = _require_login(request, db)
     form = await request.form()
-    ontvanger_id = int(form.get("ontvanger_id", 0))
+    ontvanger_raw = form.get("ontvanger_id", "").strip()
     onderwerp = form.get("onderwerp", "").strip() or None
     tekst = form.get("tekst", "").strip()
 
-    if not tekst or not ontvanger_id:
+    if not tekst:
+        return RedirectResponse(url="/berichten?fout=leeg", status_code=302)
+
+    if ontvanger_raw == "nieuws":
+        if current_user.role not in (MemberRole.admin, MemberRole.wedstrijdleider):
+            raise HTTPException(status_code=403)
+        bericht = Bericht(
+            afzender_id=current_user.id,
+            ontvanger_id=None,
+            onderwerp=onderwerp,
+            tekst=tekst,
+            is_nieuws=True,
+        )
+        db.add(bericht)
+        db.commit()
+        return RedirectResponse(url="/berichten", status_code=302)
+
+    try:
+        ontvanger_id = int(ontvanger_raw) if ontvanger_raw else 0
+    except ValueError:
+        ontvanger_id = 0
+
+    if not ontvanger_id:
         return RedirectResponse(url="/berichten?fout=leeg", status_code=302)
 
     ontvanger = db.query(Member).filter(Member.id == ontvanger_id).first()
@@ -188,7 +224,7 @@ async def bericht_detail(
     members = (
         db.query(Member)
         .filter(Member.verwijderd_op == None, Member.id != current_user.id)  # noqa: E711
-        .order_by(Member.voornaam)
+        .order_by(Member.voornaam, Member.achternaam)
         .all()
     )
     return templates.TemplateResponse(

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -34,6 +34,13 @@ _TRAINING_TYPES = {EveningType.jeugdtraining, EveningType.jeugdtraining.value,
 
 def _is_training(evening: ClubEvening) -> bool:
     return evening.type in _TRAINING_TYPES
+
+
+def _is_na_inschrijftermijn(evening: ClubEvening) -> bool:
+    if not evening.inschrijftermijn_uren:
+        return False
+    deadline = datetime.combine(evening.datum, datetime.min.time()) - timedelta(hours=evening.inschrijftermijn_uren)
+    return datetime.now() > deadline
 
 
 @router.get("/aanmelden/{event_id}")
@@ -117,6 +124,8 @@ async def registration_submit(
     partner_voornaam = form.get("partner_voornaam", "").strip()
     partner_achternaam = form.get("partner_achternaam", "").strip()
 
+    te_laat = _is_na_inschrijftermijn(evening)
+
     existing = (
         db.query(Registration)
         .filter(
@@ -152,6 +161,8 @@ async def registration_submit(
             existing.partner_naam = None
             existing.partner2_naam = None
             existing.partner3_naam = None
+            if te_laat:
+                existing.te_laat = True
         else:
             db.add(Registration(
                 evening_id=event_id,
@@ -159,9 +170,10 @@ async def registration_submit(
                 partner_naam=None,
                 type=RegistrationType.los,
                 status=RegistrationStatus.aangemeld,
+                te_laat=te_laat,
             ))
         db.commit()
-        return RedirectResponse(url="/?bevestigd=1", status_code=302)
+        return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
 
     # Viertallen: tot 3 teamgenoten opgeven
     if deelnemers_type == "viertallen":
@@ -181,6 +193,8 @@ async def registration_submit(
             existing.partner_naam = p1
             existing.partner2_naam = p2
             existing.partner3_naam = p3
+            if te_laat:
+                existing.te_laat = True
         else:
             db.add(Registration(
                 evening_id=event_id,
@@ -190,11 +204,12 @@ async def registration_submit(
                 partner3_naam=p3,
                 type=RegistrationType.los,
                 status=RegistrationStatus.aangemeld,
+                te_laat=te_laat,
             ))
         db.commit()
 
         if volledig:
-            return RedirectResponse(url="/?bevestigd=1", status_code=302)
+            return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
         return RedirectResponse(url="/?aangemeld_onvolledig_team=1", status_code=302)
 
     # Paren (standaard): één partner opgeven
@@ -217,6 +232,8 @@ async def registration_submit(
                 existing.partner_naam = partner_naam
                 existing.partner2_naam = None
                 existing.partner3_naam = None
+                if te_laat:
+                    existing.te_laat = True
             else:
                 db.add(Registration(
                     evening_id=event_id,
@@ -224,9 +241,10 @@ async def registration_submit(
                     partner_naam=partner_naam,
                     type=RegistrationType.los,
                     status=RegistrationStatus.aangemeld,
+                    te_laat=te_laat,
                 ))
             db.commit()
-            return RedirectResponse(url="/?bevestigd=1", status_code=302)
+            return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
         else:
             # Partner not in leden DB → create partner request
             # Remove existing pending request first
@@ -242,7 +260,8 @@ async def registration_submit(
                 partner_achternaam=partner_achternaam,
             ))
             db.commit()
-            return RedirectResponse(url="/?verzoek_ingediend=1", status_code=302)
+            redirect_param = "te_laat=1" if te_laat else "verzoek_ingediend=1"
+            return RedirectResponse(url=f"/?{redirect_param}", status_code=302)
     else:
         # Geen partner opgegeven bij paren
         if existing:
@@ -250,6 +269,8 @@ async def registration_submit(
             existing.partner_naam = None
             existing.partner2_naam = None
             existing.partner3_naam = None
+            if te_laat:
+                existing.te_laat = True
         else:
             db.add(Registration(
                 evening_id=event_id,
@@ -257,9 +278,10 @@ async def registration_submit(
                 partner_naam=None,
                 type=RegistrationType.los,
                 status=RegistrationStatus.beschikbaar_solo,
+                te_laat=te_laat,
             ))
         db.commit()
-        return RedirectResponse(url="/?aangemeld_zonder_partner=1", status_code=302)
+        return RedirectResponse(url="/?te_laat=1" if te_laat else "/?aangemeld_zonder_partner=1", status_code=302)
 
 
 # ── Instellingen / bulk aanmelden ─────────────────────────────────────────────

@@ -4,7 +4,7 @@
 
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:.75rem;">
   <h1 style="margin:0;">Berichtenbox</h1>
-  <button class="btn btn-primary" onclick="document.getElementById('nieuw-bericht-modal').removeAttribute('hidden')">
+  <button class="btn btn-primary" onclick="document.getElementById('nieuw-bericht-modal').style.display='flex'">
     + Nieuw bericht
   </button>
 </div>
@@ -15,73 +15,105 @@
   <div class="alert alert-error">Ontvanger niet gevonden.</div>
 {% endif %}
 
-{% if not conversations %}
-  <div class="card" style="text-align:center;padding:2rem;color:var(--text-muted,#888);">
-    Je hebt nog geen berichten. Stuur een bericht via de knop hierboven.
-  </div>
-{% else %}
-  <div class="card" style="padding:0;overflow:hidden;">
-    <table class="data-table" style="margin:0;">
-      <thead>
-        <tr>
-          <th></th>
-          <th>Van / Aan</th>
-          <th>Onderwerp</th>
-          <th>Berichten</th>
-          <th>Laatste bericht</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for conv in conversations %}
-          {% set root = conv.root %}
-          {% set is_sender = root.afzender_id == current_user.id %}
-          {% set other = root.ontvanger if is_sender else root.afzender %}
-          <tr class="{% if conv.unread > 0 %}bericht-ongelezen{% endif %}" style="cursor:pointer;" onclick="window.location='/berichten/{{ root.id }}'">
-            <td style="width:1.5rem;text-align:center;">
-              {% if conv.unread > 0 %}
-                <span class="badge badge-warning" title="{{ conv.unread }} ongelezen">{{ conv.unread }}</span>
-              {% endif %}
-            </td>
-            <td>
-              {% if is_sender %}
-                <span style="color:var(--text-muted,#888);font-size:.85em;">Aan:</span>
-              {% else %}
-                <span style="color:var(--text-muted,#888);font-size:.85em;">Van:</span>
-              {% endif %}
-              <strong>{{ other.voornaam }} {{ other.achternaam }}</strong>
-            </td>
-            <td>
-              {% if root.onderwerp %}
-                {{ root.onderwerp }}
-              {% else %}
-                <em style="color:var(--text-muted,#888);">(geen onderwerp)</em>
-              {% endif %}
-            </td>
-            <td>{{ conv.count + 1 }}</td>
-            <td style="white-space:nowrap;">{{ conv.latest.strftime('%d-%m-%Y %H:%M') }}</td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-{% endif %}
+<div style="display:flex;gap:1.5rem;align-items:flex-start;flex-wrap:wrap;">
 
-<!-- Modal: Nieuw bericht -->
-<div id="nieuw-bericht-modal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:1rem;">
+  <!-- ── Persoonlijke berichten ─────────────────────────────────────────── -->
+  <div style="flex:3;min-width:300px;">
+    {% if not conversations %}
+      <div class="card" style="text-align:center;padding:2rem;color:var(--text-muted,#888);">
+        Je hebt nog geen berichten. Stuur een bericht via de knop hierboven.
+      </div>
+    {% else %}
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table class="data-table" style="margin:0;">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Van / Aan</th>
+              <th>Onderwerp</th>
+              <th>Berichten</th>
+              <th>Laatste bericht</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for conv in conversations %}
+              {% set root = conv.root %}
+              {% set is_sender = root.afzender_id == current_user.id %}
+              {% set other = root.ontvanger if is_sender else root.afzender %}
+              <tr class="{% if conv.unread > 0 %}bericht-ongelezen{% endif %}" style="cursor:pointer;" onclick="window.location='/berichten/{{ root.id }}'">
+                <td style="width:1.5rem;text-align:center;">
+                  {% if conv.unread > 0 %}
+                    <span class="badge badge-warning" title="{{ conv.unread }} ongelezen">{{ conv.unread }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if is_sender %}
+                    <span style="color:var(--text-muted,#888);font-size:.85em;">Aan:</span>
+                  {% else %}
+                    <span style="color:var(--text-muted,#888);font-size:.85em;">Van:</span>
+                  {% endif %}
+                  <strong>{{ other.voornaam }} {{ other.achternaam }}</strong>
+                </td>
+                <td>
+                  {% if root.onderwerp %}
+                    {{ root.onderwerp }}
+                  {% else %}
+                    <em style="color:var(--text-muted,#888);">(geen onderwerp)</em>
+                  {% endif %}
+                </td>
+                <td>{{ conv.count + 1 }}</td>
+                <td style="white-space:nowrap;">{{ conv.latest.strftime('%d-%m-%Y %H:%M') }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Nieuws ─────────────────────────────────────────────────────────── -->
+  <div style="flex:2;min-width:260px;">
+    <h2 style="margin-top:0;margin-bottom:1rem;font-size:1.15rem;">Nieuws</h2>
+    {% if not nieuws_berichten %}
+      <div class="card" style="padding:1.25rem;text-align:center;color:var(--text-muted,#888);">
+        Geen nieuwsberichten.
+      </div>
+    {% else %}
+      {% for nb in nieuws_berichten %}
+        <div class="card" style="padding:1rem;margin-bottom:.75rem;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:.5rem;margin-bottom:.4rem;">
+            <strong style="font-size:.95em;">{{ nb.afzender.voornaam }} {{ nb.afzender.achternaam }}</strong>
+            <span style="font-size:.8em;color:var(--text-muted,#888);white-space:nowrap;">{{ nb.aangemaakt_op.strftime('%d-%m-%Y') }}</span>
+          </div>
+          {% if nb.onderwerp %}
+            <div style="font-weight:600;margin-bottom:.35rem;font-size:.95em;">{{ nb.onderwerp }}</div>
+          {% endif %}
+          <div style="white-space:pre-wrap;font-size:.9em;line-height:1.5;">{{ nb.tekst }}</div>
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- ── Modal: Nieuw bericht ──────────────────────────────────────────────── -->
+<div id="nieuw-bericht-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center;padding:1rem;">
   <div class="card" style="width:100%;max-width:520px;max-height:90vh;overflow-y:auto;padding:1.5rem;position:relative;">
-    <button onclick="document.getElementById('nieuw-bericht-modal').setAttribute('hidden','')"
+    <button onclick="document.getElementById('nieuw-bericht-modal').style.display='none'"
             style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;"
             aria-label="Sluiten">&times;</button>
     <h2 style="margin-top:0;margin-bottom:1.25rem;">Nieuw bericht</h2>
-    <form method="post" action="/berichten/verstuur">
+    <form method="post" action="/berichten/verstuur" id="nieuw-bericht-form">
       <div class="form-group">
-        <label for="ontvanger_id">Ontvanger</label>
-        <select name="ontvanger_id" id="ontvanger_id" required class="form-control">
-          <option value="">— Kies een ontvanger —</option>
-          {% for m in members %}
-            <option value="{{ m.id }}">{{ m.voornaam }} {{ m.achternaam }}</option>
-          {% endfor %}
-        </select>
+        <label for="ontvanger-zoek">Ontvanger</label>
+        <div id="ontvanger-container" style="position:relative;">
+          <input type="text" id="ontvanger-zoek" autocomplete="off" class="form-control"
+                 placeholder="Zoek op naam…" oninput="berichtenZoek(this.value)" onfocus="berichtenZoek(this.value)">
+          <input type="hidden" name="ontvanger_id" id="ontvanger_id_hidden">
+          <div id="ontvanger-dropdown"
+               style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1px solid #ccc;border-top:none;border-radius:0 0 4px 4px;z-index:20;max-height:200px;overflow-y:auto;box-shadow:0 4px 8px rgba(0,0,0,.1);">
+          </div>
+        </div>
       </div>
       <div class="form-group">
         <label for="onderwerp">Onderwerp (optioneel)</label>
@@ -93,7 +125,7 @@
       </div>
       <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1rem;">
         <button type="button" class="btn btn-secondary"
-                onclick="document.getElementById('nieuw-bericht-modal').setAttribute('hidden','')">
+                onclick="document.getElementById('nieuw-bericht-modal').style.display='none'">
           Annuleren
         </button>
         <button type="submit" class="btn btn-primary">Versturen</button>
@@ -106,6 +138,72 @@
   .bericht-ongelezen td { font-weight: 600; }
   .bericht-ongelezen:hover td { background: var(--hover-bg, #f0f4ff); }
   tr[onclick]:hover td { background: var(--hover-bg, #f5f5f5); }
+  .ontvanger-item { padding: .5rem .75rem; cursor: pointer; font-size: .95em; }
+  .ontvanger-item:hover, .ontvanger-item.actief { background: var(--hover-bg, #f0f4ff); }
+  .ontvanger-item.nieuws-item { color: var(--primary, #2563eb); font-weight: 600; }
 </style>
+
+<script>
+(function () {
+  const LEDEN = [
+    {% if current_user.role in ('admin', 'wedstrijdleider') %}
+    { id: "nieuws", naam: "Nieuws (voor iedereen)", nieuws: true },
+    {% endif %}
+    {% for m in members %}
+    { id: {{ m.id }}, naam: {{ (m.voornaam ~ " " ~ m.achternaam) | tojson }} },
+    {% endfor %}
+  ];
+
+  const zoekInput  = document.getElementById('ontvanger-zoek');
+  const hidden     = document.getElementById('ontvanger_id_hidden');
+  const dropdown   = document.getElementById('ontvanger-dropdown');
+  const form       = document.getElementById('nieuw-bericht-form');
+
+  function renderDropdown(items) {
+    if (!items.length) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = items.map(function(m) {
+      const cls = 'ontvanger-item' + (m.nieuws ? ' nieuws-item' : '');
+      return '<div class="' + cls + '" data-id="' + m.id + '" data-naam="' + m.naam.replace(/"/g, '&quot;') + '">' + m.naam + '</div>';
+    }).join('');
+    dropdown.style.display = 'block';
+  }
+
+  function filterLeden(q) {
+    if (!q.trim()) return [];
+    return LEDEN.filter(function(m) {
+      return m.naam.toLowerCase().indexOf(q.toLowerCase()) !== -1;
+    });
+  }
+
+  window.berichtenZoek = function(val) {
+    hidden.value = '';
+    renderDropdown(filterLeden(val));
+  };
+
+  dropdown.addEventListener('mousedown', function(e) {
+    const item = e.target.closest('.ontvanger-item');
+    if (!item) return;
+    e.preventDefault();
+    zoekInput.value = item.dataset.naam;
+    hidden.value    = item.dataset.id;
+    dropdown.style.display = 'none';
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('#ontvanger-container')) {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  form.addEventListener('submit', function(e) {
+    if (!hidden.value) {
+      e.preventDefault();
+      zoekInput.focus();
+      zoekInput.style.borderColor = 'red';
+      setTimeout(function() { zoekInput.style.borderColor = ''; }, 2000);
+    }
+  });
+})();
+</script>
 
 {% endblock %}

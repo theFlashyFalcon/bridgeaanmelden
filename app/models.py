@@ -153,6 +153,7 @@ class ClubEvening(Base):
     datum = Column(Date, nullable=False)
     type = Column(String, nullable=False, default=EveningType.clubavond)
     deelnemers_type = Column(String, nullable=False, default=DeelnemersType.paren)
+    inschrijftermijn_uren = Column(Integer, nullable=True)
     season_id = Column(Integer, ForeignKey("seasons.id"), nullable=False)
 
     season = relationship("Season", back_populates="club_evenings")
@@ -251,12 +252,13 @@ class Bericht(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     afzender_id = Column(Integer, ForeignKey("members.id"), nullable=False)
-    ontvanger_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    ontvanger_id = Column(Integer, ForeignKey("members.id"), nullable=True)
     onderwerp = Column(String, nullable=True)
     tekst = Column(Text, nullable=False)
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
     gelezen = Column(Boolean, default=False, nullable=False)
     parent_id = Column(Integer, ForeignKey("berichten.id"), nullable=True)
+    is_nieuws = Column(Boolean, default=False, nullable=False)
 
     afzender = relationship("Member", foreign_keys=[afzender_id])
     ontvanger = relationship("Member", foreign_keys=[ontvanger_id])
@@ -305,6 +307,8 @@ class Registration(Base):
     combo_partner_reg_id = Column(
         Integer, ForeignKey("registrations.id"), nullable=True
     )
+    te_laat = Column(Boolean, default=False, nullable=False, server_default="0")
+    te_laat_goedgekeurd = Column(Boolean, nullable=True)
     aangemeld_op = Column(DateTime, server_default=func.now(), nullable=False)
     gewijzigd_op = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
