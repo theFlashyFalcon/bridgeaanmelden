@@ -4,12 +4,7 @@ import secrets
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
-
-logger = logging.getLogger(__name__)
-
-def _base_url(request: Request) -> str:
-    configured = os.getenv("BASE_URL", "").rstrip("/")
-    return configured or str(request.base_url).rstrip("/")
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -17,12 +12,20 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
+
+
+def _base_url(request: Request) -> str:
+    configured = os.getenv("BASE_URL", "").rstrip("/")
+    return configured or str(request.base_url).rstrip("/")
+
 from app.auth import get_current_user, require_admin, require_wedstrijdleider
 from app.database import get_db
 from app.models import (
     AccountRequest,
     AccountRequestStatus,
     AdminBericht,
+    Bericht,
     ClubEvening,
     EmailRoleAssignment,
     EveningType,
@@ -50,7 +53,7 @@ EVENING_TYPES = [
 ]
 
 
-def _apply_recurring_registrations(db: Session, event: ClubEvening) -> None:
+def _apply_recurring_registrations(db: Session, event: ClubEvening, sender_id: Optional[int] = None) -> None:
     recurring_regs = (
         db.query(RecurringRegistration)
         .filter(
@@ -92,6 +95,19 @@ def _apply_recurring_registrations(db: Session, event: ClubEvening) -> None:
                 type=RegistrationType.vast,
                 status=status,
             ))
+            if sender_id and sender_id != rr.member_id:
+                datum_str = event.datum.strftime("%d-%m-%Y")
+                event_naam = event.naam or event.type
+                db.add(Bericht(
+                    afzender_id=sender_id,
+                    ontvanger_id=rr.member_id,
+                    onderwerp=f"Automatisch aangemeld: {event_naam} op {datum_str}",
+                    tekst=(
+                        f"Je bent automatisch aangemeld voor {event_naam} op {datum_str}. "
+                        "Dit is een gevolg van je definitieve aanmelding voor dit type evenement. "
+                        "Je kunt je aanmelding aanpassen via de agenda."
+                    ),
+                ))
 
 
 # ── Avonden (Wedstrijdleider + Admin) ─────────────────────────────────────────
@@ -249,7 +265,7 @@ async def avonden_add(
     db.commit()
 
     for evt in new_events:
-        _apply_recurring_registrations(db, evt)
+        _apply_recurring_registrations(db, evt, sender_id=current_user.id)
     db.commit()
 
     aantal = len(new_events)
@@ -301,7 +317,7 @@ async def aanmeldingen_detail(
 ):
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
 
     all_regs = (
         db.query(Registration)
@@ -432,7 +448,6 @@ async def smtp_test(
         return RedirectResponse(url="/beheer/uitnodigingen?smtp_test=ok", status_code=302)
     except Exception as exc:
         logger.exception("SMTP-test mislukt")
-        from urllib.parse import quote
         return RedirectResponse(url=f"/beheer/uitnodigingen?smtp_test=fout&fout={quote(str(exc))}", status_code=302)
 
 
@@ -896,7 +911,7 @@ async def af_aanmeldingen_detail(
 ):
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
 
     all_regs = (
         db.query(Registration)
@@ -914,12 +929,14 @@ async def af_aanmeldingen_detail(
         if r.status == RegistrationStatus.beschikbaar_solo
         or (r.status == RegistrationStatus.aangemeld and not r.partner_naam and not r.person2_id)
     ]
-    manual_pairs = (
+    all_manual = (
         db.query(ManualPair)
         .filter(ManualPair.evening_id == event_id)
         .order_by(ManualPair.aangemaakt_op)
         .all()
     )
+    manual_pairs = [p for p in all_manual if p.naam_2]
+    manual_loslopers = [p for p in all_manual if not p.naam_2]
     verzoeken = (
         db.query(PartnerRequest)
         .filter(PartnerRequest.evening_id == event_id)
@@ -939,8 +956,46 @@ async def af_aanmeldingen_detail(
             "afgemeld": afgemeld,
             "loslopers": loslopers,
             "manual_pairs": manual_pairs,
+            "manual_loslopers": manual_loslopers,
             "verzoeken": verzoeken,
             "te_laat_regs": te_laat_regs,
+        },
+    )
+
+
+@router.get("/af-aanmeldingen/{event_id}/print")
+async def af_aanmeldingen_print(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+    if not evening:
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+
+    all_regs = db.query(Registration).filter(Registration.evening_id == event_id).all()
+    volledig_aangemeld = [
+        r for r in all_regs
+        if r.status == RegistrationStatus.aangemeld and (r.partner_naam or r.person2_id)
+    ]
+    all_manual = (
+        db.query(ManualPair)
+        .filter(ManualPair.evening_id == event_id)
+        .order_by(ManualPair.aangemaakt_op)
+        .all()
+    )
+    manual_pairs = [p for p in all_manual if p.naam_2]
+
+    return templates.TemplateResponse(
+        request,
+        "admin/print_paren.html",
+        {
+            "current_user": current_user,
+            "evening": evening,
+            "volledig_aangemeld": volledig_aangemeld,
+            "manual_pairs": manual_pairs,
+            "welkom": False,
         },
     )
 
@@ -954,15 +1009,17 @@ async def af_aanmeldingen_toevoegen(
 ):
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
 
     form = await request.form()
     naam_1 = form.get("naam_1", "").strip()
-    naam_2 = form.get("naam_2", "").strip()
+    naam_2 = form.get("naam_2", "").strip() or None
 
-    if naam_1 and naam_2:
-        db.add(ManualPair(evening_id=event_id, naam_1=naam_1, naam_2=naam_2))
-        db.commit()
+    if not naam_1:
+        return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?fout=naam_verplicht", status_code=302)
+
+    db.add(ManualPair(evening_id=event_id, naam_1=naam_1, naam_2=naam_2))
+    db.commit()
     return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?toegevoegd=1", status_code=302)
 
 
@@ -1093,6 +1150,81 @@ async def te_laat_verwijderen(
     return RedirectResponse(
         url=f"/beheer/af-aanmeldingen/{evening_id}?te_laat_verwijderd=1",
         status_code=302,
+    )
+
+
+@router.get("/aanwezigheid")
+async def aanwezigheid(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    seasons = db.query(Season).order_by(Season.start_datum.desc()).all()
+    selected_season_id = request.query_params.get("seizoen")
+    selected_season = None
+
+    if selected_season_id:
+        selected_season = db.query(Season).filter(Season.id == int(selected_season_id)).first()
+    if not selected_season:
+        selected_season = db.query(Season).filter(Season.actief == True).first()  # noqa: E712
+    if not selected_season and seasons:
+        selected_season = seasons[0]
+
+    members = (
+        db.query(Member)
+        .filter(Member.verwijderd_op.is_(None))
+        .order_by(Member.achternaam, Member.voornaam)
+        .all()
+    )
+
+    stats = []
+    if selected_season:
+        evening_count = (
+            db.query(ClubEvening)
+            .filter(ClubEvening.season_id == selected_season.id)
+            .count()
+        )
+        for member in members:
+            aanwezig = (
+                db.query(Registration)
+                .join(ClubEvening)
+                .filter(
+                    Registration.person1_id == member.id,
+                    Registration.status != RegistrationStatus.afgemeld,
+                    ClubEvening.season_id == selected_season.id,
+                )
+                .count()
+            )
+            afgemeld = (
+                db.query(Registration)
+                .join(ClubEvening)
+                .filter(
+                    Registration.person1_id == member.id,
+                    Registration.status == RegistrationStatus.afgemeld,
+                    ClubEvening.season_id == selected_season.id,
+                )
+                .count()
+            )
+            stats.append({
+                "member": member,
+                "aanwezig": aanwezig,
+                "afgemeld": afgemeld,
+            })
+        stats.sort(key=lambda x: x["aanwezig"], reverse=True)
+    else:
+        evening_count = 0
+
+    return templates.TemplateResponse(
+        request,
+        "admin/aanwezigheid.html",
+        {
+            "current_user": current_user,
+            "seasons": seasons,
+            "selected_season": selected_season,
+            "stats": stats,
+            "evening_count": evening_count,
+            "welkom": False,
+        },
     )
 
 

@@ -134,9 +134,13 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
     ontvanger_raw = form.get("ontvanger_id", "").strip()
     onderwerp = form.get("onderwerp", "").strip() or None
     tekst = form.get("tekst", "").strip()
+    terug = form.get("terug", "").strip()
+    if terug and not terug.startswith("/beheer/af-aanmeldingen/"):
+        terug = ""
 
     if not tekst:
-        return RedirectResponse(url="/berichten?fout=leeg", status_code=302)
+        fout_url = f"{terug}?fout=leeg" if terug else "/berichten?fout=leeg"
+        return RedirectResponse(url=fout_url, status_code=302)
 
     if ontvanger_raw == "nieuws":
         if current_user.role not in (MemberRole.admin, MemberRole.wedstrijdleider):
@@ -150,7 +154,7 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
         )
         db.add(bericht)
         db.commit()
-        return RedirectResponse(url="/berichten", status_code=302)
+        return RedirectResponse(url=terug or "/berichten", status_code=302)
 
     try:
         ontvanger_id = int(ontvanger_raw) if ontvanger_raw else 0
@@ -158,11 +162,13 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
         ontvanger_id = 0
 
     if not ontvanger_id:
-        return RedirectResponse(url="/berichten?fout=leeg", status_code=302)
+        fout_url = f"{terug}?fout=leeg" if terug else "/berichten?fout=leeg"
+        return RedirectResponse(url=fout_url, status_code=302)
 
     ontvanger = db.query(Member).filter(Member.id == ontvanger_id).first()
     if not ontvanger:
-        return RedirectResponse(url="/berichten?fout=ontvanger", status_code=302)
+        fout_url = f"{terug}?fout=ontvanger" if terug else "/berichten?fout=ontvanger"
+        return RedirectResponse(url=fout_url, status_code=302)
 
     bericht = Bericht(
         afzender_id=current_user.id,
@@ -173,6 +179,8 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
     db.add(bericht)
     db.commit()
     db.refresh(bericht)
+    if terug:
+        return RedirectResponse(url=f"{terug}?bericht_verstuurd=1", status_code=302)
     return RedirectResponse(url=f"/berichten/{bericht.id}", status_code=302)
 
 
@@ -189,7 +197,7 @@ async def bericht_detail(
         .first()
     )
     if not root:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="Bericht niet gevonden")
 
     involved = (
         root.afzender_id == current_user.id or root.ontvanger_id == current_user.id
@@ -249,7 +257,7 @@ async def bericht_antwoord(
     current_user = _require_login(request, db)
     root = db.query(Bericht).filter(Bericht.id == bericht_id).first()
     if not root:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="Bericht niet gevonden")
 
     form = await request.form()
     tekst = form.get("tekst", "").strip()

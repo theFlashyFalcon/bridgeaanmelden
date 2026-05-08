@@ -4,7 +4,10 @@
 
 {% block content %}
 
-{% if request.query_params.get('afgemeld') %}
+{% if request.query_params.get('afgemeld_alles') %}
+  {% set n = request.query_params.get('afgemeld_alles') %}
+  <div class="alert alert-info">Je bent afgemeld voor {{ n }} komend{{ 'e' if n|int != 1 else '' }} evenement{{ 'en' if n|int != 1 else '' }}.</div>
+{% elif request.query_params.get('afgemeld') %}
   <div class="alert alert-info">Je bent afgemeld.</div>
 {% elif request.query_params.get('bevestigd') %}
   <div class="alert alert-success">Aanmelding opgeslagen.</div>
@@ -72,35 +75,25 @@
   'speciaal': 'speciale evenementen',
 } %}
 
-<div class="filter-tabs">
-  <a href="/" class="filter-tab {% if not active_filter %}filter-tab--active{% endif %}">Alle</a>
-  <a href="/?type=clubavond" class="filter-tab filter-tab--clubavond {% if active_filter == 'clubavond' %}filter-tab--active{% endif %}">Clubavond</a>
-  <a href="/?type=avondeten" class="filter-tab filter-tab--avondeten {% if active_filter == 'avondeten' %}filter-tab--active{% endif %}">Avondeten</a>
-  <a href="/?type=training"  class="filter-tab filter-tab--training  {% if active_filter == 'training'  %}filter-tab--active{% endif %}">Training</a>
-  <a href="/?type=speciaal"  class="filter-tab filter-tab--speciaal  {% if active_filter == 'speciaal'  %}filter-tab--active{% endif %}">Speciaal</a>
+<div class="filter-tabs-wrapper">
+  <div class="filter-tabs">
+    <a href="/" class="filter-tab {% if not active_filter %}filter-tab--active{% endif %}">Alle</a>
+    <a href="/?type=clubavond" class="filter-tab filter-tab--clubavond {% if active_filter == 'clubavond' %}filter-tab--active{% endif %}">Clubavond</a>
+    <a href="/?type=avondeten" class="filter-tab filter-tab--avondeten {% if active_filter == 'avondeten' %}filter-tab--active{% endif %}">Avondeten</a>
+    <a href="/?type=training"  class="filter-tab filter-tab--training  {% if active_filter == 'training'  %}filter-tab--active{% endif %}">Training</a>
+    <a href="/?type=speciaal"  class="filter-tab filter-tab--speciaal  {% if active_filter == 'speciaal'  %}filter-tab--active{% endif %}">Speciaal</a>
+    {% if current_user %}
+      <button type="button" class="filter-tab filter-tab--weergave" id="weergave-toggle" aria-expanded="false">
+        &#9881; Weergave
+      </button>
+    {% endif %}
+  </div>
 </div>
 
-{# ── Definitief aanmelden (zichtbaar bij gefilterd type) ─────────────────── #}
-{% if current_user and active_filter and active_filter in type_plural %}
-  <div class="card definitief-card">
-    <form method="post" action="/definitief-aanmelden/{{ active_filter }}"
-          data-bevestig="Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.">
-      <button type="submit" class="btn btn-primary">
-        Meld mij definitief aan voor alle {{ type_plural[active_filter] }}
-      </button>
-      <p class="definitief-hint">
-        Je wordt zonder partner aangemeld voor alle toekomstige {{ type_plural[active_filter] }}, ook nieuw geplande.
-        Je kunt dit later aanpassen via de aanmeldknop bij elk evenement.
-      </p>
-    </form>
-  </div>
-{% endif %}
-
-{# ── Weergave-instellingen (alleen zonder filter, voor ingelogde gebruikers) #}
-{% if current_user and not active_filter %}
-  <details class="card weergave-instellingen">
-    <summary class="weergave-instellingen-toggle">Agendaweergave aanpassen</summary>
-    <form method="post" action="/instellingen/verborgen-types" style="margin-top:.9rem;">
+{# ── Weergave-instellingen (uitklapbaar, altijd beschikbaar voor ingelogde gebruikers) #}
+{% if current_user %}
+  <div id="weergave-panel" class="card weergave-instellingen" hidden>
+    <form method="post" action="/instellingen/verborgen-types">
       <p class="weergave-instellingen-hint">Vink aan welke soorten evenementen je in de agenda wilt zien.</p>
       <div class="toggle-list">
         <label class="toggle-item">
@@ -128,7 +121,35 @@
         <button type="submit" class="btn btn-primary btn-sm">Opslaan</button>
       </div>
     </form>
-  </details>
+  </div>
+
+  {# ── Bulk acties ─────────────────────────────────────────────────────────── #}
+  <div class="bulk-acties">
+    <form method="post" action="/voor-alles-afmelden"
+          data-bevestig="Wil je je afmelden voor alle komende evenementen waarvoor je bent aangemeld?">
+      <button type="submit" class="btn btn-secondary">Voor alles afmelden</button>
+    </form>
+    <form method="post" action="/voor-alles-aanmelden"
+          data-bevestig="Wil je je aanmelden voor alle komende evenementen?">
+      <button type="submit" class="btn btn-primary">Voor alles aanmelden</button>
+    </form>
+  </div>
+{% endif %}
+
+{# ── Definitief aanmelden (zichtbaar bij gefilterd type) ─────────────────── #}
+{% if current_user and active_filter and active_filter in type_plural %}
+  <div class="card definitief-card">
+    <form method="post" action="/definitief-aanmelden/{{ active_filter }}"
+          data-bevestig="Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.">
+      <button type="submit" class="btn btn-primary">
+        Meld mij definitief aan voor alle {{ type_plural[active_filter] }}
+      </button>
+      <p class="definitief-hint">
+        Je wordt zonder partner aangemeld voor alle toekomstige {{ type_plural[active_filter] }}, ook nieuw geplande.
+        Je kunt dit later aanpassen via de aanmeldknop bij elk evenement.
+      </p>
+    </form>
+  </div>
 {% endif %}
 
 {# ── Evenementenraster ────────────────────────────────────────────────────── #}
@@ -203,4 +224,36 @@
   </p>
   <button onclick="this.parentElement.setAttribute('hidden','')">Sluiten</button>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+  var toggle = document.getElementById('weergave-toggle');
+  var panel  = document.getElementById('weergave-panel');
+  if (!toggle || !panel) return;
+  toggle.addEventListener('click', function() {
+    var hidden = panel.hasAttribute('hidden');
+    if (hidden) {
+      panel.removeAttribute('hidden');
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.classList.add('filter-tab--active');
+    } else {
+      panel.setAttribute('hidden', '');
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.classList.remove('filter-tab--active');
+    }
+  });
+})();
+</script>
+<style>
+.filter-tabs-wrapper { display: flex; align-items: center; }
+.filter-tab--weergave { background: none; border: none; cursor: pointer; font: inherit; }
+.bulk-acties {
+  display: flex;
+  gap: .75rem;
+  margin-top: .75rem;
+  flex-wrap: wrap;
+}
+</style>
 {% endblock %}

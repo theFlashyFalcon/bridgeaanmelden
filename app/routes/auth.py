@@ -191,7 +191,7 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
                 base_url=base_url,
             )
         except Exception:
-            pass
+            logger.exception("Admin-notificatie mislukt voor nieuwe aanvraag van %s", email)
 
     # ── Zoek in Crash-ledenlijst ──────────────────────────────────────────────
     crash_lid = db.query(Lid).filter(Lid.nbb_nummer == nbb_nummer).first()
@@ -384,26 +384,21 @@ async def wachtwoord_vergeten_submit(request: Request, db: Session = Depends(get
 
     member = db.query(Member).filter(Member.email.ilike(email)).first() if email else None
     if not member:
-        print(f"[wachtwoord-reset] Geen member gevonden voor e-mail: {email!r}", flush=True)
         logger.warning("Wachtwoord-reset aangevraagd voor onbekend e-mailadres: %s", email)
     else:
-        print(f"[wachtwoord-reset] Member gevonden: {member.voornaam} {member.achternaam} ({member.email})", flush=True)
         token = secrets.token_urlsafe(32)
         db.add(PasswordResetToken(token=token, member_id=member.id))
         db.commit()
         base_url = os.getenv("BASE_URL", "").rstrip("/") or str(request.base_url).rstrip("/")
         reset_url = f"{base_url}/wachtwoord-reset/{token}"
-        print(f"[wachtwoord-reset] Reset-URL: {reset_url}", flush=True)
         try:
             send_password_reset_email(member.email, member.voornaam, reset_url)
-            print(f"[wachtwoord-reset] E-mail verstuurd naar {member.email}", flush=True)
             logger.info("Wachtwoord-reset e-mail verstuurd naar %s", member.email)
-        except Exception as exc:
-            print(f"[wachtwoord-reset] SMTP-fout voor {member.email}: {exc}", flush=True)
+        except Exception:
             logger.exception("Wachtwoord-reset e-mail mislukt voor %s", member.email)
             return templates.TemplateResponse(
                 request, "wachtwoord_vergeten.html",
-                {"error": f"Het versturen van de e-mail is mislukt: {exc}"},
+                {"error": "Het versturen van de e-mail is mislukt. Probeer het later opnieuw of neem contact op met de beheerder."},
             )
 
     return templates.TemplateResponse(

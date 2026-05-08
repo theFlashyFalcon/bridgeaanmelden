@@ -22,10 +22,10 @@
         {% set view_as_role = request.session.get('view_as_role') if current_user.role == 'admin' else None %}
         {% set display_role = view_as_role if view_as_role else current_user.role %}
 
-        <span class="nav-user">
+        <a href="/profiel" class="nav-user" style="text-decoration:none;color:inherit;">
           {{ current_user.voornaam }}
           <span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span>
-        </span>
+        </a>
 
         {% if current_user.role == 'admin' %}
         <div class="nav-dropdown">
@@ -68,6 +68,7 @@
             <a href="/beheer/aanvragen">Inkomende verzoeken</a>
             <a href="/beheer/uitnodigingen">Uitnodigen</a>
             <a href="/beheer/rollen">Roltoewijzingen</a>
+            <a href="/beheer/aanwezigheid">Aanwezigheidsstatistieken</a>
           </div>
         </div>
         {% endif %}

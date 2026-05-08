@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <title>Paren — {{ evening.naam or evening.type }} — {{ evening.datum.strftime('%d-%m-%Y') }}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12pt; color: #000; background: #fff; padding: 2cm; }
+    h1 { font-size: 18pt; margin-bottom: .25rem; }
+    .subtitle { color: #555; margin-bottom: 1.5rem; font-size: 11pt; }
+    table { width: 100%; border-collapse: collapse; margin-top: .5rem; }
+    th { background: #f0f0f0; border: 1px solid #ccc; padding: .5rem .75rem; text-align: left; font-size: 10pt; }
+    td { border: 1px solid #ccc; padding: .5rem .75rem; font-size: 11pt; }
+    tr:nth-child(even) td { background: #fafafa; }
+    .pair-num { color: #555; font-size: 10pt; width: 2.5rem; }
+    .no-print { }
+    @media print {
+      .no-print { display: none !important; }
+      body { padding: 1.5cm; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="no-print" style="margin-bottom:1.5rem;display:flex;gap:.75rem;">
+  <button onclick="window.print()" style="padding:.5rem 1.25rem;background:#1e3a5f;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:1rem;">
+    &#128438; Afdrukken
+  </button>
+  <a href="/beheer/af-aanmeldingen/{{ evening.id }}" style="padding:.5rem 1.25rem;background:#e0e0e0;color:#333;border-radius:6px;text-decoration:none;font-size:1rem;">
+    Terug
+  </a>
+</div>
+
+<h1>{{ evening.naam or evening.type | capitalize }}</h1>
+<p class="subtitle">
+  {{ evening.datum.strftime('%A %d %B %Y') }}
+  &nbsp;&middot;&nbsp;
+  {{ (volledig_aangemeld | length) + (manual_pairs | length) }} paren
+</p>
+
+{% set all_pairs = [] %}
+{% for reg in volledig_aangemeld | sort(attribute='person1.achternaam') %}
+  {% set naam1 = reg.person1.voornaam ~ ' ' ~ reg.person1.achternaam %}
+  {% if reg.partner_naam %}
+    {% set naam2 = reg.partner_naam %}
+  {% elif reg.person2 %}
+    {% set naam2 = reg.person2.voornaam ~ ' ' ~ reg.person2.achternaam %}
+  {% else %}
+    {% set naam2 = '' %}
+  {% endif %}
+  {% set _ = all_pairs.append({'naam1': naam1, 'naam2': naam2, 'handmatig': false}) %}
+{% endfor %}
+{% for pair in manual_pairs %}
+  {% set _ = all_pairs.append({'naam1': pair.naam_1, 'naam2': pair.naam_2, 'handmatig': true}) %}
+{% endfor %}
+
+{% if all_pairs %}
+<table>
+  <thead>
+    <tr>
+      <th class="pair-num">Nr.</th>
+      <th>Speler 1</th>
+      <th>Speler 2</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in all_pairs %}
+      <tr>
+        <td class="pair-num">{{ loop.index }}</td>
+        <td>{{ p.naam1 }}{% if p.handmatig %} <span style="font-size:9pt;color:#888;">(ext.)</span>{% endif %}</td>
+        <td>{{ p.naam2 }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p style="color:#888;margin-top:1rem;">Geen paren aangemeld.</p>
+{% endif %}
+
+<p style="margin-top:2rem;font-size:9pt;color:#888;">
+  Crash Bridge Club &middot; {{ evening.datum.strftime('%d-%m-%Y') }}
+</p>
+
+</body>
+</html>

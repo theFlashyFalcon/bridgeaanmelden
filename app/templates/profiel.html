@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Mijn profiel — Crash{% endblock %}
+{% block content %}
+
+<section class="page-header">
+  <h1>Mijn profiel</h1>
+  <p class="subtitle">{{ current_user.voornaam }} {{ current_user.achternaam }}</p>
+</section>
+
+<section class="card">
+  <h2>Accountgegevens</h2>
+  <dl class="profiel-gegevens">
+    <div class="profiel-rij">
+      <dt>Naam</dt>
+      <dd>{{ current_user.voornaam }} {{ current_user.achternaam }}</dd>
+    </div>
+    <div class="profiel-rij">
+      <dt>Lidnummer</dt>
+      <dd>{{ current_user.lidnummer }}</dd>
+    </div>
+    <div class="profiel-rij">
+      <dt>E-mailadres</dt>
+      <dd>{{ current_user.email or '—' }}</dd>
+    </div>
+    <div class="profiel-rij">
+      <dt>Rol</dt>
+      <dd><span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span></dd>
+    </div>
+    {% if current_user.training_eligible %}
+    <div class="profiel-rij">
+      <dt>Trainingen</dt>
+      <dd>Toegang tot trainingsavonden</dd>
+    </div>
+    {% endif %}
+  </dl>
+</section>
+
+{% if herhalingen %}
+<section class="card">
+  <h2>Definitieve aanmeldingen</h2>
+  <p style="font-size:.875rem;color:var(--color-muted);margin-bottom:.75rem;">
+    Je bent automatisch aangemeld voor nieuwe avonden van deze typen.
+  </p>
+  <ul class="participant-list">
+    {% for rr in herhalingen %}
+      <li class="participant-item" style="flex-direction:column;align-items:flex-start;gap:.2rem;">
+        <strong>{{ rr.event_type | capitalize }}</strong>
+        {% if rr.partner_naam %}
+          <span style="font-size:.875rem;color:var(--color-muted);">Partner: {{ rr.partner_naam }}</span>
+        {% endif %}
+        {% if rr.herhaal_tot %}
+          <span style="font-size:.875rem;color:var(--color-muted);">Tot {{ rr.herhaal_tot.strftime('%d-%m-%Y') }}</span>
+        {% else %}
+          <span style="font-size:.875rem;color:var(--color-muted);">Zonder einddatum</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Aanmeldingsgeschiedenis <span class="badge">{{ registrations | length }}</span></h2>
+  {% if registrations %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border,#e0e0e0);text-align:left;">
+            <th style="padding:.5rem .75rem;">Datum</th>
+            <th style="padding:.5rem .75rem;">Avond</th>
+            <th style="padding:.5rem .75rem;">Status</th>
+            <th style="padding:.5rem .75rem;">Partner</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for reg in registrations %}
+            <tr style="border-bottom:1px solid var(--border,#e0e0e0);">
+              <td style="padding:.5rem .75rem;white-space:nowrap;">{{ reg.evening.datum.strftime('%d-%m-%Y') }}</td>
+              <td style="padding:.5rem .75rem;">{{ reg.evening.naam or reg.evening.type }}</td>
+              <td style="padding:.5rem .75rem;">
+                {% if reg.status == 'aangemeld' %}
+                  <span style="color:var(--color-success,green);">Aangemeld</span>
+                {% elif reg.status == 'afgemeld' %}
+                  <span style="color:var(--color-muted);">Afgemeld</span>
+                {% elif reg.status == 'beschikbaar_solo' %}
+                  <span style="color:var(--color-warning,orange);">Solo</span>
+                {% else %}
+                  {{ reg.status }}
+                {% endif %}
+              </td>
+              <td style="padding:.5rem .75rem;">
+                {% if reg.partner_naam %}
+                  {{ reg.partner_naam }}
+                {% elif reg.person1_id == current_user.id and reg.person2 %}
+                  {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+                {% elif reg.person2_id == current_user.id and reg.person1 %}
+                  {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="empty-state">Nog geen aanmeldingen gevonden.</p>
+  {% endif %}
+</section>
+
+<style>
+.profiel-gegevens { display: flex; flex-direction: column; gap: .75rem; margin: 0; }
+.profiel-rij { display: flex; gap: 1rem; align-items: baseline; }
+.profiel-rij dt { font-weight: 600; min-width: 9rem; color: var(--color-muted); font-size: .9rem; }
+.profiel-rij dd { margin: 0; }
+</style>
+
+{% endblock %}

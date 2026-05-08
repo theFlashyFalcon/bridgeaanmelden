@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import secrets
 from pathlib import Path
@@ -13,7 +14,15 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Member, MemberRole
 
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+_logger = logging.getLogger(__name__)
+
+_DEFAULT_SECRET = "dev-secret-key-change-in-production"
+SECRET_KEY = os.getenv("SECRET_KEY", _DEFAULT_SECRET)
+if SECRET_KEY == _DEFAULT_SECRET:
+    _logger.warning(
+        "SECRET_KEY is niet ingesteld — de standaard dev-sleutel wordt gebruikt. "
+        "Stel SECRET_KEY in via .env vóór productiegebruik."
+    )
 
 _ITERATIONS = 260_000
 

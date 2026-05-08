@@ -104,6 +104,7 @@
             aria-label="Sluiten">&times;</button>
     <h2 style="margin-top:0;margin-bottom:1.25rem;">Nieuw bericht</h2>
     <form method="post" action="/berichten/verstuur" id="nieuw-bericht-form">
+      <input type="hidden" name="terug" value="{{ request.query_params.get('terug', '') }}">
       <div class="form-group">
         <label for="ontvanger-zoek">Ontvanger</label>
         <div id="ontvanger-container" style="position:relative;">
@@ -124,8 +125,7 @@
         <textarea name="tekst" id="tekst" required class="form-control" rows="5" placeholder="Typ hier je bericht…"></textarea>
       </div>
       <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1rem;">
-        <button type="button" class="btn btn-secondary"
-                onclick="document.getElementById('nieuw-bericht-modal').style.display='none'">
+        <button type="button" class="btn btn-secondary" id="nieuw-bericht-annuleren">
           Annuleren
         </button>
         <button type="submit" class="btn btn-primary">Versturen</button>
@@ -201,6 +201,15 @@
       zoekInput.focus();
       zoekInput.style.borderColor = 'red';
       setTimeout(function() { zoekInput.style.borderColor = ''; }, 2000);
+    }
+  });
+
+  var terug = {{ request.query_params.get('terug', '') | tojson }};
+  document.getElementById('nieuw-bericht-annuleren').addEventListener('click', function() {
+    if (terug) {
+      window.location.href = terug;
+    } else {
+      document.getElementById('nieuw-bericht-modal').style.display = 'none';
     }
   });
 })();

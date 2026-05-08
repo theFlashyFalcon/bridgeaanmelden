@@ -8,7 +8,9 @@
 </section>
 
 {% if request.query_params.get('toegevoegd') %}
-  <div class="alert alert-success">Paar handmatig toegevoegd.</div>
+  <div class="alert alert-success">Handmatig toegevoegd.</div>
+{% elif request.query_params.get('fout') == 'naam_verplicht' %}
+  <div class="alert alert-error">Vul minimaal de naam van speler 1 in.</div>
 {% elif request.query_params.get('goedgekeurd') %}
   <div class="alert alert-success">Verzoek goedgekeurd en aanmelding aangemaakt.</div>
 {% elif request.query_params.get('afgewezen') %}
@@ -73,8 +75,8 @@
           <input type="text" id="naam_1" name="naam_1" required autocomplete="off" placeholder="Volledige naam">
         </div>
         <div class="form-group">
-          <label for="naam_2">Naam speler 2</label>
-          <input type="text" id="naam_2" name="naam_2" required autocomplete="off" placeholder="Volledige naam">
+          <label for="naam_2">Naam speler 2 <span style="font-weight:400;color:var(--color-muted)">(optioneel)</span></label>
+          <input type="text" id="naam_2" name="naam_2" autocomplete="off" placeholder="Volledige naam">
         </div>
       </div>
       <button type="submit" class="btn btn-primary btn-sm">Toevoegen</button>
@@ -83,19 +85,29 @@
 
   <!-- Kolom 2: Loslopers -->
   <section class="card">
-    <h2>Loslopers <span class="badge">{{ loslopers | length }}</span></h2>
-    {% if loslopers %}
-      <p style="font-size:.85rem;color:var(--color-muted);margin-bottom:.75rem;">
-        Klik op een naam om een bericht te sturen.
-      </p>
+    <h2>Loslopers <span class="badge">{{ loslopers | length + manual_loslopers | length }}</span></h2>
+    {% if loslopers or manual_loslopers %}
       <ul class="participant-list">
         {% for reg in loslopers | sort(attribute='person1.achternaam') %}
-          <li class="participant-item">
-            <button type="button" class="losloper-btn"
+          <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+            <span>{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</span>
+            <button type="button" class="losloper-btn" title="Bericht sturen"
                     data-id="{{ reg.person1.id }}"
                     data-naam="{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}">
-              {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+              ✉
             </button>
+          </li>
+        {% endfor %}
+        {% for ml in manual_loslopers %}
+          <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+            <span>
+              {{ ml.naam_1 }}
+              <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
+            </span>
+            <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/manual/{{ ml.id }}/verwijder"
+                  data-bevestig="Losloper verwijderen?" style="flex-shrink:0;">
+              <button type="submit" class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;">&#10005;</button>
+            </form>
           </li>
         {% endfor %}
       </ul>
@@ -206,6 +218,15 @@
     {% endif %}
   </section>
 
+  <!-- Berichtenbox -->
+  <section class="card">
+    <h2>Berichtenbox</h2>
+    <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
+      Stuur een bericht of bekijk je berichten.
+    </p>
+    <a href="/berichten?terug=/beheer/af-aanmeldingen/{{ evening.id }}" class="btn btn-secondary">Open berichtenbox</a>
+  </section>
+
   {% if current_user.role == 'admin' %}
   <!-- Eigen agenda (alleen admin) -->
   <section class="card">
@@ -221,11 +242,16 @@
 
 <div class="action-buttons" style="margin-top:1rem;">
   <a href="/beheer/af-aanmeldingen" class="btn btn-secondary">Terug naar overzicht</a>
+  <a href="/beheer/af-aanmeldingen/{{ evening.id }}/print" target="_blank" class="btn btn-secondary">
+    &#128438; Printversie van alle paren genereren
+  </a>
 </div>
 
 <!-- Berichtmodal -->
-<div id="bericht-modal" class="modal-overlay" hidden aria-modal="true" role="dialog">
-  <div class="modal" style="max-width:420px;text-align:left;">
+<div id="bericht-modal" class="modal-overlay" style="display:none;" aria-modal="true" role="dialog">
+  <div class="modal" style="max-width:420px;text-align:left;position:relative;">
+    <button id="modal-sluiten-x" type="button" aria-label="Sluiten"
+            style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
     <h2>Bericht sturen</h2>
     <p id="modal-naam-tekst" style="margin-bottom:1rem;font-weight:600;"></p>
     <form method="post" action="/berichten/verstuur" class="form-stack">
@@ -253,26 +279,33 @@
   var naamTekst = document.getElementById('modal-naam-tekst');
   var tekstveld = document.getElementById('modal-tekst');
 
+  function openModal(id, naam) {
+    ontvangerInput.value = id;
+    naamTekst.textContent = naam;
+    tekstveld.value = '';
+    modal.style.display = 'flex';
+    tekstveld.focus();
+  }
+
+  function sluitModal() {
+    modal.style.display = 'none';
+  }
+
   document.querySelectorAll('.losloper-btn').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      ontvangerInput.value = btn.dataset.id;
-      naamTekst.textContent = btn.dataset.naam;
-      tekstveld.value = '';
-      modal.removeAttribute('hidden');
-      tekstveld.focus();
+      openModal(btn.dataset.id, btn.dataset.naam);
     });
   });
 
-  document.getElementById('modal-sluiten').addEventListener('click', function () {
-    modal.setAttribute('hidden', '');
-  });
+  document.getElementById('modal-sluiten').addEventListener('click', sluitModal);
+  document.getElementById('modal-sluiten-x').addEventListener('click', sluitModal);
 
   modal.addEventListener('click', function (e) {
-    if (e.target === modal) modal.setAttribute('hidden', '');
+    if (e.target === modal) sluitModal();
   });
 
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') modal.setAttribute('hidden', '');
+    if (e.key === 'Escape' && modal.style.display !== 'none') sluitModal();
   });
 })();
 </script>
@@ -280,14 +313,18 @@
 <style>
 .losloper-btn {
   background: none;
-  border: none;
-  color: var(--color-secondary);
+  border: 1px solid var(--color-secondary, #6c757d);
+  border-radius: var(--radius, 4px);
+  color: var(--color-secondary, #6c757d);
   cursor: pointer;
-  font-size: 1rem;
-  padding: 0;
-  text-align: left;
-  text-decoration: underline;
+  font-size: .95rem;
+  padding: .15rem .4rem;
+  line-height: 1;
+  flex-shrink: 0;
 }
-.losloper-btn:hover { color: var(--color-primary); }
+.losloper-btn:hover {
+  background: var(--color-secondary, #6c757d);
+  color: #fff;
+}
 </style>
 {% endblock %}

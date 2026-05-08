@@ -213,7 +213,7 @@ class ManualPair(Base):
     id = Column(Integer, primary_key=True, index=True)
     evening_id = Column(Integer, ForeignKey("club_evenings.id"), nullable=False)
     naam_1 = Column(String, nullable=False)
-    naam_2 = Column(String, nullable=False)
+    naam_2 = Column(String, nullable=True)
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
 
     evening = relationship("ClubEvening")

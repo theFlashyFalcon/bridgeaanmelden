@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_auth
@@ -111,7 +111,7 @@ async def registration_submit(
 ):
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
 
     if evening.datum < date.today():
         return RedirectResponse(url="/", status_code=302)
@@ -419,7 +419,7 @@ async def registration_herhaal(
 ):
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
-        raise HTTPException(status_code=404)
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
 
     if _is_training(evening) and not current_user.training_eligible:
         raise HTTPException(status_code=403, detail="Geen toegang tot trainingsavonden")
@@ -640,3 +640,135 @@ async def verborgen_types_submit(
 @router.get("/aanmelden/wijzigen")
 async def wijzigen_redirect(request: Request):
     return RedirectResponse(url="/", status_code=302)
+
+
+# ── Profielpagina ─────────────────────────────────────────────────────────────
+
+@router.get("/profiel")
+async def mijn_profiel(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_auth),
+):
+    registrations = (
+        db.query(Registration)
+        .filter(
+            or_(
+                Registration.person1_id == current_user.id,
+                Registration.person2_id == current_user.id,
+            )
+        )
+        .join(ClubEvening)
+        .order_by(ClubEvening.datum.desc())
+        .limit(50)
+        .all()
+    )
+
+    herhalingen = (
+        db.query(RecurringRegistration)
+        .filter(
+            RecurringRegistration.member_id == current_user.id,
+            RecurringRegistration.actief == True,  # noqa: E712
+        )
+        .order_by(RecurringRegistration.aangemaakt_op)
+        .all()
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "profiel.html",
+        {
+            "current_user": current_user,
+            "registrations": registrations,
+            "herhalingen": herhalingen,
+            "welkom": False,
+        },
+    )
+
+
+# ── Bulk voor alles aanmelden / afmelden ─────────────────────────────────────
+
+_ALL_TYPES_MAP: dict[str, list[str]] = {
+    "clubavond": ["clubavond", "regulier"],
+    "avondeten": ["eten voor jeugdtraining"],
+    "training": ["jeugdtraining", "training"],
+    "speciaal": ["speciaal"],
+}
+
+
+@router.post("/voor-alles-aanmelden")
+async def voor_alles_aanmelden(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_auth),
+):
+    today = date.today()
+    all_db_types = ["clubavond", "regulier", "eten voor jeugdtraining", "speciaal"]
+    if current_user.training_eligible:
+        all_db_types += ["jeugdtraining", "training"]
+
+    future_events = (
+        db.query(ClubEvening)
+        .join(Season)
+        .filter(
+            ClubEvening.datum >= today,
+            ClubEvening.type.in_(all_db_types),
+            Season.actief == True,  # noqa: E712
+        )
+        .order_by(ClubEvening.datum)
+        .all()
+    )
+
+    count = 0
+    for evt in future_events:
+        existing = (
+            db.query(Registration)
+            .filter(
+                Registration.evening_id == evt.id,
+                Registration.person1_id == current_user.id,
+                Registration.status != RegistrationStatus.afgemeld,
+            )
+            .first()
+        )
+        if not existing:
+            db.add(Registration(
+                evening_id=evt.id,
+                person1_id=current_user.id,
+                partner_naam=None,
+                type=RegistrationType.los,
+                status=RegistrationStatus.beschikbaar_solo,
+            ))
+            count += 1
+
+    db.commit()
+    return RedirectResponse(url=f"/?bulk_ok={count}", status_code=302)
+
+
+@router.post("/voor-alles-afmelden")
+async def voor_alles_afmelden(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_auth),
+):
+    today = date.today()
+
+    upcoming_regs = (
+        db.query(Registration)
+        .join(ClubEvening)
+        .filter(
+            Registration.person1_id == current_user.id,
+            Registration.status != RegistrationStatus.afgemeld,
+            ClubEvening.datum >= today,
+        )
+        .all()
+    )
+
+    count = len(upcoming_regs)
+    for reg in upcoming_regs:
+        reg.status = RegistrationStatus.afgemeld
+        reg.partner_naam = None
+        reg.partner2_naam = None
+        reg.partner3_naam = None
+
+    db.commit()
+    return RedirectResponse(url=f"/?afgemeld_alles={count}", status_code=302)

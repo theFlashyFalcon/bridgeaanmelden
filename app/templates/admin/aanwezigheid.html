@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Aanwezigheidsstatistieken — Crash{% endblock %}
+{% block content %}
+
+<section class="page-header">
+  <h1>Aanwezigheidsstatistieken</h1>
+  {% if selected_season %}
+    <p class="subtitle">Seizoen: {{ selected_season.naam }}</p>
+  {% endif %}
+</section>
+
+<form method="get" action="/beheer/aanwezigheid" style="margin-bottom:1.5rem;">
+  <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+    <label for="seizoen-select" style="font-weight:600;">Seizoen:</label>
+    <select id="seizoen-select" name="seizoen" style="padding:.45rem .75rem;border:1px solid var(--border,#ccc);border-radius:6px;font-size:.95rem;background:var(--input-bg,#fff);color:var(--text,#222);">
+      {% for s in seasons %}
+        <option value="{{ s.id }}" {% if selected_season and s.id == selected_season.id %}selected{% endif %}>
+          {{ s.naam }}{% if s.actief %} (actief){% endif %}
+        </option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary">Tonen</button>
+  </div>
+</form>
+
+{% if selected_season %}
+<div class="card" style="padding:0;overflow:hidden;">
+  <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+    <thead>
+      <tr style="background:var(--input-bg,#f5f5f5);border-bottom:2px solid var(--border,#e0e0e0);">
+        <th style="padding:.65rem 1rem;text-align:left;">Naam</th>
+        <th style="padding:.65rem 1rem;text-align:left;">Lidnummer</th>
+        <th style="padding:.65rem 1rem;text-align:center;">Aanwezig</th>
+        <th style="padding:.65rem 1rem;text-align:center;">Afgemeld</th>
+        <th style="padding:.65rem 1rem;text-align:center;">% aanwezig</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in stats %}
+        {% set pct = ((s.aanwezig / evening_count * 100) | round(0) | int) if evening_count > 0 else 0 %}
+        <tr style="border-bottom:1px solid var(--border,#e0e0e0);">
+          <td style="padding:.55rem 1rem;">
+            {{ s.member.voornaam }} {{ s.member.achternaam }}
+          </td>
+          <td style="padding:.55rem 1rem;color:var(--color-muted);">{{ s.member.lidnummer }}</td>
+          <td style="padding:.55rem 1rem;text-align:center;">
+            <strong>{{ s.aanwezig }}</strong>
+            <span style="color:var(--color-muted);font-size:.8rem;">/ {{ evening_count }}</span>
+          </td>
+          <td style="padding:.55rem 1rem;text-align:center;color:var(--color-muted);">{{ s.afgemeld }}</td>
+          <td style="padding:.55rem 1rem;text-align:center;">
+            <div style="display:flex;align-items:center;gap:.4rem;justify-content:center;">
+              <div style="width:70px;background:var(--border,#e0e0e0);border-radius:4px;height:8px;overflow:hidden;">
+                <div style="width:{{ pct }}%;background:var(--color-primary,#1e3a5f);height:100%;border-radius:4px;"></div>
+              </div>
+              <span style="font-size:.85rem;min-width:2.5rem;">{{ pct }}%</span>
+            </div>
+          </td>
+        </tr>
+      {% else %}
+        <tr>
+          <td colspan="5" style="padding:2rem;text-align:center;color:var(--color-muted);">Geen leden gevonden.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+    {% if stats %}
+    <tfoot>
+      <tr style="background:var(--input-bg,#f5f5f5);border-top:2px solid var(--border,#e0e0e0);font-weight:600;">
+        <td colspan="2" style="padding:.65rem 1rem;">Totaal {{ stats | length }} leden</td>
+        <td style="padding:.65rem 1rem;text-align:center;">
+          {{ stats | sum(attribute='aanwezig') }}
+        </td>
+        <td style="padding:.65rem 1rem;text-align:center;">
+          {{ stats | sum(attribute='afgemeld') }}
+        </td>
+        <td></td>
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+{% else %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted);">
+    Geen seizoen geselecteerd.
+  </div>
+{% endif %}
+
+{% endblock %}
