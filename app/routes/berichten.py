@@ -166,7 +166,7 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
             afzender_id=current_user.id,
             ontvanger_id=None,
             onderwerp=onderwerp,
-            tekst=tekst,
+            tekst=tekst or None,
             is_nieuws=True,
         ))
         db.commit()

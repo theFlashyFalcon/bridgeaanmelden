@@ -254,7 +254,7 @@ class Bericht(Base):
     afzender_id = Column(Integer, ForeignKey("members.id"), nullable=False)
     ontvanger_id = Column(Integer, ForeignKey("members.id"), nullable=True)
     onderwerp = Column(String, nullable=True)
-    tekst = Column(Text, nullable=False)
+    tekst = Column(Text, nullable=True)
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
     gelezen = Column(Boolean, default=False, nullable=False)
     parent_id = Column(Integer, ForeignKey("berichten.id"), nullable=True)
