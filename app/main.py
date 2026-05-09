@@ -52,14 +52,18 @@ def _migrate():
         "ALTER TABLE club_evenings ADD COLUMN naam VARCHAR",
         "ALTER TABLE account_requests ADD COLUMN wachtwoord_hash VARCHAR",
         "ALTER TABLE members ADD COLUMN wachtwoord_hash VARCHAR",
+        "ALTER TABLE members ADD COLUMN training_eligible BOOLEAN NOT NULL DEFAULT 0",
         "ALTER TABLE members ADD COLUMN verwijderd_op TIMESTAMP",
         "ALTER TABLE members ADD COLUMN verborgen_types VARCHAR",
         "ALTER TABLE club_evenings ADD COLUMN deelnemers_type VARCHAR NOT NULL DEFAULT 'paren'",
+        "ALTER TABLE club_evenings ADD COLUMN inschrijftermijn_uren INTEGER",
         "ALTER TABLE registrations ADD COLUMN partner2_naam VARCHAR",
         "ALTER TABLE registrations ADD COLUMN partner3_naam VARCHAR",
         "ALTER TABLE registrations ADD COLUMN substitute_name TEXT",
         "ALTER TABLE registrations ADD COLUMN available_person_id INTEGER REFERENCES members(id)",
         "ALTER TABLE registrations ADD COLUMN combo_partner_reg_id INTEGER REFERENCES registrations(id)",
+        "ALTER TABLE registrations ADD COLUMN te_laat BOOLEAN NOT NULL DEFAULT 0",
+        "ALTER TABLE registrations ADD COLUMN te_laat_goedgekeurd BOOLEAN",
         (
             "CREATE TABLE IF NOT EXISTS berichten ("
             "id INTEGER PRIMARY KEY, "

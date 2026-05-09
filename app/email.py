@@ -153,6 +153,74 @@ def send_admin_new_request_email(
     _send(to_email, f"Nieuwe accountaanvraag — {aanvrager_voornaam} {aanvrager_achternaam}", html_body, text_body)
 
 
+def send_afmelding_wedstrijdleider_email(
+    to_email: str,
+    wedstrijdleider_voornaam: str,
+    lid_naam: str,
+    event_naam: str,
+    event_datum,
+) -> None:
+    datum_str = event_datum.strftime("%d-%m-%Y") if hasattr(event_datum, "strftime") else str(event_datum)
+    html_body = f"""
+    <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">
+      <div style="background: #1e3a5f; padding: 1rem 1.5rem; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 1.3rem;">&#9824; Bridge Club</h1>
+      </div>
+      <div style="background: #fff; padding: 1.5rem; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hallo {wedstrijdleider_voornaam},</p>
+        <p><strong>{lid_naam}</strong> heeft zich afgemeld voor <strong>{event_naam}</strong> op <strong>{datum_str}</strong>.</p>
+      </div>
+    </body></html>
+    """
+    text_body = (
+        f"Hallo {wedstrijdleider_voornaam},\n\n"
+        f"{lid_naam} heeft zich afgemeld voor {event_naam} op {datum_str}."
+    )
+    _send(to_email, f"Afmelding {lid_naam} — {event_naam}", html_body, text_body)
+
+
+def send_bulk_afmelding_wedstrijdleider_email(
+    to_email: str,
+    wedstrijdleider_voornaam: str,
+    lid_naam: str,
+    events: list,
+) -> None:
+    rijen = "".join(
+        f"<tr{'  style=\"background:#f5f5f5\"' if i % 2 else ''}>"
+        f"<td style='padding:.3rem .6rem;'>{naam}</td>"
+        f"<td style='padding:.3rem .6rem;'>{datum.strftime('%d-%m-%Y') if hasattr(datum, 'strftime') else datum}</td>"
+        f"</tr>"
+        for i, (naam, datum) in enumerate(events)
+    )
+    events_text = "\n".join(
+        f"- {naam} ({datum.strftime('%d-%m-%Y') if hasattr(datum, 'strftime') else datum})"
+        for naam, datum in events
+    )
+    html_body = f"""
+    <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">
+      <div style="background: #1e3a5f; padding: 1rem 1.5rem; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 1.3rem;">&#9824; Bridge Club</h1>
+      </div>
+      <div style="background: #fff; padding: 1.5rem; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hallo {wedstrijdleider_voornaam},</p>
+        <p><strong>{lid_naam}</strong> heeft zich afgemeld voor de volgende {len(events)} evenement(en):</p>
+        <table style="border-collapse: collapse; width: 100%; margin: 1rem 0;">
+          <thead><tr>
+            <th style="padding:.3rem .6rem; text-align:left;">Evenement</th>
+            <th style="padding:.3rem .6rem; text-align:left;">Datum</th>
+          </tr></thead>
+          <tbody>{rijen}</tbody>
+        </table>
+      </div>
+    </body></html>
+    """
+    text_body = (
+        f"Hallo {wedstrijdleider_voornaam},\n\n"
+        f"{lid_naam} heeft zich afgemeld voor de volgende {len(events)} evenement(en):\n{events_text}"
+    )
+    _send(to_email, f"Bulk afmelding {lid_naam} ({len(events)} evenementen)", html_body, text_body)
+
+
 def send_approval_email(to_email: str, voornaam: str, login_url: str) -> None:
     html_body = f"""
     <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">

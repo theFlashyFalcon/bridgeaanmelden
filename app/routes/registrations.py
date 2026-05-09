@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -9,11 +10,17 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_auth
 from app.database import get_db
+from app.email import (
+    send_afmelding_wedstrijdleider_email,
+    send_bulk_afmelding_wedstrijdleider_email,
+    smtp_geconfigureerd,
+)
 from app.models import (
     ClubEvening,
     EveningType,
     Lid,
     Member,
+    MemberRole,
     PartnerRequest,
     RecurringRegistration,
     Registration,
@@ -21,6 +28,8 @@ from app.models import (
     RegistrationType,
     Season,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
@@ -150,6 +159,29 @@ async def registration_submit(
             PartnerRequest.status == "wachtend",
         ).delete()
         db.commit()
+        if smtp_geconfigureerd():
+            lid_naam = f"{current_user.voornaam} {current_user.achternaam}"
+            event_naam = evening.naam or evening.type
+            wedstrijdleiders = (
+                db.query(Member)
+                .filter(
+                    Member.role == MemberRole.wedstrijdleider,
+                    Member.email.isnot(None),
+                    Member.verwijderd_op.is_(None),
+                )
+                .all()
+            )
+            for wl in wedstrijdleiders:
+                try:
+                    send_afmelding_wedstrijdleider_email(
+                        wl.email,
+                        wl.voornaam,
+                        lid_naam,
+                        event_naam,
+                        evening.datum,
+                    )
+                except Exception:
+                    logger.exception("E-mail afmelding versturen mislukt naar wedstrijdleider %s", wl.email)
         return RedirectResponse(url="/?afgemeld=1", status_code=302)
 
     deelnemers_type = evening.deelnemers_type or "paren"
@@ -771,4 +803,26 @@ async def voor_alles_afmelden(
         reg.partner3_naam = None
 
     db.commit()
+    if smtp_geconfigureerd() and upcoming_regs:
+        lid_naam = f"{current_user.voornaam} {current_user.achternaam}"
+        events = [(reg.evening.naam or reg.evening.type, reg.evening.datum) for reg in upcoming_regs]
+        wedstrijdleiders = (
+            db.query(Member)
+            .filter(
+                Member.role == MemberRole.wedstrijdleider,
+                Member.email.isnot(None),
+                Member.verwijderd_op.is_(None),
+            )
+            .all()
+        )
+        for wl in wedstrijdleiders:
+            try:
+                send_bulk_afmelding_wedstrijdleider_email(
+                    wl.email,
+                    wl.voornaam,
+                    lid_naam,
+                    events,
+                )
+            except Exception:
+                logger.exception("E-mail bulk afmelding versturen mislukt naar wedstrijdleider %s", wl.email)
     return RedirectResponse(url=f"/?afgemeld_alles={count}", status_code=302)

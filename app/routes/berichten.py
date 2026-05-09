@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -131,48 +131,79 @@ async def berichten_inbox(request: Request, db: Session = Depends(get_db)):
 async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
     current_user = _require_login(request, db)
     form = await request.form()
-    ontvanger_raw = form.get("ontvanger_id", "").strip()
-    onderwerp = form.get("onderwerp", "").strip() or None
-    tekst = form.get("tekst", "").strip()
-    terug = form.get("terug", "").strip()
+    ontvanger_id_raw  = form.get("ontvanger_id", "").strip()
+    ontvanger_vnaam   = form.get("ontvanger_voornaam", "").strip()
+    ontvanger_anaam   = form.get("ontvanger_achternaam", "").strip()
+    is_nieuws         = form.get("is_nieuws", "") == "1"
+    onderwerp         = form.get("onderwerp", "").strip() or None
+    tekst             = form.get("tekst", "").strip()
+    terug             = form.get("terug", "").strip()
     if terug and not terug.startswith("/beheer/af-aanmeldingen/"):
         terug = ""
 
-    if not tekst:
-        fout_url = f"{terug}?fout=leeg" if terug else "/berichten?fout=leeg"
-        return RedirectResponse(url=fout_url, status_code=302)
+    def _redirect_fout(code: str) -> RedirectResponse:
+        base = terug if terug else "/berichten"
+        return RedirectResponse(url=f"{base}?fout={code}", status_code=302)
 
-    if ontvanger_raw == "nieuws":
+    # ── Nieuwsbericht (admin / wedstrijdleider) ───────────────────────────
+    if is_nieuws:
         if current_user.role not in (MemberRole.admin, MemberRole.wedstrijdleider):
             raise HTTPException(status_code=403)
-        bericht = Bericht(
+        if not onderwerp:
+            return _redirect_fout("leeg")
+        db.add(Bericht(
             afzender_id=current_user.id,
             ontvanger_id=None,
             onderwerp=onderwerp,
             tekst=tekst,
             is_nieuws=True,
-        )
-        db.add(bericht)
+        ))
         db.commit()
         return RedirectResponse(url=terug or "/berichten", status_code=302)
 
-    try:
-        ontvanger_id = int(ontvanger_raw) if ontvanger_raw else 0
-    except ValueError:
-        ontvanger_id = 0
+    # ── Persoonlijk bericht via ontvanger_id (losloper-modal) ─────────────
+    if ontvanger_id_raw:
+        try:
+            ontvanger_id = int(ontvanger_id_raw)
+        except ValueError:
+            return _redirect_fout("ontvanger")
+        ontvanger = db.query(Member).filter(Member.id == ontvanger_id).first()
+        if not ontvanger:
+            return _redirect_fout("ontvanger")
+        bericht = Bericht(
+            afzender_id=current_user.id,
+            ontvanger_id=ontvanger_id,
+            onderwerp=onderwerp,
+            tekst=tekst,
+        )
+        db.add(bericht)
+        db.commit()
+        db.refresh(bericht)
+        if terug:
+            return RedirectResponse(url=f"{terug}?bericht_verstuurd=1", status_code=302)
+        return RedirectResponse(url=f"/berichten/{bericht.id}", status_code=302)
 
-    if not ontvanger_id:
-        fout_url = f"{terug}?fout=leeg" if terug else "/berichten?fout=leeg"
-        return RedirectResponse(url=fout_url, status_code=302)
+    # ── Persoonlijk bericht via naam-zoekopdracht ─────────────────────────
+    if not onderwerp:
+        return _redirect_fout("leeg")
+    if not ontvanger_vnaam or not ontvanger_anaam:
+        return _redirect_fout("ontvanger")
 
-    ontvanger = db.query(Member).filter(Member.id == ontvanger_id).first()
+    ontvanger = (
+        db.query(Member)
+        .filter(
+            func.lower(Member.voornaam) == ontvanger_vnaam.lower(),
+            func.lower(Member.achternaam) == ontvanger_anaam.lower(),
+            Member.verwijderd_op == None,  # noqa: E711
+        )
+        .first()
+    )
     if not ontvanger:
-        fout_url = f"{terug}?fout=ontvanger" if terug else "/berichten?fout=ontvanger"
-        return RedirectResponse(url=fout_url, status_code=302)
+        return _redirect_fout("ontvanger")
 
     bericht = Bericht(
         afzender_id=current_user.id,
-        ontvanger_id=ontvanger_id,
+        ontvanger_id=ontvanger.id,
         onderwerp=onderwerp,
         tekst=tekst,
     )
