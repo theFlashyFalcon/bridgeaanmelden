@@ -47,14 +47,25 @@ def _get_conversations(db: Session, user_id: int):
         db.query(Bericht).filter(Bericht.id.in_(extra_ids)).all() if extra_ids else []
     )
 
+    root_messages = direct + indirect
+    if not root_messages:
+        return []
+
+    # Bug 8 fix: load all replies in one query instead of one query per conversation
+    all_root_ids = [r.id for r in root_messages]
+    all_replies = (
+        db.query(Bericht)
+        .filter(Bericht.parent_id.in_(all_root_ids))
+        .order_by(Bericht.aangemaakt_op)
+        .all()
+    )
+    replies_by_parent: dict = {}
+    for reply in all_replies:
+        replies_by_parent.setdefault(reply.parent_id, []).append(reply)
+
     result = []
-    for root in direct + indirect:
-        replies = (
-            db.query(Bericht)
-            .filter(Bericht.parent_id == root.id)
-            .order_by(Bericht.aangemaakt_op)
-            .all()
-        )
+    for root in root_messages:
+        replies = replies_by_parent.get(root.id, [])
         all_in_thread = [root] + replies
         latest = max(b.aangemaakt_op for b in all_in_thread)
         unread = sum(
@@ -167,6 +178,10 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
             ontvanger_id = int(ontvanger_id_raw)
         except ValueError:
             return _redirect_fout("ontvanger")
+        if ontvanger_id == current_user.id:  # Bug 5 fix: no self-messaging
+            return _redirect_fout("ontvanger")
+        if not tekst:  # Bug 4 fix: require non-empty message body
+            return _redirect_fout("leeg")
         ontvanger = db.query(Member).filter(Member.id == ontvanger_id).first()
         if not ontvanger:
             return _redirect_fout("ontvanger")
@@ -286,9 +301,37 @@ async def bericht_antwoord(
     bericht_id: int, request: Request, db: Session = Depends(get_db)
 ):
     current_user = _require_login(request, db)
-    root = db.query(Bericht).filter(Bericht.id == bericht_id).first()
+    # Bug 2 fix: only allow replying to root messages, not to replies themselves
+    root = (
+        db.query(Bericht)
+        .filter(Bericht.id == bericht_id, Bericht.parent_id == None)  # noqa: E711
+        .first()
+    )
     if not root:
         raise HTTPException(status_code=404, detail="Bericht niet gevonden")
+
+    # Bug 3 fix: news items have no addressed recipient, so replies are not possible
+    if root.is_nieuws:
+        raise HTTPException(status_code=403, detail="Nieuwsberichten kunnen niet beantwoord worden")
+
+    # Bug 1 fix: check that the current user is a participant in this conversation
+    involved = (
+        root.afzender_id == current_user.id or root.ontvanger_id == current_user.id
+    )
+    if not involved:
+        reply_check = (
+            db.query(Bericht)
+            .filter(
+                Bericht.parent_id == bericht_id,
+                or_(
+                    Bericht.afzender_id == current_user.id,
+                    Bericht.ontvanger_id == current_user.id,
+                ),
+            )
+            .first()
+        )
+        if not reply_check:
+            raise HTTPException(status_code=403)
 
     form = await request.form()
     tekst = form.get("tekst", "").strip()

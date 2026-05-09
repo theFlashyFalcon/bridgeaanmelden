@@ -172,7 +172,7 @@ _seed_crash_leden()
 
 app = FastAPI(title="Bridge Club Aanmeldingsapp", docs_url=None, redoc_url=None)
 
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="strict")
 
 
 @app.exception_handler(401)

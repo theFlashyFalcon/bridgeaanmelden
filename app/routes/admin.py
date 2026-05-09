@@ -156,8 +156,11 @@ async def seizoen_add_from_beheren(
     if errors:
         return RedirectResponse(url="/beheer/avonden?fout=seizoen", status_code=302)
 
-    start = date.fromisoformat(start_str)
-    eind = date.fromisoformat(eind_str)
+    try:
+        start = date.fromisoformat(start_str)
+        eind = date.fromisoformat(eind_str)
+    except ValueError:
+        return RedirectResponse(url="/beheer/avonden?fout=datum", status_code=302)
     if start >= eind:
         return RedirectResponse(url="/beheer/avonden?fout=datum", status_code=302)
 
@@ -187,7 +190,12 @@ async def avonden_add(
     if not datum_str:
         errors.append("Datum is verplicht.")
 
-    datum = date.fromisoformat(datum_str) if datum_str else None
+    datum = None
+    if datum_str:
+        try:
+            datum = date.fromisoformat(datum_str)
+        except ValueError:
+            errors.append("Ongeldige datumformat (gebruik JJJJ-MM-DD).")
 
     season = None
     if datum:
