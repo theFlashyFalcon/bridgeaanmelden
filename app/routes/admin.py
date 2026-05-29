@@ -4,7 +4,6 @@ import secrets
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -454,9 +453,9 @@ async def smtp_test(
         )
         logger.info("SMTP-test geslaagd, bericht verstuurd naar %s", to_email)
         return RedirectResponse(url="/beheer/uitnodigingen?smtp_test=ok", status_code=302)
-    except Exception as exc:
+    except Exception:
         logger.exception("SMTP-test mislukt")
-        return RedirectResponse(url=f"/beheer/uitnodigingen?smtp_test=fout&fout={quote(str(exc))}", status_code=302)
+        return RedirectResponse(url="/beheer/uitnodigingen?smtp_test=fout", status_code=302)
 
 
 # ── Uitnodigingen (Admin only) ────────────────────────────────────────────────
@@ -513,11 +512,10 @@ async def create_invitation(
     try:
         send_invitation_email(email, invite_url)
         return RedirectResponse(url="/beheer/uitnodigingen?verstuurd=1", status_code=302)
-    except Exception as exc:
+    except Exception:
         logger.exception("E-mail versturen mislukt voor uitnodiging naar %s", email)
-        from urllib.parse import quote
         return RedirectResponse(
-            url=f"/beheer/uitnodigingen?aangemaakt=1&email_fout=1&token={token}&fout={quote(str(exc))}",
+            url="/beheer/uitnodigingen?aangemaakt=1&email_fout=1",
             status_code=302,
         )
 
@@ -650,10 +648,9 @@ async def aanvraag_goedkeuren(
         try:
             send_approval_email(aanvraag.email, aanvraag.voornaam, f"{_base_url(request)}/login")
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1", status_code=302)
-        except Exception as exc:
+        except Exception:
             logger.exception("E-mail versturen mislukt bij goedkeuren aanvraag %s", aanvraag.email)
-            from urllib.parse import quote
-            return RedirectResponse(url=f"/beheer/aanvragen?goedgekeurd=1&email_fout=1&fout={quote(str(exc))}", status_code=302)
+            return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1&email_fout=1", status_code=302)
     else:
         # Legacy: send invite link
         assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == aanvraag.email).first()
@@ -670,11 +667,10 @@ async def aanvraag_goedkeuren(
         try:
             send_invitation_email(aanvraag.email, invite_url)
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1", status_code=302)
-        except Exception as exc:
+        except Exception:
             logger.exception("Uitnodigingsmail mislukt voor aanvraag %s", aanvraag.email)
-            from urllib.parse import quote
             return RedirectResponse(
-                url=f"/beheer/aanvragen?goedgekeurd=1&email_fout=1&token={token}&fout={quote(str(exc))}",
+                url="/beheer/aanvragen?goedgekeurd=1&email_fout=1",
                 status_code=302,
             )
 
@@ -765,8 +761,11 @@ async def delete_role(
     form = await request.form()
     assignment_id = form.get("id")
     if assignment_id:
-        db.query(EmailRoleAssignment).filter(EmailRoleAssignment.id == int(assignment_id)).delete()
-        db.commit()
+        try:
+            db.query(EmailRoleAssignment).filter(EmailRoleAssignment.id == int(assignment_id)).delete()
+            db.commit()
+        except ValueError:
+            pass
     return RedirectResponse(url="/beheer/rollen", status_code=302)
 
 
@@ -1172,7 +1171,10 @@ async def aanwezigheid(
     selected_season = None
 
     if selected_season_id:
-        selected_season = db.query(Season).filter(Season.id == int(selected_season_id)).first()
+        try:
+            selected_season = db.query(Season).filter(Season.id == int(selected_season_id)).first()
+        except ValueError:
+            selected_season = None
     if not selected_season:
         selected_season = db.query(Season).filter(Season.actief == True).first()  # noqa: E712
     if not selected_season and seasons:
@@ -1250,4 +1252,7 @@ async def set_weergave(
         raise HTTPException(status_code=400, detail="Ongeldige rol")
 
     referer = request.headers.get("referer", "/")
+    # Only follow relative paths — reject absolute URLs to prevent open redirect
+    if not referer.startswith("/") or referer.startswith("//"):
+        referer = "/"
     return RedirectResponse(url=referer, status_code=302)

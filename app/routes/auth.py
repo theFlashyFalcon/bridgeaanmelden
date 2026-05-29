@@ -50,15 +50,24 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
     if login_method == "naam":
         voornaam = form.get("voornaam", "").strip()
         achternaam = form.get("achternaam", "").strip()
-        member = (
+        matches = (
             db.query(Member)
             .filter(
                 Member.voornaam.ilike(voornaam),
                 Member.achternaam.ilike(achternaam),
             )
-            .first()
+            .all()
         )
-        if member:
+        if len(matches) > 1:
+            # Ambiguous — multiple members share this name, email login is required
+            return templates.TemplateResponse(
+                request,
+                "login.html",
+                {"error": "Meerdere accounts gevonden met deze naam. Gebruik je e-mailadres om in te loggen."},
+                status_code=401,
+            )
+        if len(matches) == 1:
+            member = matches[0]
             email = member.email or ""
     else:
         email = form.get("email", "").strip().lower()
@@ -384,7 +393,7 @@ async def wachtwoord_vergeten_submit(request: Request, db: Session = Depends(get
 
     member = db.query(Member).filter(Member.email.ilike(email)).first() if email else None
     if not member:
-        logger.warning("Wachtwoord-reset aangevraagd voor onbekend e-mailadres: %s", email)
+        pass  # Silently ignore unknown addresses — don't log to avoid leaking which emails exist
     else:
         token = secrets.token_urlsafe(32)
         db.add(PasswordResetToken(token=token, member_id=member.id))
