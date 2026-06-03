@@ -94,6 +94,9 @@ def _migrate():
         ),
         "ALTER TABLE berichten ADD COLUMN is_nieuws BOOLEAN NOT NULL DEFAULT 0",
         "ALTER TABLE berichten ALTER COLUMN ontvanger_id DROP NOT NULL",
+        "ALTER TABLE berichten ALTER COLUMN tekst DROP NOT NULL",
+        "ALTER TABLE rankings ADD COLUMN aangemaakt_door_id INTEGER REFERENCES members(id)",
+        "ALTER TABLE uitslagen ADD COLUMN aangemaakt_door_id INTEGER REFERENCES members(id)",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -108,6 +111,40 @@ def _migrate():
 
 
 _migrate()
+
+
+def _fix_nullable_columns():
+    """Maak berichten.ontvanger_id en berichten.tekst nullable via Alembic batch (SQLite-compatibel)."""
+    import sqlalchemy as sa
+    from sqlalchemy import inspect as sa_inspect
+
+    try:
+        insp = sa_inspect(engine)
+        if "berichten" not in insp.get_table_names():
+            return
+        cols = {c["name"]: c for c in insp.get_columns("berichten")}
+        fix_ontvanger = not cols.get("ontvanger_id", {}).get("nullable", True)
+        fix_tekst = not cols.get("tekst", {}).get("nullable", True)
+        if not fix_ontvanger and not fix_tekst:
+            return
+
+        from alembic.operations import Operations
+        from alembic.runtime.migration import MigrationContext
+
+        with engine.begin() as conn:
+            ctx = MigrationContext.configure(conn)
+            op = Operations(ctx)
+            with op.batch_alter_table("berichten", recreate="auto") as batch_op:
+                if fix_ontvanger:
+                    batch_op.alter_column("ontvanger_id", existing_type=sa.Integer(), nullable=True)
+                if fix_tekst:
+                    batch_op.alter_column("tekst", existing_type=sa.Text(), nullable=True)
+        logger.info("berichten: ontvanger_id/tekst nullable gemaakt via batch migratie")
+    except Exception as e:
+        logger.warning("Fix nullable kolommen mislukt: %s", e)
+
+
+_fix_nullable_columns()
 
 
 def _seed_admin():
