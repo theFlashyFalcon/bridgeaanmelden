@@ -18,7 +18,7 @@ def _base_url(request: Request) -> str:
     configured = os.getenv("BASE_URL", "").rstrip("/")
     return configured or str(request.base_url).rstrip("/")
 
-from app.auth import get_current_user, require_admin, require_wedstrijdleider
+from app.auth import get_current_user, require_admin, require_auth, require_wedstrijdleider
 from app.database import get_db
 from app.models import (
     AccountRequest,
@@ -39,6 +39,7 @@ from app.models import (
     RegistrationStatus,
     RegistrationType,
     Season,
+    Uitslag,
 )
 
 router = APIRouter(prefix="/beheer")
@@ -288,6 +289,10 @@ async def avonden_delete(
 ):
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if evening:
+        db.query(Registration).filter(Registration.evening_id == event_id).delete(synchronize_session=False)
+        db.query(ManualPair).filter(ManualPair.evening_id == event_id).delete(synchronize_session=False)
+        db.query(PartnerRequest).filter(PartnerRequest.evening_id == event_id).delete(synchronize_session=False)
+        db.query(Uitslag).filter(Uitslag.evening_id == event_id).delete(synchronize_session=False)
         db.delete(evening)
         db.commit()
     return RedirectResponse(url="/beheer/avonden?verwijderd=1", status_code=302)
@@ -335,11 +340,17 @@ async def aanmeldingen_detail(
 
     active = [r for r in all_regs if r.status != RegistrationStatus.afgemeld]
     recent_changes = all_regs[:10]
+    dtype_detail = evening.deelnemers_type or "paren"
 
-    loslopers = [
-        r for r in active
-        if r.person2_id is None or r.status == RegistrationStatus.beschikbaar_solo
-    ]
+    if dtype_detail == "viertallen":
+        volledig = [r for r in active if r.partner_naam and r.partner2_naam and r.partner3_naam]
+        loslopers = [r for r in active if r not in volledig]
+    elif dtype_detail == "individueel":
+        volledig = list(active)
+        loslopers = []
+    else:
+        volledig = [r for r in active if (r.person2_id or r.partner_naam) and r.status != RegistrationStatus.beschikbaar_solo]
+        loslopers = [r for r in active if r not in volledig]
 
     return templates.TemplateResponse(
         request,
@@ -348,8 +359,10 @@ async def aanmeldingen_detail(
             "current_user": current_user,
             "evening": evening,
             "active": active,
+            "volledig": volledig,
             "recent_changes": recent_changes,
             "loslopers": loslopers,
+            "dtype": dtype_detail,
         },
     )
 
@@ -926,24 +939,51 @@ async def af_aanmeldingen_detail(
         .all()
     )
 
-    volledig_aangemeld = [
-        r for r in all_regs
-        if r.status == RegistrationStatus.aangemeld and (r.partner_naam or r.person2_id)
-    ]
+    dtype = evening.deelnemers_type or "paren"
+
+    if dtype == "individueel":
+        volledig_aangemeld = [r for r in all_regs if r.status == RegistrationStatus.aangemeld]
+        loslopers = []
+    elif dtype == "viertallen":
+        volledig_aangemeld = [
+            r for r in all_regs
+            if r.status == RegistrationStatus.aangemeld and r.partner_naam and r.partner2_naam and r.partner3_naam
+        ]
+        loslopers = [
+            r for r in all_regs
+            if r.status in (RegistrationStatus.beschikbaar_solo, RegistrationStatus.aangemeld)
+            and r not in volledig_aangemeld
+            and r.status != RegistrationStatus.afgemeld
+        ]
+    else:  # paren
+        volledig_aangemeld = [
+            r for r in all_regs
+            if r.status == RegistrationStatus.aangemeld and (r.partner_naam or r.person2_id)
+        ]
+        loslopers = [
+            r for r in all_regs
+            if r.status == RegistrationStatus.beschikbaar_solo
+            or (r.status == RegistrationStatus.aangemeld and not r.partner_naam and not r.person2_id)
+        ]
+
     afgemeld = [r for r in all_regs if r.status == RegistrationStatus.afgemeld]
-    loslopers = [
-        r for r in all_regs
-        if r.status == RegistrationStatus.beschikbaar_solo
-        or (r.status == RegistrationStatus.aangemeld and not r.partner_naam and not r.person2_id)
-    ]
     all_manual = (
         db.query(ManualPair)
         .filter(ManualPair.evening_id == event_id)
         .order_by(ManualPair.aangemaakt_op)
         .all()
     )
-    manual_pairs = [p for p in all_manual if p.naam_2]
-    manual_loslopers = [p for p in all_manual if not p.naam_2]
+
+    if dtype == "individueel":
+        manual_aangemeld = all_manual
+        manual_loslopers = []
+    elif dtype == "viertallen":
+        manual_aangemeld = [p for p in all_manual if p.naam_4]
+        manual_loslopers = [p for p in all_manual if not p.naam_4]
+    else:
+        manual_aangemeld = [p for p in all_manual if p.naam_2]
+        manual_loslopers = [p for p in all_manual if not p.naam_2]
+
     verzoeken = (
         db.query(PartnerRequest)
         .filter(PartnerRequest.evening_id == event_id)
@@ -962,10 +1002,11 @@ async def af_aanmeldingen_detail(
             "volledig_aangemeld": volledig_aangemeld,
             "afgemeld": afgemeld,
             "loslopers": loslopers,
-            "manual_pairs": manual_pairs,
+            "manual_aangemeld": manual_aangemeld,
             "manual_loslopers": manual_loslopers,
             "verzoeken": verzoeken,
             "te_laat_regs": te_laat_regs,
+            "dtype": dtype,
         },
     )
 
@@ -982,17 +1023,25 @@ async def af_aanmeldingen_print(
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
 
     all_regs = db.query(Registration).filter(Registration.evening_id == event_id).all()
-    volledig_aangemeld = [
-        r for r in all_regs
-        if r.status == RegistrationStatus.aangemeld and (r.partner_naam or r.person2_id)
-    ]
+    dtype_print = evening.deelnemers_type or "paren"
+    if dtype_print == "viertallen":
+        volledig_aangemeld = [r for r in all_regs if r.status == RegistrationStatus.aangemeld and r.partner_naam and r.partner2_naam and r.partner3_naam]
+    elif dtype_print == "individueel":
+        volledig_aangemeld = [r for r in all_regs if r.status == RegistrationStatus.aangemeld]
+    else:
+        volledig_aangemeld = [r for r in all_regs if r.status == RegistrationStatus.aangemeld and (r.partner_naam or r.person2_id)]
     all_manual = (
         db.query(ManualPair)
         .filter(ManualPair.evening_id == event_id)
         .order_by(ManualPair.aangemaakt_op)
         .all()
     )
-    manual_pairs = [p for p in all_manual if p.naam_2]
+    if dtype_print == "viertallen":
+        manual_aangemeld_print = [p for p in all_manual if p.naam_4]
+    elif dtype_print == "individueel":
+        manual_aangemeld_print = all_manual
+    else:
+        manual_aangemeld_print = [p for p in all_manual if p.naam_2]
 
     return templates.TemplateResponse(
         request,
@@ -1001,7 +1050,7 @@ async def af_aanmeldingen_print(
             "current_user": current_user,
             "evening": evening,
             "volledig_aangemeld": volledig_aangemeld,
-            "manual_pairs": manual_pairs,
+            "manual_pairs": manual_aangemeld_print,
             "welkom": False,
         },
     )
@@ -1019,13 +1068,30 @@ async def af_aanmeldingen_toevoegen(
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
 
     form = await request.form()
-    naam_1 = form.get("naam_1", "").strip()
-    naam_2 = form.get("naam_2", "").strip() or None
+    dtype = evening.deelnemers_type or "paren"
 
+    naam_1 = form.get("naam_1", "").strip()
     if not naam_1:
         return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?fout=naam_verplicht", status_code=302)
 
-    db.add(ManualPair(evening_id=event_id, naam_1=naam_1, naam_2=naam_2))
+    if dtype == "individueel":
+        # Elke naam is een individuele deelnemer → direct naar aangemeld (geen losloper)
+        db.add(ManualPair(evening_id=event_id, naam_1=naam_1))
+    elif dtype == "viertallen":
+        naam_2 = form.get("naam_2", "").strip() or None
+        naam_3 = form.get("naam_3", "").strip() or None
+        naam_4 = form.get("naam_4", "").strip() or None
+        team_naam = form.get("team_naam", "").strip() or None
+        # < 4 spelers → losloper-groep (naam_4 is None); alle 4 → aangemeld
+        db.add(ManualPair(
+            evening_id=event_id,
+            naam_1=naam_1, naam_2=naam_2, naam_3=naam_3, naam_4=naam_4,
+            team_naam=team_naam,
+        ))
+    else:  # paren
+        naam_2 = form.get("naam_2", "").strip() or None
+        db.add(ManualPair(evening_id=event_id, naam_1=naam_1, naam_2=naam_2))
+
     db.commit()
     return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?toegevoegd=1", status_code=302)
 
@@ -1160,11 +1226,19 @@ async def te_laat_verwijderen(
     )
 
 
+_AANWEZIGHEID_TYPE_MAP: dict[str, list[str]] = {
+    "clubavond": ["clubavond", "regulier"],
+    "avondeten": ["eten voor jeugdtraining"],
+    "training": ["jeugdtraining", "training"],
+    "speciaal": ["speciaal"],
+}
+
+
 @router.get("/aanwezigheid")
 async def aanwezigheid(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Member = Depends(require_admin),
+    current_user: Member = Depends(require_auth),
 ):
     seasons = db.query(Season).order_by(Season.start_datum.desc()).all()
     selected_season_id = request.query_params.get("seizoen")
@@ -1180,41 +1254,54 @@ async def aanwezigheid(
     if not selected_season and seasons:
         selected_season = seasons[0]
 
-    members = (
-        db.query(Member)
-        .filter(Member.verwijderd_op.is_(None))
-        .order_by(Member.achternaam, Member.voornaam)
-        .all()
-    )
+    # Event-type filter: "alle" (default) or one/more of the type keys
+    raw_types = request.query_params.getlist("type")
+    valid_keys = list(_AANWEZIGHEID_TYPE_MAP.keys())
+    selected_types = [t for t in raw_types if t in valid_keys]
+    # If nothing selected → treat as "alle"
+    alle_actief = not selected_types
+
+    # Determine which DB event-type strings count
+    if alle_actief:
+        db_types: Optional[list[str]] = None  # no filter = all
+    else:
+        db_types = []
+        for key in selected_types:
+            db_types.extend(_AANWEZIGHEID_TYPE_MAP[key])
+
+    is_beheerder = current_user.role in (MemberRole.wedstrijdleider.value, MemberRole.admin.value)
+
+    if is_beheerder:
+        members = (
+            db.query(Member)
+            .filter(Member.verwijderd_op.is_(None))
+            .order_by(Member.achternaam, Member.voornaam)
+            .all()
+        )
+    else:
+        members = [current_user]
 
     stats = []
     if selected_season:
-        evening_count = (
-            db.query(ClubEvening)
-            .filter(ClubEvening.season_id == selected_season.id)
-            .count()
-        )
+        evening_q = db.query(ClubEvening).filter(ClubEvening.season_id == selected_season.id)
+        if db_types is not None:
+            evening_q = evening_q.filter(ClubEvening.type.in_(db_types))
+        evening_count = evening_q.count()
+
         for member in members:
-            aanwezig = (
+            base_q = (
                 db.query(Registration)
                 .join(ClubEvening)
                 .filter(
                     Registration.person1_id == member.id,
-                    Registration.status != RegistrationStatus.afgemeld,
                     ClubEvening.season_id == selected_season.id,
                 )
-                .count()
             )
-            afgemeld = (
-                db.query(Registration)
-                .join(ClubEvening)
-                .filter(
-                    Registration.person1_id == member.id,
-                    Registration.status == RegistrationStatus.afgemeld,
-                    ClubEvening.season_id == selected_season.id,
-                )
-                .count()
-            )
+            if db_types is not None:
+                base_q = base_q.filter(ClubEvening.type.in_(db_types))
+
+            aanwezig = base_q.filter(Registration.status != RegistrationStatus.afgemeld).count()
+            afgemeld = base_q.filter(Registration.status == RegistrationStatus.afgemeld).count()
             stats.append({
                 "member": member,
                 "aanwezig": aanwezig,
@@ -1233,6 +1320,11 @@ async def aanwezigheid(
             "selected_season": selected_season,
             "stats": stats,
             "evening_count": evening_count,
+            "selected_types": selected_types,
+            "alle_actief": alle_actief,
+            "type_knoppen": list(_AANWEZIGHEID_TYPE_MAP.keys()),
+            "type_labels": {"clubavond": "Clubavond", "avondeten": "Avondeten", "training": "Training", "speciaal": "Speciaal"},
+            "is_beheerder": is_beheerder,
             "welkom": False,
         },
     )

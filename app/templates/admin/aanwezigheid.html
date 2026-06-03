@@ -3,23 +3,49 @@
 {% block content %}
 
 <section class="page-header">
-  <h1>Aanwezigheidsstatistieken</h1>
-  {% if selected_season %}
-    <p class="subtitle">Seizoen: {{ selected_season.naam }}</p>
+  {% if is_beheerder %}
+    <h1>Aanwezigheidsstatistieken</h1>
+  {% else %}
+    <h1>Mijn aanwezigheid</h1>
   {% endif %}
 </section>
 
-<form method="get" action="/beheer/aanwezigheid" style="margin-bottom:1.5rem;">
-  <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
-    <label for="seizoen-select" style="font-weight:600;">Seizoen:</label>
-    <select id="seizoen-select" name="seizoen" style="padding:.45rem .75rem;border:1px solid var(--border,#ccc);border-radius:6px;font-size:.95rem;background:var(--input-bg,#fff);color:var(--text,#222);">
+{# ── Formulier: seizoen + type-filter ─────────────────────────────────────── #}
+<form method="get" action="/beheer/aanwezigheid" id="aanwezigheid-form" style="margin-bottom:1.5rem;">
+
+  {# Seizoen selectie #}
+  <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-bottom:1rem;">
+    <label for="seizoen-select" style="font-weight:600;">Seizoen</label>
+    <select id="seizoen-select" name="seizoen"
+            style="padding:.45rem .75rem;border:1px solid var(--border,#ccc);border-radius:6px;font-size:.95rem;background:var(--input-bg,#fff);color:var(--text,#222);"
+            onchange="this.form.submit()">
       {% for s in seasons %}
         <option value="{{ s.id }}" {% if selected_season and s.id == selected_season.id %}selected{% endif %}>
           {{ s.naam }}{% if s.actief %} (actief){% endif %}
         </option>
       {% endfor %}
     </select>
-    <button type="submit" class="btn btn-secondary">Tonen</button>
+    <span style="color:var(--color-muted);font-size:.9rem;">tonen</span>
+  </div>
+
+  {# Type-filter knoppen #}
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+    <button type="button" id="btn-alle"
+            class="filter-knop {% if alle_actief %}filter-knop--actief{% endif %}"
+            onclick="toggleAlle()">Alle</button>
+    {% for key in type_knoppen %}
+      <button type="button"
+              id="btn-{{ key }}"
+              class="filter-knop {% if key in selected_types %}filter-knop--actief{% endif %}"
+              onclick="toggleType('{{ key }}')">{{ type_labels[key] }}</button>
+    {% endfor %}
+  </div>
+
+  {# Verborgen velden voor geselecteerde types #}
+  <div id="type-hidden-fields">
+    {% for key in selected_types %}
+      <input type="hidden" name="type" value="{{ key }}">
+    {% endfor %}
   </div>
 </form>
 
@@ -39,9 +65,7 @@
       {% for s in stats %}
         {% set pct = ((s.aanwezig / evening_count * 100) | round(0) | int) if evening_count > 0 else 0 %}
         <tr style="border-bottom:1px solid var(--border,#e0e0e0);">
-          <td style="padding:.55rem 1rem;">
-            {{ s.member.voornaam }} {{ s.member.achternaam }}
-          </td>
+          <td style="padding:.55rem 1rem;">{{ s.member.voornaam }} {{ s.member.achternaam }}</td>
           <td style="padding:.55rem 1rem;color:var(--color-muted);">{{ s.member.lidnummer }}</td>
           <td style="padding:.55rem 1rem;text-align:center;">
             <strong>{{ s.aanwezig }}</strong>
@@ -67,12 +91,8 @@
     <tfoot>
       <tr style="background:var(--input-bg,#f5f5f5);border-top:2px solid var(--border,#e0e0e0);font-weight:600;">
         <td colspan="2" style="padding:.65rem 1rem;">Totaal {{ stats | length }} leden</td>
-        <td style="padding:.65rem 1rem;text-align:center;">
-          {{ stats | sum(attribute='aanwezig') }}
-        </td>
-        <td style="padding:.65rem 1rem;text-align:center;">
-          {{ stats | sum(attribute='afgemeld') }}
-        </td>
+        <td style="padding:.65rem 1rem;text-align:center;">{{ stats | sum(attribute='aanwezig') }}</td>
+        <td style="padding:.65rem 1rem;text-align:center;">{{ stats | sum(attribute='afgemeld') }}</td>
         <td></td>
       </tr>
     </tfoot>
@@ -84,5 +104,75 @@
     Geen seizoen geselecteerd.
   </div>
 {% endif %}
+
+<style>
+.filter-knop {
+  padding:.35rem .85rem;
+  border:2px solid var(--color-primary,#1e3a5f);
+  border-radius:20px;
+  background:#fff;
+  color:var(--color-primary,#1e3a5f);
+  font-size:.9rem;
+  cursor:pointer;
+  font-weight:500;
+  transition:background .15s,color .15s;
+}
+.filter-knop--actief {
+  background:var(--color-primary,#1e3a5f);
+  color:#fff;
+}
+.filter-knop:hover:not(.filter-knop--actief) {
+  background:var(--color-primary-light,#e8edf5);
+}
+</style>
+
+<script>
+(function() {
+  var ALLE_KEYS = {{ type_knoppen | tojson }};
+  // Current selection: set from server-rendered state
+  var selected = new Set({{ selected_types | tojson }});
+  var alleActief = {{ 'true' if alle_actief else 'false' }};
+
+  function render() {
+    document.getElementById('btn-alle').classList.toggle('filter-knop--actief', alleActief);
+    ALLE_KEYS.forEach(function(key) {
+      var btn = document.getElementById('btn-' + key);
+      if (btn) btn.classList.toggle('filter-knop--actief', selected.has(key));
+    });
+    // Update hidden fields
+    var container = document.getElementById('type-hidden-fields');
+    container.innerHTML = '';
+    selected.forEach(function(key) {
+      var inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = 'type';
+      inp.value = key;
+      container.appendChild(inp);
+    });
+  }
+
+  window.toggleAlle = function() {
+    alleActief = true;
+    selected.clear();
+    render();
+    document.getElementById('aanwezigheid-form').submit();
+  };
+
+  window.toggleType = function(key) {
+    if (selected.has(key)) {
+      selected.delete(key);
+    } else {
+      selected.add(key);
+      alleActief = false;
+    }
+    // If nothing selected, switch back to "alle"
+    if (selected.size === 0) {
+      alleActief = true;
+    }
+    render();
+    document.getElementById('aanwezigheid-form').submit();
+  };
+})();
+</script>
 
 {% endblock %}

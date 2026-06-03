@@ -10,50 +10,102 @@
   </p>
 </section>
 
-{% set pairs = active | selectattr('person2_id') | list %}
-{% set solo_active = active | rejectattr('person2_id') | list %}
+{% if dtype == 'viertallen' %}
 
-<section class="card">
-  <h2>Aangemelde paren <span class="badge">{{ pairs | length }}</span></h2>
-  {% if pairs %}
+  <section class="card">
+    <h2>Teams <span class="badge">{{ volledig | length }}</span></h2>
+    {% if volledig %}
+      <ul class="participant-list">
+        {% for reg in volledig | sort(attribute='person1.achternaam') %}
+          <li class="participant-item">
+            <button type="button" class="team-toggle-btn"
+                    data-captain="{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}"
+                    data-p1="{{ reg.partner_naam or '' }}"
+                    data-p2="{{ reg.partner2_naam or '' }}"
+                    data-p3="{{ reg.partner3_naam or '' }}"
+                    style="background:none;border:none;color:var(--color-primary,#1e3a5f);cursor:pointer;font-weight:600;text-decoration:underline;font-size:inherit;padding:0;">
+              {{ reg.team_naam or reg.person1.voornaam }}
+            </button>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-state">Nog geen volledige teams aangemeld.</p>
+    {% endif %}
+  </section>
+
+  {% if loslopers %}
+  <section class="card">
+    <h2>Onvolledige teams / loslopers <span class="badge badge-warning">{{ loslopers | length }}</span></h2>
     <ul class="participant-list">
-      {% for reg in pairs | sort(attribute='person1.achternaam') %}
+      {% for reg in loslopers %}
         <li class="participant-item">
-          {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
-          &amp;
-          {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
-          {% if reg.status == 'combipaar' %}<em>(combipaar)</em>{% endif %}
+          <button type="button" class="team-toggle-btn"
+                  data-captain="{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}"
+                  data-p1="{{ reg.partner_naam or '' }}"
+                  data-p2="{{ reg.partner2_naam or '' }}"
+                  data-p3="{{ reg.partner3_naam or '' }}"
+                  style="background:none;border:none;color:var(--color-primary,#1e3a5f);cursor:pointer;font-weight:600;text-decoration:underline;font-size:inherit;padding:0;">
+            {{ reg.team_naam or reg.person1.voornaam }}
+          </button>
         </li>
       {% endfor %}
     </ul>
-  {% else %}
-    <p class="empty-state">Nog geen paren aangemeld.</p>
+  </section>
   {% endif %}
-</section>
 
-{% if solo_active %}
-<section class="card">
-  <h2>Losse aanmeldingen <span class="badge">{{ solo_active | length }}</span></h2>
-  <ul class="participant-list">
-    {% for reg in solo_active | sort(attribute='person1.achternaam') %}
-      <li class="participant-item">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
+{% elif dtype == 'individueel' %}
 
-{% if loslopers %}
-<section class="card">
-  <h2>Loslopers <span class="badge badge-warning">{{ loslopers | length }}</span></h2>
-  <p style="color:var(--color-muted);font-size:.875rem;margin-bottom:.75rem;">
-    Aangemeld zonder partner of als beschikbaar losloper.
-  </p>
-  <ul class="participant-list">
-    {% for reg in loslopers %}
-      <li class="participant-item">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</li>
-    {% endfor %}
-  </ul>
-</section>
+  <section class="card">
+    <h2>Aangemeld <span class="badge">{{ volledig | length }}</span></h2>
+    {% if volledig %}
+      <ul class="participant-list">
+        {% for reg in volledig | sort(attribute='person1.achternaam') %}
+          <li class="participant-item">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-state">Nog niemand aangemeld.</p>
+    {% endif %}
+  </section>
+
+{% else %}
+
+  <section class="card">
+    <h2>Aangemelde paren <span class="badge">{{ volledig | length }}</span></h2>
+    {% if volledig %}
+      <ul class="participant-list">
+        {% for reg in volledig | sort(attribute='person1.achternaam') %}
+          <li class="participant-item">
+            {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+            {% if reg.partner_naam %}
+              &amp; {{ reg.partner_naam }}
+            {% elif reg.person2 %}
+              &amp; {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+            {% endif %}
+            {% if reg.status == 'combipaar' %}<em>(combipaar)</em>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-state">Nog geen paren aangemeld.</p>
+    {% endif %}
+  </section>
+
+  {% if loslopers %}
+  <section class="card">
+    <h2>Loslopers <span class="badge badge-warning">{{ loslopers | length }}</span></h2>
+    <p style="color:var(--color-muted);font-size:.875rem;margin-bottom:.75rem;">
+      Aangemeld zonder partner of als beschikbaar losloper.
+    </p>
+    <ul class="participant-list">
+      {% for reg in loslopers %}
+        <li class="participant-item">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
 {% endif %}
 
 <section class="card">
@@ -89,6 +141,69 @@
 </section>
 
 <div class="action-buttons">
-  <a href="/beheer/aanmeldingen" class="btn btn-secondary">Terug</a>
+  <a href="/" class="btn btn-secondary">Terug naar agenda</a>
+  <a href="/beheer/aanmeldingen" class="btn btn-secondary">Aanmeldingenoverzicht</a>
 </div>
+
+<!-- Team detail modal voor viertallen -->
+<div id="team-modal" class="modal-overlay" style="display:none;" aria-modal="true" role="dialog">
+  <div class="modal" style="max-width:360px;text-align:left;position:relative;">
+    <button id="team-modal-sluiten" type="button" aria-label="Sluiten"
+            style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+    <h2 id="team-modal-titel" style="margin-bottom:1rem;"></h2>
+    <ul id="team-modal-leden" class="participant-list" style="margin:0;padding:0;"></ul>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function() {
+  var teamModal = document.getElementById('team-modal');
+  if (!teamModal) return;
+  var teamTitel = document.getElementById('team-modal-titel');
+  var teamLeden = document.getElementById('team-modal-leden');
+  var teamSluit = document.getElementById('team-modal-sluiten');
+
+  document.querySelectorAll('.team-toggle-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var captain = btn.dataset.captain;
+      var p1 = btn.dataset.p1;
+      var p2 = btn.dataset.p2;
+      var p3 = btn.dataset.p3;
+
+      teamTitel.textContent = btn.textContent.trim();
+      teamLeden.innerHTML = '';
+
+      function addLid(naam, isCaptain) {
+        if (!naam) return;
+        var li = document.createElement('li');
+        li.className = 'participant-item';
+        li.textContent = naam;
+        if (isCaptain) {
+          var span = document.createElement('span');
+          span.style.cssText = 'font-size:.8rem;color:var(--color-muted);margin-left:.4rem;';
+          span.textContent = '(captain)';
+          li.appendChild(span);
+        }
+        teamLeden.appendChild(li);
+      }
+
+      addLid(captain, true);
+      addLid(p1, false);
+      addLid(p2, false);
+      addLid(p3, false);
+
+      teamModal.style.display = 'flex';
+    });
+  });
+
+  teamSluit.addEventListener('click', function() { teamModal.style.display = 'none'; });
+  teamModal.addEventListener('click', function(e) { if (e.target === teamModal) teamModal.style.display = 'none'; });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && teamModal.style.display !== 'none') teamModal.style.display = 'none';
+  });
+})();
+</script>
 {% endblock %}

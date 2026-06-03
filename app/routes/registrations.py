@@ -207,8 +207,11 @@ async def registration_submit(
         db.commit()
         return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
 
-    # Viertallen: tot 3 teamgenoten opgeven
+    # Viertallen: teamnaam + tot 3 teamgenoten opgeven
     if deelnemers_type == "viertallen":
+        team_naam_raw = form.get("team_naam", "").strip()
+        team_naam = team_naam_raw if team_naam_raw else current_user.voornaam
+
         partner2_voornaam = form.get("partner2_voornaam", "").strip()
         partner2_achternaam = form.get("partner2_achternaam", "").strip()
         partner3_voornaam = form.get("partner3_voornaam", "").strip()
@@ -222,6 +225,7 @@ async def registration_submit(
 
         if existing:
             existing.status = RegistrationStatus.aangemeld
+            existing.team_naam = team_naam
             existing.partner_naam = p1
             existing.partner2_naam = p2
             existing.partner3_naam = p3
@@ -231,6 +235,7 @@ async def registration_submit(
             db.add(Registration(
                 evening_id=event_id,
                 person1_id=current_user.id,
+                team_naam=team_naam,
                 partner_naam=p1,
                 partner2_naam=p2,
                 partner3_naam=p3,

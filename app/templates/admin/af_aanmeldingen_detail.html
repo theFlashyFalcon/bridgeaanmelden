@@ -23,74 +23,168 @@
   <div class="alert alert-info">Te-laat inschrijving verwijderd.</div>
 {% endif %}
 
+{# ═══════════════════════════════════════════════════════════════════════════
+   Kolomnamen bepalen op basis van dtype
+═══════════════════════════════════════════════════════════════════════════ #}
+{% if dtype == 'viertallen' %}
+  {% set kolom1_naam = 'Teams' %}
+{% elif dtype == 'individueel' %}
+  {% set kolom1_naam = 'Aangemeld' %}
+{% else %}
+  {% set kolom1_naam = 'Paren' %}
+{% endif %}
+
 <div class="afd-grid">
 
-  <!-- Kolom 1: Aangemeld (Paren / Viertallen) -->
+  <!-- Kolom 1: Aangemeld -->
   <section class="card">
-    {% if evening.deelnemers_type == 'viertallen' %}
-      <h2>Viertallen <span class="badge">{{ volledig_aangemeld | length + manual_pairs | length }}</span></h2>
-    {% elif evening.deelnemers_type == 'paren' %}
-      <h2>Paren <span class="badge">{{ volledig_aangemeld | length + manual_pairs | length }}</span></h2>
-    {% else %}
-      <h2>Aangemeld <span class="badge">{{ volledig_aangemeld | length + manual_pairs | length }}</span></h2>
-    {% endif %}
+    <h2>{{ kolom1_naam }}
+      <span class="badge">{{ volledig_aangemeld | length + manual_aangemeld | length }}</span>
+    </h2>
 
-    {% if volledig_aangemeld or manual_pairs %}
+    {% if volledig_aangemeld or manual_aangemeld %}
       <ul class="participant-list">
+
+        {# Reguliere aanmeldingen #}
         {% for reg in volledig_aangemeld | sort(attribute='person1.achternaam') %}
           <li class="participant-item">
-            {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
-            {% if reg.partner_naam %}
-              &amp; {{ reg.partner_naam }}
-            {% elif reg.person2 %}
-              &amp; {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+            {% if dtype == 'viertallen' %}
+              {# Toon teamnaam als klikbare knop #}
+              <button type="button" class="team-toggle-btn"
+                      data-captain="{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}"
+                      data-p1="{{ reg.partner_naam or '' }}"
+                      data-p2="{{ reg.partner2_naam or '' }}"
+                      data-p3="{{ reg.partner3_naam or '' }}"
+                      style="background:none;border:none;color:var(--color-primary,#1e3a5f);cursor:pointer;font-weight:600;text-decoration:underline;font-size:inherit;padding:0;">
+                {{ reg.team_naam or reg.person1.voornaam }}
+              </button>
+            {% elif dtype == 'individueel' %}
+              {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+            {% else %}
+              {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+              {% if reg.partner_naam %}
+                &amp; {{ reg.partner_naam }}
+              {% elif reg.person2 %}
+                &amp; {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+              {% endif %}
             {% endif %}
             {% if reg.te_laat and not reg.te_laat_goedgekeurd %}
               <span class="badge badge-warning" style="margin-left:.4rem;font-size:.7rem;">te laat</span>
             {% endif %}
           </li>
         {% endfor %}
-        {% for pair in manual_pairs %}
+
+        {# Handmatige aanmeldingen #}
+        {% for pair in manual_aangemeld %}
           <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
             <span>
-              {{ pair.naam_1 }} &amp; {{ pair.naam_2 }}
+              {% if dtype == 'viertallen' %}
+                <button type="button" class="team-toggle-btn"
+                        data-captain="{{ pair.naam_1 }}"
+                        data-p1="{{ pair.naam_2 or '' }}"
+                        data-p2="{{ pair.naam_3 or '' }}"
+                        data-p3="{{ pair.naam_4 or '' }}"
+                        style="background:none;border:none;color:var(--color-primary,#1e3a5f);cursor:pointer;font-weight:600;text-decoration:underline;font-size:inherit;padding:0;">
+                  {{ pair.team_naam or pair.naam_1 }}
+                </button>
+              {% elif dtype == 'individueel' %}
+                {{ pair.naam_1 }}
+              {% else %}
+                {{ pair.naam_1 }} &amp; {{ pair.naam_2 }}
+              {% endif %}
               <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
             </span>
             <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/manual/{{ pair.id }}/verwijder"
-                  data-bevestig="Paar verwijderen?" style="flex-shrink:0;">
+                  data-bevestig="Verwijderen?" style="flex-shrink:0;">
               <button type="submit" class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;">&#10005;</button>
             </form>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="empty-state">Nog geen volledige aanmeldingen.</p>
+      <p class="empty-state">Nog geen aanmeldingen.</p>
     {% endif %}
 
-    <h3 style="margin-top:1.25rem;font-size:1rem;">Paar handmatig toevoegen</h3>
+    {# Handmatig toevoegen — form per type #}
+    <h3 style="margin-top:1.25rem;font-size:1rem;">
+      {% if dtype == 'viertallen' %}Team{% elif dtype == 'individueel' %}Deelnemer{% else %}Paar{% endif %}
+      handmatig toevoegen
+    </h3>
     <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/toevoegen" class="form-stack">
-      <div class="form-row">
+
+      {% if dtype == 'individueel' %}
         <div class="form-group">
-          <label for="naam_1">Naam speler 1</label>
+          <label for="naam_1">Naam deelnemer</label>
           <input type="text" id="naam_1" name="naam_1" required autocomplete="off" placeholder="Volledige naam">
         </div>
+
+      {% elif dtype == 'viertallen' %}
         <div class="form-group">
-          <label for="naam_2">Naam speler 2 <span style="font-weight:400;color:var(--color-muted)">(optioneel)</span></label>
-          <input type="text" id="naam_2" name="naam_2" autocomplete="off" placeholder="Volledige naam">
+          <label for="team_naam">Teamnaam <span style="font-weight:400;color:var(--color-muted)">(optioneel)</span></label>
+          <input type="text" id="team_naam" name="team_naam" autocomplete="off" placeholder="Teamnaam">
         </div>
-      </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="naam_1">Naam speler 1 (captain)</label>
+            <input type="text" id="naam_1" name="naam_1" required autocomplete="off" placeholder="Volledige naam">
+          </div>
+          <div class="form-group">
+            <label for="naam_2">Naam speler 2</label>
+            <input type="text" id="naam_2" name="naam_2" autocomplete="off" placeholder="Volledige naam">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="naam_3">Naam speler 3</label>
+            <input type="text" id="naam_3" name="naam_3" autocomplete="off" placeholder="Volledige naam">
+          </div>
+          <div class="form-group">
+            <label for="naam_4">Naam speler 4</label>
+            <input type="text" id="naam_4" name="naam_4" autocomplete="off" placeholder="Volledige naam">
+          </div>
+        </div>
+        <p style="font-size:.8rem;color:var(--color-muted);">
+          Minder dan 4 spelers ingevuld? Dan verschijnen ze als groep in de loslopers-kolom.
+        </p>
+
+      {% else %}{# paren #}
+        <div class="form-row">
+          <div class="form-group">
+            <label for="naam_1">Naam speler 1</label>
+            <input type="text" id="naam_1" name="naam_1" required autocomplete="off" placeholder="Volledige naam">
+          </div>
+          <div class="form-group">
+            <label for="naam_2">Naam speler 2 <span style="font-weight:400;color:var(--color-muted)">(optioneel → losloper)</span></label>
+            <input type="text" id="naam_2" name="naam_2" autocomplete="off" placeholder="Volledige naam">
+          </div>
+        </div>
+      {% endif %}
+
       <button type="submit" class="btn btn-primary btn-sm">Toevoegen</button>
     </form>
   </section>
 
-  <!-- Kolom 2: Loslopers -->
+  <!-- Kolom 2: Loslopers (niet bij individueel) -->
+  {% if dtype != 'individueel' %}
   <section class="card">
     <h2>Loslopers <span class="badge">{{ loslopers | length + manual_loslopers | length }}</span></h2>
     {% if loslopers or manual_loslopers %}
       <ul class="participant-list">
         {% for reg in loslopers | sort(attribute='person1.achternaam') %}
           <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
-            <span>{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</span>
+            <span>
+              {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+              {% if dtype == 'viertallen' %}
+                {% set leden = [] %}
+                {% if reg.partner_naam %}{% set _ = leden.append(reg.partner_naam) %}{% endif %}
+                {% if reg.partner2_naam %}{% set _ = leden.append(reg.partner2_naam) %}{% endif %}
+                {% if leden %}
+                  <span style="font-size:.85rem;color:var(--color-muted);">
+                    (+ {{ leden | join(', ') }})
+                  </span>
+                {% endif %}
+              {% endif %}
+            </span>
             <button type="button" class="losloper-btn" title="Bericht sturen"
                     data-id="{{ reg.person1.id }}"
                     data-naam="{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}">
@@ -101,7 +195,14 @@
         {% for ml in manual_loslopers %}
           <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
             <span>
-              {{ ml.naam_1 }}
+              {% if dtype == 'viertallen' %}
+                {% set groep = [ml.naam_1] %}
+                {% if ml.naam_2 %}{% set _ = groep.append(ml.naam_2) %}{% endif %}
+                {% if ml.naam_3 %}{% set _ = groep.append(ml.naam_3) %}{% endif %}
+                {{ groep | join(', ') }}
+              {% else %}
+                {{ ml.naam_1 }}
+              {% endif %}
               <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
             </span>
             <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/manual/{{ ml.id }}/verwijder"
@@ -115,8 +216,10 @@
       <p class="empty-state">Geen loslopers.</p>
     {% endif %}
   </section>
+  {% endif %}
 
-  <!-- Kolom 3: Partnerverzoeken -->
+  <!-- Kolom 3: Partnerverzoeken (alleen paren) -->
+  {% if dtype == 'paren' %}
   <section class="card">
     <h2>Partnerverzoeken
       {% set wachtend_count = verzoeken | selectattr('status', 'equalto', 'wachtend') | list | length %}
@@ -158,6 +261,7 @@
       <p class="empty-state">Geen partnerverzoeken.</p>
     {% endif %}
   </section>
+  {% endif %}
 
   <!-- Te laat aangemeld -->
   {% if te_laat_regs %}
@@ -228,7 +332,6 @@
   </section>
 
   {% if current_user.role == 'admin' %}
-  <!-- Eigen agenda (alleen admin) -->
   <section class="card">
     <h2>Eigen agenda</h2>
     <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
@@ -242,12 +345,14 @@
 
 <div class="action-buttons" style="margin-top:1rem;">
   <a href="/beheer/af-aanmeldingen" class="btn btn-secondary">Terug naar overzicht</a>
+  {% if dtype != 'individueel' %}
   <a href="/beheer/af-aanmeldingen/{{ evening.id }}/print" target="_blank" class="btn btn-secondary">
-    &#128438; Printversie van alle paren genereren
+    &#128438; Printversie genereren
   </a>
+  {% endif %}
 </div>
 
-<!-- Berichtmodal -->
+<!-- Berichtmodal voor loslopers -->
 <div id="bericht-modal" class="modal-overlay" style="display:none;" aria-modal="true" role="dialog">
   <div class="modal" style="max-width:420px;text-align:left;position:relative;">
     <button id="modal-sluiten-x" type="button" aria-label="Sluiten"
@@ -269,11 +374,22 @@
   </div>
 </div>
 
+<!-- Team detail modal voor viertallen -->
+<div id="team-modal" class="modal-overlay" style="display:none;" aria-modal="true" role="dialog">
+  <div class="modal" style="max-width:380px;text-align:left;position:relative;">
+    <button id="team-modal-sluiten" type="button" aria-label="Sluiten"
+            style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+    <h2 id="team-modal-titel" style="margin-bottom:1rem;"></h2>
+    <ul id="team-modal-leden" class="participant-list" style="margin:0;padding:0;"></ul>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
 (function () {
+  /* ── Berichtmodal ── */
   var modal = document.getElementById('bericht-modal');
   var ontvangerInput = document.getElementById('modal-ontvanger-id');
   var naamTekst = document.getElementById('modal-naam-tekst');
@@ -286,26 +402,63 @@
     modal.style.display = 'flex';
     tekstveld.focus();
   }
+  function sluitModal() { modal.style.display = 'none'; }
 
-  function sluitModal() {
-    modal.style.display = 'none';
-  }
-
-  document.querySelectorAll('.losloper-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      openModal(btn.dataset.id, btn.dataset.naam);
-    });
+  document.querySelectorAll('.losloper-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { openModal(btn.dataset.id, btn.dataset.naam); });
   });
 
   document.getElementById('modal-sluiten').addEventListener('click', sluitModal);
   document.getElementById('modal-sluiten-x').addEventListener('click', sluitModal);
-
-  modal.addEventListener('click', function (e) {
-    if (e.target === modal) sluitModal();
+  modal.addEventListener('click', function(e) { if (e.target === modal) sluitModal(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && modal.style.display !== 'none') sluitModal();
   });
 
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && modal.style.display !== 'none') sluitModal();
+  /* ── Teamdetail modal ── */
+  var teamModal = document.getElementById('team-modal');
+  var teamTitel = document.getElementById('team-modal-titel');
+  var teamLeden = document.getElementById('team-modal-leden');
+  var teamSluit = document.getElementById('team-modal-sluiten');
+
+  document.querySelectorAll('.team-toggle-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var captain = btn.dataset.captain;
+      var p1 = btn.dataset.p1;
+      var p2 = btn.dataset.p2;
+      var p3 = btn.dataset.p3;
+      var teamNaam = btn.textContent.trim();
+
+      teamTitel.textContent = teamNaam;
+      teamLeden.innerHTML = '';
+
+      function addLid(naam, isCaptain) {
+        if (!naam) return;
+        var li = document.createElement('li');
+        li.className = 'participant-item';
+        li.textContent = naam;
+        if (isCaptain) {
+          var span = document.createElement('span');
+          span.style.cssText = 'font-size:.8rem;color:var(--color-muted);margin-left:.4rem;';
+          span.textContent = '(captain)';
+          li.appendChild(span);
+        }
+        teamLeden.appendChild(li);
+      }
+
+      addLid(captain, true);
+      addLid(p1, false);
+      addLid(p2, false);
+      addLid(p3, false);
+
+      teamModal.style.display = 'flex';
+    });
+  });
+
+  teamSluit.addEventListener('click', function() { teamModal.style.display = 'none'; });
+  teamModal.addEventListener('click', function(e) { if (e.target === teamModal) teamModal.style.display = 'none'; });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && teamModal.style.display !== 'none') teamModal.style.display = 'none';
   });
 })();
 </script>

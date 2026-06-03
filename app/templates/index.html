@@ -176,7 +176,11 @@
         {% if reg %}
           <div class="event-status event-status--aangemeld">
             &#10003; Aangemeld
-            {% if reg.partner_naam %}
+            {% if evening.deelnemers_type == 'viertallen' %}
+              &nbsp;&middot;&nbsp; team: <strong>{{ reg.team_naam or current_user.voornaam }}</strong>
+            {% elif evening.deelnemers_type == 'individueel' %}
+              {# geen extra info nodig #}
+            {% elif reg.partner_naam %}
               &nbsp;&middot;&nbsp; partner: <strong>{{ reg.partner_naam }}</strong>
             {% elif reg.person1_id == current_user.id and reg.person2 %}
               &nbsp;&middot;&nbsp; partner: <strong>{{ reg.person2.voornaam }} {{ reg.person2.achternaam }}</strong>

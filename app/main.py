@@ -97,13 +97,22 @@ def _migrate():
         "ALTER TABLE berichten ALTER COLUMN tekst DROP NOT NULL",
         "ALTER TABLE rankings ADD COLUMN aangemaakt_door_id INTEGER REFERENCES members(id)",
         "ALTER TABLE uitslagen ADD COLUMN aangemaakt_door_id INTEGER REFERENCES members(id)",
+        "ALTER TABLE registrations ADD COLUMN team_naam VARCHAR",
+        "ALTER TABLE manual_pairs ADD COLUMN naam_3 VARCHAR",
+        "ALTER TABLE manual_pairs ADD COLUMN naam_4 VARCHAR",
+        "ALTER TABLE manual_pairs ADD COLUMN team_naam VARCHAR",
     ]
     with engine.connect() as conn:
         for sql in migrations:
             try:
                 conn.execute(text(sql))
                 conn.commit()
-            except Exception:
+            except Exception as migration_exc:
+                exc_msg = str(migration_exc).lower()
+                # Ignore "already exists" / "duplicate column" errors — those are expected on re-runs
+                benign = any(k in exc_msg for k in ("already exists", "duplicate column", "duplicate", "already exists"))
+                if not benign:
+                    logger.warning("Migratie overgeslagen (%s): %.120s", type(migration_exc).__name__, str(migration_exc))
                 try:
                     conn.rollback()
                 except Exception as rollback_exc:
@@ -145,6 +154,52 @@ def _fix_nullable_columns():
 
 
 _fix_nullable_columns()
+
+
+def _fix_missing_columns():
+    """Voeg ontbrekende kolommen toe aan tabellen via Alembic batch (SQLite-compatibel)."""
+    import sqlalchemy as sa
+    from sqlalchemy import inspect as sa_inspect
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
+    # (tabel, kolom, Column-definitie)
+    to_check = [
+        ("rankings",     "aangemaakt_door_id", sa.Column("aangemaakt_door_id", sa.Integer(), sa.ForeignKey("members.id"), nullable=True)),
+        ("uitslagen",    "aangemaakt_door_id", sa.Column("aangemaakt_door_id", sa.Integer(), sa.ForeignKey("members.id"), nullable=True)),
+        ("registrations","team_naam",          sa.Column("team_naam",          sa.String(), nullable=True)),
+        ("manual_pairs", "naam_3",             sa.Column("naam_3",             sa.String(), nullable=True)),
+        ("manual_pairs", "naam_4",             sa.Column("naam_4",             sa.String(), nullable=True)),
+        ("manual_pairs", "team_naam",          sa.Column("team_naam",          sa.String(), nullable=True)),
+    ]
+
+    try:
+        insp = sa_inspect(engine)
+        tabel_namen = set(insp.get_table_names())
+
+        # Groepeer per tabel
+        per_tabel: dict = {}
+        for tabel, kolom, col_def in to_check:
+            if tabel not in tabel_namen:
+                continue
+            kol_namen = {c["name"] for c in insp.get_columns(tabel)}
+            if kolom in kol_namen:
+                continue
+            per_tabel.setdefault(tabel, []).append((kolom, col_def))
+
+        for tabel, toe_te_voegen in per_tabel.items():
+            with engine.begin() as conn:
+                ctx = MigrationContext.configure(conn)
+                op = Operations(ctx)
+                with op.batch_alter_table(tabel, recreate="auto") as batch_op:
+                    for kolom, col_def in toe_te_voegen:
+                        batch_op.add_column(col_def)
+            logger.info("%s: kolommen toegevoegd: %s", tabel, [k for k, _ in toe_te_voegen])
+    except Exception as e:
+        logger.warning("Fix ontbrekende kolommen mislukt: %s", e)
+
+
+_fix_missing_columns()
 
 
 def _seed_admin():

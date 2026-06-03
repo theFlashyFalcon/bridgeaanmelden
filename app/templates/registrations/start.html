@@ -19,6 +19,9 @@
     <div class="alert alert-success" style="margin-bottom:1rem;">
       Je bent aangemeld
       {% if evening.deelnemers_type == 'viertallen' %}
+        {% if existing.team_naam %}
+          als team <strong>{{ existing.team_naam }}</strong>
+        {% endif %}
         {% set partners = [] %}
         {% if existing.partner_naam %}{% set _ = partners.append(existing.partner_naam) %}{% endif %}
         {% if existing.partner2_naam %}{% set _ = partners.append(existing.partner2_naam) %}{% endif %}
@@ -50,11 +53,19 @@
 
     {% elif evening.deelnemers_type == 'viertallen' %}
       <p style="color:var(--color-muted);font-size:.9rem;">
-        Vul de namen van je teamgenoten in. Je hoeft niet alle plekken in te vullen.
+        Vul de teamnaam en de namen van je teamgenoten in. Je hoeft niet alle plekken in te vullen — als je minder dan 4 spelers invult meldt de wedstrijdleider contact op.
       </p>
+      {% set tn = existing.team_naam if existing and existing.team_naam else '' %}
       {% set p1 = existing.partner_naam if existing and existing.partner_naam else '' %}
       {% set p2 = existing.partner2_naam if existing and existing.partner2_naam else '' %}
       {% set p3 = existing.partner3_naam if existing and existing.partner3_naam else '' %}
+
+      <div class="form-group">
+        <label for="team_naam">Teamnaam <span style="font-weight:400;color:var(--color-muted)">(optioneel — standaard je voornaam)</span></label>
+        <input type="text" id="team_naam" name="team_naam" autocomplete="off"
+               placeholder="Teamnaam…" value="{{ tn }}">
+      </div>
+
       <div class="form-row">
         <div class="form-group">
           <label for="partner_voornaam">Voornaam teamgenoot 1</label>

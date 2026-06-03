@@ -13,7 +13,7 @@
 
 <header>
   <nav class="navbar">
-    <a href="/" class="nav-brand">&#9824; Crash</a>
+    <a href="/" class="nav-brand">&#127968;</a>
     <button class="nav-toggle" id="nav-toggle" aria-label="Menu openen" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
@@ -59,6 +59,8 @@
         </div>
         {% endif %}
 
+        <a href="/beheer/aanwezigheid">Aanwezigheid</a>
+
         {% if display_role == 'admin' %}
         <div class="nav-dropdown">
           <span class="nav-dropdown-toggle">Gebruikersbeheer &#9660;</span>
@@ -68,7 +70,6 @@
             <a href="/beheer/aanvragen">Inkomende verzoeken</a>
             <a href="/beheer/uitnodigingen">Uitnodigen</a>
             <a href="/beheer/rollen">Roltoewijzingen</a>
-            <a href="/beheer/aanwezigheid">Aanwezigheidsstatistieken</a>
           </div>
         </div>
         {% endif %}
