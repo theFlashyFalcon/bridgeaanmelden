@@ -216,6 +216,8 @@ class ManualPair(Base):
     naam_2 = Column(String, nullable=True)
     naam_3 = Column(String, nullable=True)
     naam_4 = Column(String, nullable=True)
+    naam_5 = Column(String, nullable=True)
+    naam_6 = Column(String, nullable=True)
     team_naam = Column(String, nullable=True)
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
 
@@ -303,6 +305,8 @@ class Registration(Base):
     partner_naam = Column(String, nullable=True)
     partner2_naam = Column(String, nullable=True)
     partner3_naam = Column(String, nullable=True)
+    reserve1_naam = Column(String, nullable=True)
+    reserve2_naam = Column(String, nullable=True)
     team_naam = Column(String, nullable=True)
     type = Column(String, nullable=False)
     status = Column(String, default=RegistrationStatus.aangemeld, nullable=False)

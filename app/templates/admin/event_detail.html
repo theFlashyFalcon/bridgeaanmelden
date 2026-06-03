@@ -23,6 +23,8 @@
                     data-p1="{{ reg.partner_naam or '' }}"
                     data-p2="{{ reg.partner2_naam or '' }}"
                     data-p3="{{ reg.partner3_naam or '' }}"
+                    data-r1="{{ reg.reserve1_naam or '' }}"
+                    data-r2="{{ reg.reserve2_naam or '' }}"
                     style="background:none;border:none;color:var(--color-primary,#1e3a5f);cursor:pointer;font-weight:600;text-decoration:underline;font-size:inherit;padding:0;">
               {{ reg.team_naam or reg.person1.voornaam }}
             </button>
@@ -45,6 +47,8 @@
                   data-p1="{{ reg.partner_naam or '' }}"
                   data-p2="{{ reg.partner2_naam or '' }}"
                   data-p3="{{ reg.partner3_naam or '' }}"
+                  data-r1="{{ reg.reserve1_naam or '' }}"
+                  data-r2="{{ reg.reserve2_naam or '' }}"
                   style="background:none;border:none;color:var(--color-primary,#1e3a5f);cursor:pointer;font-weight:600;text-decoration:underline;font-size:inherit;padding:0;">
             {{ reg.team_naam or reg.person1.voornaam }}
           </button>
@@ -108,6 +112,7 @@
 
 {% endif %}
 
+{% if current_user.role in ('wedstrijdleider', 'admin') %}
 <section class="card">
   <h2>Recente wijzigingen</h2>
   {% if recent_changes %}
@@ -139,10 +144,13 @@
     <p class="empty-state">Geen wijzigingen gevonden.</p>
   {% endif %}
 </section>
+{% endif %}
 
 <div class="action-buttons">
-  <a href="/" class="btn btn-secondary">Terug naar agenda</a>
+  <a href="javascript:history.back()" class="btn btn-secondary">Terug</a>
+  {% if current_user.role in ('wedstrijdleider', 'admin') %}
   <a href="/beheer/aanmeldingen" class="btn btn-secondary">Aanmeldingenoverzicht</a>
+  {% endif %}
 </div>
 
 <!-- Team detail modal voor viertallen -->
@@ -172,28 +180,39 @@
       var p1 = btn.dataset.p1;
       var p2 = btn.dataset.p2;
       var p3 = btn.dataset.p3;
+      var r1 = btn.dataset.r1;
+      var r2 = btn.dataset.r2;
 
       teamTitel.textContent = btn.textContent.trim();
       teamLeden.innerHTML = '';
 
-      function addLid(naam, isCaptain) {
+      function addLid(naam, label) {
         if (!naam) return;
         var li = document.createElement('li');
         li.className = 'participant-item';
         li.textContent = naam;
-        if (isCaptain) {
+        if (label) {
           var span = document.createElement('span');
           span.style.cssText = 'font-size:.8rem;color:var(--color-muted);margin-left:.4rem;';
-          span.textContent = '(captain)';
+          span.textContent = '(' + label + ')';
           li.appendChild(span);
         }
         teamLeden.appendChild(li);
       }
 
-      addLid(captain, true);
-      addLid(p1, false);
-      addLid(p2, false);
-      addLid(p3, false);
+      addLid(captain, 'captain');
+      addLid(p1, '');
+      addLid(p2, '');
+      addLid(p3, '');
+      if (r1 || r2) {
+        var sep = document.createElement('li');
+        sep.className = 'participant-item';
+        sep.style.cssText = 'font-size:.8rem;color:var(--color-muted);padding-top:.4rem;border-top:1px solid var(--color-border,#e0e0e0);margin-top:.4rem;';
+        sep.textContent = 'Reserves';
+        teamLeden.appendChild(sep);
+      }
+      addLid(r1, 'reserve');
+      addLid(r2, 'reserve');
 
       teamModal.style.display = 'flex';
     });

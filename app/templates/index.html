@@ -35,7 +35,7 @@
 {% endif %}
 
 <section class="page-header">
-  <h1>&#9824; Crash</h1>
+  <h1>&#127968;</h1>
   {% if current_user %}
     <p class="subtitle">Welkom, {{ current_user.voornaam }}</p>
   {% endif %}
@@ -202,9 +202,7 @@
           <a href="/aanmelden/{{ evening.id }}" class="btn btn-primary btn-sm">
             {% if reg %}Wijzigen{% else %}Aanmelden{% endif %}
           </a>
-          {% if current_user.role in ['wedstrijdleider', 'admin'] %}
-            <a href="/beheer/aanmeldingen/{{ evening.id }}" class="btn btn-secondary btn-sm">Bekijk aanmeldingen</a>
-          {% endif %}
+          <a href="/beheer/aanmeldingen/{{ evening.id }}" class="btn btn-secondary btn-sm">Bekijk aanmeldingen</a>
         {% endif %}
       </div>
     </section>

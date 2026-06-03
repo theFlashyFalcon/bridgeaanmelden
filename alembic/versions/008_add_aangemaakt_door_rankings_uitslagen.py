@@ -19,9 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     with op.batch_alter_table('rankings') as batch_op:
-        batch_op.add_column(sa.Column('aangemaakt_door_id', sa.Integer(), sa.ForeignKey('members.id'), nullable=True))
+        batch_op.add_column(sa.Column('aangemaakt_door_id', sa.Integer(), nullable=True))
     with op.batch_alter_table('uitslagen') as batch_op:
-        batch_op.add_column(sa.Column('aangemaakt_door_id', sa.Integer(), sa.ForeignKey('members.id'), nullable=True))
+        batch_op.add_column(sa.Column('aangemaakt_door_id', sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:

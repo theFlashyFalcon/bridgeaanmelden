@@ -216,10 +216,16 @@ async def registration_submit(
         partner2_achternaam = form.get("partner2_achternaam", "").strip()
         partner3_voornaam = form.get("partner3_voornaam", "").strip()
         partner3_achternaam = form.get("partner3_achternaam", "").strip()
+        reserve1_voornaam = form.get("reserve1_voornaam", "").strip()
+        reserve1_achternaam = form.get("reserve1_achternaam", "").strip()
+        reserve2_voornaam = form.get("reserve2_voornaam", "").strip()
+        reserve2_achternaam = form.get("reserve2_achternaam", "").strip()
 
         p1 = f"{partner_voornaam} {partner_achternaam}".strip() if partner_voornaam and partner_achternaam else None
         p2 = f"{partner2_voornaam} {partner2_achternaam}".strip() if partner2_voornaam and partner2_achternaam else None
         p3 = f"{partner3_voornaam} {partner3_achternaam}".strip() if partner3_voornaam and partner3_achternaam else None
+        r1 = f"{reserve1_voornaam} {reserve1_achternaam}".strip() if reserve1_voornaam and reserve1_achternaam else None
+        r2 = f"{reserve2_voornaam} {reserve2_achternaam}".strip() if reserve2_voornaam and reserve2_achternaam else None
 
         volledig = bool(p1 and p2 and p3)
 
@@ -229,6 +235,8 @@ async def registration_submit(
             existing.partner_naam = p1
             existing.partner2_naam = p2
             existing.partner3_naam = p3
+            existing.reserve1_naam = r1
+            existing.reserve2_naam = r2
             if te_laat:
                 existing.te_laat = True
         else:
@@ -239,6 +247,8 @@ async def registration_submit(
                 partner_naam=p1,
                 partner2_naam=p2,
                 partner3_naam=p3,
+                reserve1_naam=r1,
+                reserve2_naam=r2,
                 type=RegistrationType.los,
                 status=RegistrationStatus.aangemeld,
                 te_laat=te_laat,

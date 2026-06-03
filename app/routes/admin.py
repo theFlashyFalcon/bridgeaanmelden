@@ -325,7 +325,7 @@ async def aanmeldingen_detail(
     event_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Member = Depends(require_wedstrijdleider),
+    current_user: Member = Depends(require_auth),
 ):
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
@@ -1081,11 +1081,14 @@ async def af_aanmeldingen_toevoegen(
         naam_2 = form.get("naam_2", "").strip() or None
         naam_3 = form.get("naam_3", "").strip() or None
         naam_4 = form.get("naam_4", "").strip() or None
+        naam_5 = form.get("naam_5", "").strip() or None
+        naam_6 = form.get("naam_6", "").strip() or None
         team_naam = form.get("team_naam", "").strip() or None
         # < 4 spelers → losloper-groep (naam_4 is None); alle 4 → aangemeld
         db.add(ManualPair(
             evening_id=event_id,
             naam_1=naam_1, naam_2=naam_2, naam_3=naam_3, naam_4=naam_4,
+            naam_5=naam_5, naam_6=naam_6,
             team_naam=team_naam,
         ))
     else:  # paren

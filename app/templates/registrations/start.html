@@ -59,6 +59,8 @@
       {% set p1 = existing.partner_naam if existing and existing.partner_naam else '' %}
       {% set p2 = existing.partner2_naam if existing and existing.partner2_naam else '' %}
       {% set p3 = existing.partner3_naam if existing and existing.partner3_naam else '' %}
+      {% set r1 = existing.reserve1_naam if existing and existing.reserve1_naam else '' %}
+      {% set r2 = existing.reserve2_naam if existing and existing.reserve2_naam else '' %}
 
       <div class="form-group">
         <label for="team_naam">Teamnaam <span style="font-weight:400;color:var(--color-muted)">(optioneel — standaard je voornaam)</span></label>
@@ -109,6 +111,36 @@
         </div>
       </div>
 
+      <p style="margin-top:1rem;margin-bottom:.25rem;font-weight:600;font-size:.9rem;color:var(--color-muted);">Reserves <span style="font-weight:400;">(optioneel)</span></p>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="reserve1_voornaam">Voornaam reserve 1</label>
+          <input type="text" id="reserve1_voornaam" name="reserve1_voornaam"
+                 autocomplete="off" placeholder="Voornaam"
+                 value="{{ r1.split(' ')[0] if r1 else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="reserve1_achternaam">Achternaam reserve 1</label>
+          <input type="text" id="reserve1_achternaam" name="reserve1_achternaam"
+                 autocomplete="off" placeholder="Achternaam"
+                 value="{{ r1.split(' ', 1)[1] if r1 and ' ' in r1 else '' }}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="reserve2_voornaam">Voornaam reserve 2</label>
+          <input type="text" id="reserve2_voornaam" name="reserve2_voornaam"
+                 autocomplete="off" placeholder="Voornaam"
+                 value="{{ r2.split(' ')[0] if r2 else '' }}">
+        </div>
+        <div class="form-group">
+          <label for="reserve2_achternaam">Achternaam reserve 2</label>
+          <input type="text" id="reserve2_achternaam" name="reserve2_achternaam"
+                 autocomplete="off" placeholder="Achternaam"
+                 value="{{ r2.split(' ', 1)[1] if r2 and ' ' in r2 else '' }}">
+        </div>
+      </div>
+
     {% else %}{# paren (standaard) #}
       <p style="color:var(--color-muted);font-size:.9rem;">
         Vul de naam van je partner in. Als je geen partner hebt, laat dan beide velden leeg.
@@ -142,7 +174,7 @@
           Afmelden
         </button>
       {% endif %}
-      <a href="/" class="btn btn-secondary">Terug naar agenda</a>
+      <a href="javascript:history.back()" class="btn btn-secondary">Terug</a>
     </div>
   </form>
 

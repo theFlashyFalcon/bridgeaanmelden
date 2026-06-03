@@ -55,6 +55,8 @@
                       data-p1="{{ reg.partner_naam or '' }}"
                       data-p2="{{ reg.partner2_naam or '' }}"
                       data-p3="{{ reg.partner3_naam or '' }}"
+                      data-r1="{{ reg.reserve1_naam or '' }}"
+                      data-r2="{{ reg.reserve2_naam or '' }}"
                       style="background:none;border:none;color:var(--color-primary,#1e3a5f);cursor:pointer;font-weight:600;text-decoration:underline;font-size:inherit;padding:0;">
                 {{ reg.team_naam or reg.person1.voornaam }}
               </button>
@@ -84,6 +86,8 @@
                         data-p1="{{ pair.naam_2 or '' }}"
                         data-p2="{{ pair.naam_3 or '' }}"
                         data-p3="{{ pair.naam_4 or '' }}"
+                        data-r1="{{ pair.naam_5 or '' }}"
+                        data-r2="{{ pair.naam_6 or '' }}"
                         style="background:none;border:none;color:var(--color-primary,#1e3a5f);cursor:pointer;font-weight:600;text-decoration:underline;font-size:inherit;padding:0;">
                   {{ pair.team_naam or pair.naam_1 }}
                 </button>
@@ -141,6 +145,16 @@
           <div class="form-group">
             <label for="naam_4">Naam speler 4</label>
             <input type="text" id="naam_4" name="naam_4" autocomplete="off" placeholder="Volledige naam">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="naam_5">Naam reserve 1 <span style="font-weight:400;color:var(--color-muted)">(optioneel)</span></label>
+            <input type="text" id="naam_5" name="naam_5" autocomplete="off" placeholder="Volledige naam">
+          </div>
+          <div class="form-group">
+            <label for="naam_6">Naam reserve 2 <span style="font-weight:400;color:var(--color-muted)">(optioneel)</span></label>
+            <input type="text" id="naam_6" name="naam_6" autocomplete="off" placeholder="Volledige naam">
           </div>
         </div>
         <p style="font-size:.8rem;color:var(--color-muted);">
@@ -427,29 +441,40 @@
       var p1 = btn.dataset.p1;
       var p2 = btn.dataset.p2;
       var p3 = btn.dataset.p3;
+      var r1 = btn.dataset.r1;
+      var r2 = btn.dataset.r2;
       var teamNaam = btn.textContent.trim();
 
       teamTitel.textContent = teamNaam;
       teamLeden.innerHTML = '';
 
-      function addLid(naam, isCaptain) {
+      function addLid(naam, label) {
         if (!naam) return;
         var li = document.createElement('li');
         li.className = 'participant-item';
         li.textContent = naam;
-        if (isCaptain) {
+        if (label) {
           var span = document.createElement('span');
           span.style.cssText = 'font-size:.8rem;color:var(--color-muted);margin-left:.4rem;';
-          span.textContent = '(captain)';
+          span.textContent = '(' + label + ')';
           li.appendChild(span);
         }
         teamLeden.appendChild(li);
       }
 
-      addLid(captain, true);
-      addLid(p1, false);
-      addLid(p2, false);
-      addLid(p3, false);
+      addLid(captain, 'captain');
+      addLid(p1, '');
+      addLid(p2, '');
+      addLid(p3, '');
+      if (r1 || r2) {
+        var sep = document.createElement('li');
+        sep.className = 'participant-item';
+        sep.style.cssText = 'font-size:.8rem;color:var(--color-muted);padding-top:.4rem;border-top:1px solid var(--color-border,#e0e0e0);margin-top:.4rem;';
+        sep.textContent = 'Reserves';
+        teamLeden.appendChild(sep);
+      }
+      addLid(r1, 'reserve');
+      addLid(r2, 'reserve');
 
       teamModal.style.display = 'flex';
     });
