@@ -101,6 +101,10 @@ def _migrate():
         "ALTER TABLE manual_pairs ADD COLUMN naam_3 VARCHAR",
         "ALTER TABLE manual_pairs ADD COLUMN naam_4 VARCHAR",
         "ALTER TABLE manual_pairs ADD COLUMN team_naam VARCHAR",
+        "ALTER TABLE registrations ADD COLUMN reserve1_naam VARCHAR",
+        "ALTER TABLE registrations ADD COLUMN reserve2_naam VARCHAR",
+        "ALTER TABLE manual_pairs ADD COLUMN naam_5 VARCHAR",
+        "ALTER TABLE manual_pairs ADD COLUMN naam_6 VARCHAR",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -163,14 +167,18 @@ def _fix_missing_columns():
     from alembic.operations import Operations
     from alembic.runtime.migration import MigrationContext
 
-    # (tabel, kolom, Column-definitie)
+    # (tabel, kolom, Column-definitie) — geen ForeignKey in batch_op.add_column voor SQLite-compatibiliteit
     to_check = [
-        ("rankings",     "aangemaakt_door_id", sa.Column("aangemaakt_door_id", sa.Integer(), sa.ForeignKey("members.id"), nullable=True)),
-        ("uitslagen",    "aangemaakt_door_id", sa.Column("aangemaakt_door_id", sa.Integer(), sa.ForeignKey("members.id"), nullable=True)),
-        ("registrations","team_naam",          sa.Column("team_naam",          sa.String(), nullable=True)),
-        ("manual_pairs", "naam_3",             sa.Column("naam_3",             sa.String(), nullable=True)),
-        ("manual_pairs", "naam_4",             sa.Column("naam_4",             sa.String(), nullable=True)),
-        ("manual_pairs", "team_naam",          sa.Column("team_naam",          sa.String(), nullable=True)),
+        ("rankings",      "aangemaakt_door_id", sa.Column("aangemaakt_door_id", sa.Integer(), nullable=True)),
+        ("uitslagen",     "aangemaakt_door_id", sa.Column("aangemaakt_door_id", sa.Integer(), nullable=True)),
+        ("registrations", "team_naam",          sa.Column("team_naam",          sa.String(), nullable=True)),
+        ("registrations", "reserve1_naam",      sa.Column("reserve1_naam",      sa.String(), nullable=True)),
+        ("registrations", "reserve2_naam",      sa.Column("reserve2_naam",      sa.String(), nullable=True)),
+        ("manual_pairs",  "naam_3",             sa.Column("naam_3",             sa.String(), nullable=True)),
+        ("manual_pairs",  "naam_4",             sa.Column("naam_4",             sa.String(), nullable=True)),
+        ("manual_pairs",  "team_naam",          sa.Column("team_naam",          sa.String(), nullable=True)),
+        ("manual_pairs",  "naam_5",             sa.Column("naam_5",             sa.String(), nullable=True)),
+        ("manual_pairs",  "naam_6",             sa.Column("naam_6",             sa.String(), nullable=True)),
     ]
 
     try:
