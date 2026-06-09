@@ -16,6 +16,7 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templa
 
 
 def _parse_csv(inhoud: str) -> tuple[list[str], list[list[str]]]:
+    inhoud = inhoud.replace('\r\n', '\n').replace('\r', '\n')
     reader = csv.reader(io.StringIO(inhoud))
     rows = list(reader)
     if not rows:
