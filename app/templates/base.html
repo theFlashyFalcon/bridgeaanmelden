@@ -114,13 +114,6 @@
     navigator.serviceWorker.register('/static/sw.js');
   }
 
-  const isIos = /iphone|ipad|ipod/.test(navigator.userAgent.toLowerCase());
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-  if (isIos && !isStandalone && !sessionStorage.getItem('ios-prompt-shown')) {
-    document.getElementById('ios-install-prompt')?.removeAttribute('hidden');
-    sessionStorage.setItem('ios-prompt-shown', '1');
-  }
-
   const navToggle = document.getElementById('nav-toggle');
   const navLinks = document.getElementById('nav-links');
   if (navToggle) {

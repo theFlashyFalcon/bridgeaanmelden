@@ -194,34 +194,6 @@ a:hover { text-decoration: underline; }
   min-width: 200px;
 }
 
-/* ── Install prompt ─────────────────────────────────────────────────────────── */
-.install-prompt {
-  position: fixed;
-  bottom: 1rem;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--color-primary);
-  color: #fff;
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
-  box-shadow: 0 4px 16px rgba(0,0,0,.15);
-  max-width: calc(var(--max-width) - 2rem);
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  z-index: 100;
-}
-.install-prompt button {
-  background: rgba(255,255,255,.2);
-  border: none;
-  color: #fff;
-  border-radius: var(--radius);
-  padding: .35rem .75rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
 
 /* ── Weergave-modus banner ───────────────────────────────────────────────────── */
 .weergave-banner {

@@ -18,7 +18,11 @@
 {% elif request.query_params.get('bulk_ok') %}
   {% set n = request.query_params.get('bulk_ok') %}
   {% if n|int == 0 %}
-    <div class="alert alert-info">Je was al aangemeld voor alle komende evenementen van dit type.</div>
+    {% if request.query_params.get('type') %}
+      <div class="alert alert-info">Je bent al aangemeld voor alle komende evenementen van dit type.</div>
+    {% else %}
+      <div class="alert alert-info">Je bent al aangemeld voor alle komende evenementen.</div>
+    {% endif %}
   {% else %}
     <div class="alert alert-success">
       Je bent aangemeld voor {{ n }} komend{{ 'e' if n|int != 1 else '' }} evenement{{ 'en' if n|int != 1 else '' }}.
@@ -218,14 +222,6 @@
   </section>
 {% endif %}
 
-<!-- iOS install prompt -->
-<div id="ios-install-prompt" class="install-prompt" hidden>
-  <p>
-    <strong>Installeer de app:</strong>
-    Tik op <strong>Delen</strong> &#8594; <strong>Zet op beginscherm</strong>
-  </p>
-  <button onclick="this.parentElement.setAttribute('hidden','')">Sluiten</button>
-</div>
 {% endblock %}
 
 {% block extra_scripts %}
