@@ -299,6 +299,31 @@ async def not_found_handler(request: Request, exc):
         status_code=404,
     )
 
+
+@app.exception_handler(500)
+async def server_error_handler(request: Request, exc):
+    import traceback
+    logger.error("500 op %s:\n%s", request.url.path, traceback.format_exc())
+    return _templates.TemplateResponse(
+        request, "errors/500.html",
+        {"current_user": _get_user_for_request(request), "welkom": False},
+        status_code=500,
+    )
+
+
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class LogExceptionsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            import traceback
+            logger.error("Onverwerkte fout op %s:\n%s", request.url.path, traceback.format_exc())
+            raise
+
+app.add_middleware(LogExceptionsMiddleware)
+
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
