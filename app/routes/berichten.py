@@ -2,7 +2,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
@@ -11,7 +10,7 @@ from app.database import get_db
 from app.models import Bericht, Member, MemberRole
 
 router = APIRouter(prefix="/berichten")
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+from app.templates_env import templates
 
 
 def _require_login(request: Request, db: Session):

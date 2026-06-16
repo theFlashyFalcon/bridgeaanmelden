@@ -4,7 +4,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_wedstrijdleider
@@ -12,7 +11,7 @@ from app.database import get_db
 from app.models import Ranking
 
 router = APIRouter(prefix="/ranking")
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+from app.templates_env import templates
 
 
 def _parse_csv(inhoud: str) -> tuple[list[str], list[list[str]]]:

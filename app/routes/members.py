@@ -3,7 +3,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -12,7 +11,7 @@ from app.database import get_db
 from app.models import ClubEvening, Lid, Member, Registration
 
 router = APIRouter(prefix="/leden")
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+from app.templates_env import templates
 
 _SORT_MAP = {
     "naam": (Member.achternaam, Member.voornaam),

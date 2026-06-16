@@ -6,7 +6,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -26,7 +25,7 @@ from app.models import (
 )
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+from app.templates_env import templates
 
 
 # ── Login ──────────────────────────────────────────────────────────────────────

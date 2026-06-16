@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_auth
@@ -18,7 +17,7 @@ from app.models import (
 )
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+from app.templates_env import templates
 
 # Mapping URL-type-sleutel → DB-waarden
 _TYPE_MAP: dict[str, list[str]] = {

@@ -18,13 +18,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from app.auth import SECRET_KEY  # noqa: E402 — must be after load_dotenv
-from app.csrf import csrf_input as _csrf_input, get_csrf_token as _get_csrf_token, require_csrf  # noqa: E402
+from app.csrf import require_csrf  # noqa: E402
 from app.database import Base, engine  # noqa: E402
 from app.routes import admin, auth, berichten, evenings, members, registrations, rankings, uitslagen  # noqa: E402
-
-_templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-_templates.env.globals["csrf_token"] = _get_csrf_token
-_templates.env.globals["csrf_input"] = _csrf_input
+from app.templates_env import templates as _templates  # noqa: E402
 
 
 def _get_user_for_request(request: Request):

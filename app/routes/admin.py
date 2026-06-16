@@ -7,7 +7,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -43,7 +42,7 @@ from app.models import (
 )
 
 router = APIRouter(prefix="/beheer")
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+from app.templates_env import templates
 
 EVENING_TYPES = [
     ("clubavond", "Clubavond"),

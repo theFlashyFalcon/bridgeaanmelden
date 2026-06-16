@@ -3,7 +3,6 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_auth, require_wedstrijdleider
@@ -11,7 +10,7 @@ from app.database import get_db
 from app.models import ClubEvening, Member, Uitslag
 
 router = APIRouter(prefix="/uitslagen")
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
+from app.templates_env import templates
 
 # Evenement-typen die niet in uitslagen worden getoond
 EXCLUDED_TYPES = ["jeugdtraining", "training", "eten voor jeugdtraining"]
