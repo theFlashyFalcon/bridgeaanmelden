@@ -51,6 +51,7 @@
           <td onclick="event.stopPropagation()">
             {% if m.id != current_user.id %}
             <form method="post" action="/leden/{{ m.id }}/verwijder" data-bevestig="Weet je zeker dat je {{ m.voornaam }} {{ m.achternaam }} wilt verwijderen? Het account kan niet meer inloggen.">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
               <button type="submit" class="btn btn-danger btn-sm">Verwijderen</button>
             </form>
             {% endif %}

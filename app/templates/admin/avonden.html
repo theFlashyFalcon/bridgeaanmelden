@@ -46,6 +46,7 @@
   <div id="form-seizoen" class="inline-form" {% if open_type != 'seizoen_err' %}hidden{% endif %}>
     <h2>Seizoen aanmaken</h2>
     <form method="post" action="/beheer/avonden/seizoen" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <div class="form-group">
         <label for="s-naam">Naam</label>
         <input type="text" id="s-naam" name="naam" required placeholder="bijv. Seizoen 2025-2026">
@@ -75,6 +76,7 @@
        {% if not open_type or open_type == 'seizoen_err' %}hidden{% endif %}>
     <h2 id="form-event-title">Evenement aanmaken</h2>
     <form method="post" action="/beheer/avonden" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <input type="hidden" name="type" id="form-event-type" value="{{ open_type or 'clubavond' }}">
       <div class="form-group">
         <label for="e-naam">Naam</label>
@@ -171,6 +173,7 @@
             {% if current_user.role == 'admin' %}
             <form method="post" action="/beheer/avonden/{{ e.id }}/verwijder" style="display:inline;"
                   data-bevestig="Evenement verwijderen?">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
               <button type="submit" class="btn btn-danger btn-sm">Verwijder</button>
             </form>
             {% endif %}
@@ -210,6 +213,7 @@
         <td>
           {% if not s.actief %}
             <form method="post" action="/beheer/seizoenen/{{ s.id }}/activeer" style="display:inline;">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
               <button type="submit" class="btn btn-secondary btn-sm">Activeer</button>
             </form>
           {% endif %}

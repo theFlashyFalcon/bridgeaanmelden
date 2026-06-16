@@ -47,6 +47,7 @@
 
   {% if not training_niet_toegestaan %}
   <form method="post" action="/aanmelden/{{ evening.id }}" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
 
     {% if evening.deelnemers_type == 'individueel' %}
       {# Geen partnervelden nodig #}
@@ -188,6 +189,7 @@
 
     <div id="herhaal-paneel" hidden style="margin-top:1rem;border:1px solid var(--color-secondary);border-radius:var(--radius);padding:1rem;background:var(--color-bg);">
       <form method="post" action="/aanmelden/{{ evening.id }}/herhaal" class="form-stack" id="herhaal-form">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
 
         <!-- Optie 1: aanmelden voor alle evenementen van dit type -->
         <div style="margin-bottom:1rem;">

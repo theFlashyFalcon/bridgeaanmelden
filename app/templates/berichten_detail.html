@@ -57,6 +57,7 @@
   {% endif %}
 
   <form method="post" action="/berichten/{{ root.id }}/antwoord" style="margin-top:1.5rem;border-top:1px solid var(--border,#ddd);padding-top:1.25rem;">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
     <label for="tekst-antwoord" style="display:block;font-weight:600;margin-bottom:.5rem;">Antwoorden</label>
     <textarea name="tekst" id="tekst-antwoord" class="form-control" rows="4"
               placeholder="Typ hier je antwoord…" required

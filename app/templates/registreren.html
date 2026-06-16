@@ -49,37 +49,45 @@
     {% endif %}
 
     <form method="post" action="/registreren" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <div class="form-row">
         <div class="form-group">
           <label for="voornaam">Voornaam</label>
           <input type="text" id="voornaam" name="voornaam" required autocomplete="given-name"
-                 value="{{ voornaam or '' }}">
+                 maxlength="100" value="{{ voornaam or '' }}">
         </div>
         <div class="form-group">
           <label for="achternaam">Achternaam <span class="form-hint">(inclusief tussenvoegsel)</span></label>
           <input type="text" id="achternaam" name="achternaam" required autocomplete="family-name"
-                 placeholder="bijv. van den Berg" value="{{ achternaam or '' }}">
+                 placeholder="bijv. van den Berg" maxlength="100" value="{{ achternaam or '' }}">
         </div>
       </div>
       <div class="form-group">
         <label for="email">E-mailadres</label>
         <input type="email" id="email" name="email" required autocomplete="email"
-               placeholder="naam@voorbeeld.nl" value="{{ email or '' }}">
+               placeholder="naam@voorbeeld.nl" maxlength="254" value="{{ email or '' }}">
       </div>
       <div class="form-group">
         <label for="lidnummer">NBB-nummer</label>
         <input type="text" id="lidnummer" name="lidnummer" required
-               placeholder="bijv. 669660" value="{{ lidnummer or '' }}">
+               placeholder="bijv. 669660" maxlength="20" value="{{ lidnummer or '' }}">
       </div>
       <div class="form-group">
         <label for="password">Wachtwoord</label>
         <input type="password" id="password" name="password" required
-               autocomplete="new-password" minlength="8" placeholder="Minimaal 8 tekens">
+               autocomplete="new-password" minlength="8" maxlength="128" placeholder="Minimaal 8 tekens">
+        <div class="pw-strength-bars" id="pw-bars" style="display:none;">
+          <div class="pw-bar" id="pw-b1"></div>
+          <div class="pw-bar" id="pw-b2"></div>
+          <div class="pw-bar" id="pw-b3"></div>
+          <div class="pw-bar" id="pw-b4"></div>
+        </div>
+        <span class="pw-strength-label" id="pw-label"></span>
       </div>
       <div class="form-group">
         <label for="password2">Wachtwoord bevestigen</label>
         <input type="password" id="password2" name="password2" required
-               autocomplete="new-password" minlength="8" placeholder="Herhaal wachtwoord">
+               autocomplete="new-password" minlength="8" maxlength="128" placeholder="Herhaal wachtwoord">
       </div>
       <button type="submit" class="btn btn-primary btn-full">Account aanmaken</button>
     </form>
@@ -87,4 +95,34 @@
     <p class="login-hint">Al een account? <a href="/login">Inloggen</a></p>
   {% endif %}
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var pw = document.getElementById('password');
+  if (!pw) return;
+  pw.addEventListener('input', function () {
+    var val = this.value;
+    document.getElementById('pw-bars').style.display = val ? 'flex' : 'none';
+    var score = 0;
+    if (val.length >= 8) score++;
+    if (val.length >= 12) score++;
+    if (/[A-Z]/.test(val)) score++;
+    if (/[0-9]/.test(val)) score++;
+    if (/[^A-Za-z0-9]/.test(val)) score++;
+    var klassen = ['', 'pw-zwak', 'pw-zwak', 'pw-matig', 'pw-goed', 'pw-sterk'];
+    var teksten = ['', 'Zeer zwak', 'Zwak', 'Matig', 'Sterk', 'Zeer sterk'];
+    var kleuren = ['', '#e74c3c', '#e74c3c', '#e67e22', '#f1c40f', '#27ae60'];
+    for (var i = 1; i <= 4; i++) {
+      var bar = document.getElementById('pw-b' + i);
+      bar.className = 'pw-bar';
+      if (score >= i) bar.classList.add(klassen[score]);
+    }
+    var lbl = document.getElementById('pw-label');
+    lbl.textContent = val ? (teksten[score] || '') : '';
+    lbl.style.color = kleuren[score] || '';
+  });
+})();
+</script>
 {% endblock %}

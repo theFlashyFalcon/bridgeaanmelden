@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+from app import ratelimit
 from app.auth import get_current_user, hash_password, verify_password
 from app.database import get_db
 from app.models import (
@@ -40,6 +41,15 @@ async def login_form(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/login")
 async def login_submit(request: Request, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "onbekend"
+    rate_key = f"login:{client_ip}"
+    if ratelimit.is_limited(rate_key):
+        return templates.TemplateResponse(
+            request, "login.html",
+            {"error": "Te veel inlogpogingen. Probeer het over 5 minuten opnieuw."},
+            status_code=429,
+        )
+
     form = await request.form()
     login_method = form.get("login_method", "email")
     password = form.get("password", "")
@@ -79,6 +89,7 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
         )
 
     if member and member.wachtwoord_hash and verify_password(password, member.wachtwoord_hash):
+        ratelimit.reset(rate_key)
         request.session["user_id"] = member.id
         request.session["welkom"] = True
         return RedirectResponse(url="/", status_code=302)
@@ -108,6 +119,7 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
             request, "login.html", {"login_status": "afgewezen"}, status_code=401
         )
 
+    ratelimit.record_failure(rate_key)
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -214,7 +226,12 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
             lidnummer=nbb_nummer,
             wachtwoord_hash=hash_password(password),
         ))
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("DB-fout bij aanvraag aanmaken voor %s", email)
+            return _render({"errors": ["Er is een technische fout opgetreden. Probeer het later opnieuw."]})
         _stuur_admin_mail("Aanvrager staat niet in de Crash-ledenlijst.")
         return _render({"melding": "geen_lid_crash"}, status=200)
 
@@ -245,7 +262,12 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
             lidnummer=nbb_nummer,
             wachtwoord_hash=hash_password(password),
         ))
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("DB-fout bij aanvraag aanmaken voor %s", email)
+            return _render({"errors": ["Er is een technische fout opgetreden. Probeer het later opnieuw."]})
         _stuur_admin_mail(
             "Crash-lid, maar er bestaat al een account met dezelfde voor- en achternaam."
         )
@@ -264,8 +286,13 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         role=role,
     )
     db.add(member)
-    db.commit()
-    db.refresh(member)
+    try:
+        db.commit()
+        db.refresh(member)
+    except Exception:
+        db.rollback()
+        logger.exception("DB-fout bij aanmaken account voor %s", email)
+        return _render({"errors": ["Er is een technische fout opgetreden. Probeer het later opnieuw."]})
 
     request.session["user_id"] = member.id
     request.session["welkom"] = True
@@ -456,7 +483,16 @@ async def wachtwoord_reset_submit(token: str, request: Request, db: Session = De
 
     reset_token.member.wachtwoord_hash = hash_password(password)
     reset_token.gebruikt_op = datetime.now(timezone.utc)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("DB-fout bij wachtwoord-reset voor token %s", token)
+        return templates.TemplateResponse(
+            request, "wachtwoord_reset.html",
+            {"token": token, "errors": ["Er is een technische fout opgetreden. Probeer het later opnieuw."]},
+            status_code=500,
+        )
 
     return templates.TemplateResponse(request, "wachtwoord_reset.html", {"gelukt": True})
 

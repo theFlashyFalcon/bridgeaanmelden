@@ -115,14 +115,21 @@ def _apply_recurring_registrations(db: Session, event: ClubEvening, sender_id: O
 @router.get("/avonden")
 async def avonden_list(
     request: Request,
+    pagina: int = 1,
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
+    PER_PAGINA = 30
+    totaal = db.query(ClubEvening).count()
+    totaal_paginas = max(1, (totaal + PER_PAGINA - 1) // PER_PAGINA)
+    pagina = max(1, min(pagina, totaal_paginas))
     seasons = db.query(Season).order_by(Season.start_datum.desc()).all()
     evenings = (
         db.query(ClubEvening)
         .join(Season)
-        .order_by(ClubEvening.datum)
+        .order_by(ClubEvening.datum.desc())
+        .offset((pagina - 1) * PER_PAGINA)
+        .limit(PER_PAGINA)
         .all()
     )
     return templates.TemplateResponse(
@@ -132,6 +139,9 @@ async def avonden_list(
             "current_user": current_user,
             "evenings": evenings,
             "seasons": seasons,
+            "pagina": pagina,
+            "totaal_paginas": totaal_paginas,
+            "totaal": totaal,
         },
     )
 
@@ -571,15 +581,26 @@ async def delete_invitation(
 @router.get("/aanvragen")
 async def aanvragen_list(
     request: Request,
+    pagina: int = 1,
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
+    PER_PAGINA = 20
+    totaal = db.query(AccountRequest).count()
+    totaal_paginas = max(1, (totaal + PER_PAGINA - 1) // PER_PAGINA)
+    pagina = max(1, min(pagina, totaal_paginas))
     aanvragen = (
         db.query(AccountRequest)
         .order_by(AccountRequest.aangemaakt_op.desc())
+        .offset((pagina - 1) * PER_PAGINA)
+        .limit(PER_PAGINA)
         .all()
     )
-    pending_count = sum(1 for a in aanvragen if a.status == AccountRequestStatus.wachtend)
+    pending_count = (
+        db.query(AccountRequest)
+        .filter(AccountRequest.status == AccountRequestStatus.wachtend)
+        .count()
+    )
     berichten = (
         db.query(AdminBericht)
         .order_by(AdminBericht.aangemaakt_op.desc())
@@ -598,6 +619,9 @@ async def aanvragen_list(
             "smtp_ok": smtp_geconfigureerd(),
             "berichten": berichten,
             "ongelezen_berichten": ongelezen_berichten,
+            "pagina": pagina,
+            "totaal_paginas": totaal_paginas,
+            "totaal": totaal,
         },
     )
 
@@ -787,14 +811,31 @@ async def delete_role(
 @router.get("/leden")
 async def leden_list(
     request: Request,
+    pagina: int = 1,
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
-    leden = db.query(Lid).order_by(Lid.achternaam, Lid.voornaam).all()
+    PER_PAGINA = 50
+    totaal = db.query(Lid).count()
+    totaal_paginas = max(1, (totaal + PER_PAGINA - 1) // PER_PAGINA)
+    pagina = max(1, min(pagina, totaal_paginas))
+    leden = (
+        db.query(Lid)
+        .order_by(Lid.achternaam, Lid.voornaam)
+        .offset((pagina - 1) * PER_PAGINA)
+        .limit(PER_PAGINA)
+        .all()
+    )
     return templates.TemplateResponse(
         request,
         "admin/leden.html",
-        {"current_user": current_user, "leden": leden},
+        {
+            "current_user": current_user,
+            "leden": leden,
+            "pagina": pagina,
+            "totaal_paginas": totaal_paginas,
+            "totaal": totaal,
+        },
     )
 
 

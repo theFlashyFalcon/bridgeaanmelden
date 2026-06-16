@@ -19,16 +19,56 @@
     {% endif %}
 
     <form method="post" action="/wachtwoord-reset/{{ token }}" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <div class="form-group">
         <label for="password">Nieuw wachtwoord</label>
-        <input type="password" id="password" name="password" required autocomplete="new-password" placeholder="Minimaal 8 tekens">
+        <input type="password" id="password" name="password" required autocomplete="new-password"
+               minlength="8" maxlength="128" placeholder="Minimaal 8 tekens">
+        <div class="pw-strength-bars" id="pw-bars" style="display:none;">
+          <div class="pw-bar" id="pw-b1"></div>
+          <div class="pw-bar" id="pw-b2"></div>
+          <div class="pw-bar" id="pw-b3"></div>
+          <div class="pw-bar" id="pw-b4"></div>
+        </div>
+        <span class="pw-strength-label" id="pw-label"></span>
       </div>
       <div class="form-group">
         <label for="password2">Herhaal wachtwoord</label>
-        <input type="password" id="password2" name="password2" required autocomplete="new-password" placeholder="••••••••">
+        <input type="password" id="password2" name="password2" required autocomplete="new-password"
+               maxlength="128" placeholder="••••••••">
       </div>
       <button type="submit" class="btn btn-primary btn-full">Wachtwoord opslaan</button>
     </form>
   {% endif %}
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var pw = document.getElementById('password');
+  if (!pw) return;
+  pw.addEventListener('input', function () {
+    var val = this.value;
+    document.getElementById('pw-bars').style.display = val ? 'flex' : 'none';
+    var score = 0;
+    if (val.length >= 8) score++;
+    if (val.length >= 12) score++;
+    if (/[A-Z]/.test(val)) score++;
+    if (/[0-9]/.test(val)) score++;
+    if (/[^A-Za-z0-9]/.test(val)) score++;
+    var klassen = ['', 'pw-zwak', 'pw-zwak', 'pw-matig', 'pw-goed', 'pw-sterk'];
+    var teksten = ['', 'Zeer zwak', 'Zwak', 'Matig', 'Sterk', 'Zeer sterk'];
+    var kleuren = ['', '#e74c3c', '#e74c3c', '#e67e22', '#f1c40f', '#27ae60'];
+    for (var i = 1; i <= 4; i++) {
+      var bar = document.getElementById('pw-b' + i);
+      bar.className = 'pw-bar';
+      if (score >= i) bar.classList.add(klassen[score]);
+    }
+    var lbl = document.getElementById('pw-label');
+    lbl.textContent = val ? (teksten[score] || '') : '';
+    lbl.style.color = kleuren[score] || '';
+  });
+})();
+</script>
 {% endblock %}

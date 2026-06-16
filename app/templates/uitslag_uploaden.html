@@ -20,6 +20,7 @@
   {% endif %}
 
   <form method="post" action="/uitslagen/{{ evening.id }}/uploaden" enctype="multipart/form-data" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
     <div class="form-group">
       <label for="bestand">PDF-bestand</label>
       <input type="file" id="bestand" name="bestand" accept=".pdf,application/pdf" required>

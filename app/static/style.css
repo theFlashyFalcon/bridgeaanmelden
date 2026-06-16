@@ -786,3 +786,49 @@ details[open] .weergave-instellingen-toggle::before { content: '▾ '; }
 .toggle-list { display: flex; flex-direction: column; gap: .35rem; }
 .toggle-item { display: flex; align-items: center; gap: .5rem; font-size: .875rem; cursor: pointer; }
 .toggle-item input[type="checkbox"] { width: 1rem; height: 1rem; cursor: pointer; }
+
+/* ── Wachtwoord-sterkte indicator ───────────────────────────────────────────── */
+.pw-strength-bars {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.pw-bar {
+  flex: 1;
+  height: 5px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  transition: background .2s;
+}
+.pw-bar.pw-zwak    { background: #e74c3c; }
+.pw-bar.pw-matig   { background: #e67e22; }
+.pw-bar.pw-goed    { background: #f1c40f; }
+.pw-bar.pw-sterk   { background: #27ae60; }
+.pw-strength-label {
+  font-size: .78rem;
+  margin-top: 3px;
+  display: block;
+  min-height: 1em;
+}
+
+/* ── Paginering ─────────────────────────────────────────────────────────────── */
+.paginering {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.paginering a,
+.paginering span {
+  display: inline-flex;
+  align-items: center;
+  padding: .3rem .65rem;
+  border-radius: var(--radius);
+  font-size: .875rem;
+  text-decoration: none;
+}
+.paginering a { background: var(--color-bg); border: 1px solid var(--color-border, #ddd); color: var(--color-text); }
+.paginering a:hover { background: #e8f0ff; text-decoration: none; }
+.paginering span.huidig { background: var(--color-primary); color: #fff; border: 1px solid var(--color-primary); font-weight: 600; }
+.paginering span.dots { color: var(--color-muted); border: none; }

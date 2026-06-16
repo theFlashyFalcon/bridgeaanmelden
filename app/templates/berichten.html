@@ -103,7 +103,9 @@
             style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
     <h2 style="margin-top:0;margin-bottom:1.25rem;">Nieuw bericht</h2>
     <form method="post" action="/berichten/verstuur" id="nieuw-bericht-form">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <input type="hidden" name="terug" value="{{ request.query_params.get('terug', '') }}">
+      <div id="modal-fout" class="alert alert-error" style="display:none;margin-bottom:.75rem;"></div>
 
       {% if current_user.role in ('admin', 'wedstrijdleider') %}
       <div style="margin-bottom:.75rem;display:flex;align-items:center;gap:.5rem;">
@@ -136,7 +138,8 @@
       </div>
       <div class="form-group">
         <label for="tekst">Bericht <span style="font-weight:400;color:var(--color-muted,#888);">(optioneel)</span></label>
-        <textarea name="tekst" id="tekst" class="form-control" rows="5" placeholder="Typ hier je bericht…"></textarea>
+        <textarea name="tekst" id="tekst" class="form-control" rows="5" placeholder="Typ hier je bericht…" maxlength="5000"></textarea>
+        <span id="tekst-teller" style="font-size:.78rem;color:var(--color-muted,#888);"></span>
       </div>
       <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1rem;">
         <button type="button" class="btn btn-secondary" id="nieuw-bericht-annuleren">
@@ -164,6 +167,29 @@
   var annBtn   = document.getElementById('nieuw-bericht-annuleren');
   var form     = document.getElementById('nieuw-bericht-form');
   var terug    = {{ request.query_params.get('terug', '') | tojson }};
+
+  /* ── Auto-open bij fout + foutmelding in modal tonen ── */
+  var foutMeldingen = {
+    'ontvanger': 'Ontvanger niet gevonden. Selecteer iemand uit de lijst.',
+    'leeg': 'Vul een onderwerp in voordat je het bericht verstuurt.'
+  };
+  var foutParam = new URLSearchParams(window.location.search).get('fout');
+  if (foutParam && foutMeldingen[foutParam]) {
+    var foutDiv = document.getElementById('modal-fout');
+    foutDiv.textContent = foutMeldingen[foutParam];
+    foutDiv.style.display = '';
+    setTimeout(function () { modal.style.display = 'flex'; }, 50);
+  }
+
+  /* ── Tekst-teller ── */
+  var tekst = document.getElementById('tekst');
+  var teller = document.getElementById('tekst-teller');
+  if (tekst && teller) {
+    tekst.addEventListener('input', function () {
+      var resterend = 5000 - this.value.length;
+      teller.textContent = resterend < 500 ? resterend + ' tekens resterend' : '';
+    });
+  }
 
   /* ── Modal openen / sluiten ── */
   function openModal() { modal.style.display = 'flex'; }

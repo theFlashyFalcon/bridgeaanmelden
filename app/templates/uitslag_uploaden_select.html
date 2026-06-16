@@ -12,6 +12,7 @@
   {% endif %}
 
   <form method="post" action="/uitslagen/uploaden" enctype="multipart/form-data" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
     <div class="form-group">
       <label for="evening_id">Evenement</label>
       <select id="evening_id" name="evening_id" required

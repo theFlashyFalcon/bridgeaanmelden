@@ -28,6 +28,7 @@
   </p>
   <form method="post" action="/beheer/leden/importeer" enctype="multipart/form-data"
         class="form-stack" style="margin-bottom:1.5rem;">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
     <div class="form-group">
       <label for="bestand">CSV-bestand</label>
       <input type="file" id="bestand" name="bestand" accept=".csv,text/csv" required>
@@ -37,6 +38,7 @@
 
   <h2 style="margin-top:1.25rem;">Lid toevoegen</h2>
   <form method="post" action="/beheer/leden" class="form-stack" style="margin-bottom:1.5rem;">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
     <div class="form-row">
       <div class="form-group">
         <label for="voornaam">Voornaam</label>
@@ -73,6 +75,7 @@
           <td style="text-align:right;">
             <form method="post" action="/beheer/leden/{{ lid.id }}/verwijder"
                   data-bevestig="Lid verwijderen?">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
               <button type="submit" class="btn btn-danger" style="padding:.2rem .5rem;font-size:.8rem;">Verwijderen</button>
             </form>
           </td>
@@ -83,5 +86,26 @@
   {% else %}
     <p class="empty-state">Nog geen leden toegevoegd.</p>
   {% endif %}
+
+  {% if totaal_paginas > 1 %}
+  <nav class="paginering" aria-label="Paginering">
+    {% if pagina > 1 %}
+      <a href="?pagina={{ pagina - 1 }}">&laquo; Vorige</a>
+    {% endif %}
+    {% for p in range(1, totaal_paginas + 1) %}
+      {% if p == pagina %}
+        <span class="huidig">{{ p }}</span>
+      {% elif p == 1 or p == totaal_paginas or (p >= pagina - 2 and p <= pagina + 2) %}
+        <a href="?pagina={{ p }}">{{ p }}</a>
+      {% elif p == pagina - 3 or p == pagina + 3 %}
+        <span class="dots">&hellip;</span>
+      {% endif %}
+    {% endfor %}
+    {% if pagina < totaal_paginas %}
+      <a href="?pagina={{ pagina + 1 }}">Volgende &raquo;</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+
 </section>
 {% endblock %}

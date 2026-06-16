@@ -19,6 +19,7 @@
   {% endif %}
 
   <form method="post" action="/invite/{{ token }}" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
     <div class="form-group">
       <label>E-mailadres</label>
       <input type="email" value="{{ invitation.email }}" disabled class="input-disabled">
@@ -41,27 +42,64 @@
         <div class="form-group">
           <label for="voornaam">Voornaam</label>
           <input type="text" id="voornaam" name="voornaam" required autocomplete="given-name"
-                 value="{{ voornaam or '' }}">
+                 maxlength="100" value="{{ voornaam or '' }}">
         </div>
         <div class="form-group">
           <label for="achternaam">Achternaam</label>
           <input type="text" id="achternaam" name="achternaam" required autocomplete="family-name"
-                 value="{{ achternaam or '' }}">
+                 maxlength="100" value="{{ achternaam or '' }}">
         </div>
       </div>
     {% endif %}
 
     <div class="form-group">
       <label for="password">Wachtwoord <span class="form-hint">(minimaal 8 tekens)</span></label>
-      <input type="password" id="password" name="password" required minlength="8"
+      <input type="password" id="password" name="password" required minlength="8" maxlength="128"
              autocomplete="new-password" placeholder="••••••••">
+      <div class="pw-strength-bars" id="pw-bars" style="display:none;">
+        <div class="pw-bar" id="pw-b1"></div>
+        <div class="pw-bar" id="pw-b2"></div>
+        <div class="pw-bar" id="pw-b3"></div>
+        <div class="pw-bar" id="pw-b4"></div>
+      </div>
+      <span class="pw-strength-label" id="pw-label"></span>
     </div>
     <div class="form-group">
       <label for="password2">Wachtwoord bevestigen</label>
       <input type="password" id="password2" name="password2" required
-             autocomplete="new-password" placeholder="••••••••">
+             autocomplete="new-password" maxlength="128" placeholder="••••••••">
     </div>
     <button type="submit" class="btn btn-primary btn-full">Account activeren</button>
   </form>
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(function () {
+  var pw = document.getElementById('password');
+  if (!pw) return;
+  pw.addEventListener('input', function () {
+    var val = this.value;
+    document.getElementById('pw-bars').style.display = val ? 'flex' : 'none';
+    var score = 0;
+    if (val.length >= 8) score++;
+    if (val.length >= 12) score++;
+    if (/[A-Z]/.test(val)) score++;
+    if (/[0-9]/.test(val)) score++;
+    if (/[^A-Za-z0-9]/.test(val)) score++;
+    var klassen = ['', 'pw-zwak', 'pw-zwak', 'pw-matig', 'pw-goed', 'pw-sterk'];
+    var teksten = ['', 'Zeer zwak', 'Zwak', 'Matig', 'Sterk', 'Zeer sterk'];
+    var kleuren = ['', '#e74c3c', '#e74c3c', '#e67e22', '#f1c40f', '#27ae60'];
+    for (var i = 1; i <= 4; i++) {
+      var bar = document.getElementById('pw-b' + i);
+      bar.className = 'pw-bar';
+      if (score >= i) bar.classList.add(klassen[score]);
+    }
+    var lbl = document.getElementById('pw-label');
+    lbl.textContent = val ? (teksten[score] || '') : '';
+    lbl.style.color = kleuren[score] || '';
+  });
+})();
+</script>
 {% endblock %}

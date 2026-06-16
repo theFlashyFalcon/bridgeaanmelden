@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -18,10 +18,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from app.auth import SECRET_KEY  # noqa: E402 — must be after load_dotenv
+from app.csrf import csrf_input as _csrf_input, get_csrf_token as _get_csrf_token, require_csrf  # noqa: E402
 from app.database import Base, engine  # noqa: E402
 from app.routes import admin, auth, berichten, evenings, members, registrations, rankings, uitslagen  # noqa: E402
 
 _templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+_templates.env.globals["csrf_token"] = _get_csrf_token
+_templates.env.globals["csrf_input"] = _csrf_input
 
 
 def _get_user_for_request(request: Request):
@@ -270,9 +273,21 @@ def _seed_crash_leden():
 
 _seed_crash_leden()
 
-app = FastAPI(title="Bridge Club Aanmeldingsapp", docs_url=None, redoc_url=None)
+app = FastAPI(
+    title="Bridge Club Aanmeldingsapp",
+    docs_url=None,
+    redoc_url=None,
+    dependencies=[Depends(require_csrf)],
+)
 
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, same_site="strict")
+_https_only = os.getenv("HTTPS_ONLY", "false").lower() == "true"
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SECRET_KEY,
+    same_site="strict",
+    https_only=_https_only,
+    max_age=7 * 24 * 3600,
+)
 
 
 @app.exception_handler(401)

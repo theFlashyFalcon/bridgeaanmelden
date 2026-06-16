@@ -98,6 +98,7 @@
 {% if current_user %}
   <div id="weergave-panel" class="card weergave-instellingen" hidden>
     <form method="post" action="/instellingen/verborgen-types">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <p class="weergave-instellingen-hint">Vink aan welke soorten evenementen je in de agenda wilt zien.</p>
       <div class="toggle-list">
         <label class="toggle-item">
@@ -131,10 +132,12 @@
   <div class="bulk-acties">
     <form method="post" action="/voor-alles-afmelden"
           data-bevestig="Wil je je afmelden voor alle komende evenementen waarvoor je bent aangemeld?">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <button type="submit" class="btn btn-secondary">Voor alles afmelden</button>
     </form>
     <form method="post" action="/voor-alles-aanmelden"
           data-bevestig="Wil je je aanmelden voor alle komende evenementen?">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <button type="submit" class="btn btn-primary">Voor alles aanmelden</button>
     </form>
   </div>
@@ -145,6 +148,7 @@
   <div class="card definitief-card">
     <form method="post" action="/definitief-aanmelden/{{ active_filter }}"
           data-bevestig="Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <button type="submit" class="btn btn-primary">
         Meld mij definitief aan voor alle {{ type_plural[active_filter] }}
       </button>

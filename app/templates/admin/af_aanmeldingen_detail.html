@@ -100,6 +100,7 @@
             </span>
             <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/manual/{{ pair.id }}/verwijder"
                   data-bevestig="Verwijderen?" style="flex-shrink:0;">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
               <button type="submit" class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;">&#10005;</button>
             </form>
           </li>
@@ -115,6 +116,7 @@
       handmatig toevoegen
     </h3>
     <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/toevoegen" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
 
       {% if dtype == 'individueel' %}
         <div class="form-group">
@@ -221,6 +223,7 @@
             </span>
             <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/manual/{{ ml.id }}/verwijder"
                   data-bevestig="Losloper verwijderen?" style="flex-shrink:0;">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
               <button type="submit" class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;">&#10005;</button>
             </form>
           </li>
@@ -257,9 +260,11 @@
             {% if v.status == 'wachtend' %}
               <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
                 <form method="post" action="/beheer/verzoeken/{{ v.id }}/goedkeuren">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
                   <button type="submit" class="btn btn-primary btn-sm">Goedkeuren</button>
                 </form>
                 <form method="post" action="/beheer/verzoeken/{{ v.id }}/afwijzen">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
                   <button type="submit" class="btn btn-danger btn-sm">Afwijzen</button>
                 </form>
               </div>
@@ -306,10 +311,12 @@
           {% else %}
             <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
               <form method="post" action="/beheer/te-laat/{{ reg.id }}/goedkeuren">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
                 <button type="submit" class="btn btn-primary btn-sm">Goedkeuren</button>
               </form>
               <form method="post" action="/beheer/te-laat/{{ reg.id }}/verwijderen"
                     data-bevestig="Inschrijving verwijderen?">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
                 <button type="submit" class="btn btn-danger btn-sm">Verwijderen</button>
               </form>
             </div>
@@ -374,6 +381,7 @@
     <h2>Bericht sturen</h2>
     <p id="modal-naam-tekst" style="margin-bottom:1rem;font-weight:600;"></p>
     <form method="post" action="/berichten/verstuur" class="form-stack">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
       <input type="hidden" name="ontvanger_id" id="modal-ontvanger-id">
       <div class="form-group">
         <label for="modal-tekst">Bericht</label>
