@@ -609,6 +609,23 @@ async def definitief_aanmelden(
     if event_type in _TRAINING_KEYS and not current_user.training_eligible:
         raise HTTPException(status_code=403, detail="Geen toegang tot trainingsavonden")
 
+    form = await request.form()
+    partner_naam = None
+    if form.get("met_partner") == "1":
+        partner_voornaam = form.get("partner_voornaam", "").strip()
+        partner_achternaam = form.get("partner_achternaam", "").strip()
+        if partner_voornaam and partner_achternaam:
+            lid = (
+                db.query(Lid)
+                .filter(
+                    func.lower(Lid.voornaam) == partner_voornaam.lower(),
+                    func.lower(Lid.achternaam) == partner_achternaam.lower(),
+                )
+                .first()
+            )
+            if lid:
+                partner_naam = f"{partner_voornaam} {partner_achternaam}"
+
     db_types = _TYPE_MAP[event_type]
     today = date.today()
 
@@ -636,12 +653,22 @@ async def definitief_aanmelden(
             .first()
         )
         if not existing:
+            deelnemers_type = evt.deelnemers_type or "paren"
+            if deelnemers_type == "individueel":
+                reg_partner = None
+                reg_status = RegistrationStatus.aangemeld
+            elif deelnemers_type == "paren" and partner_naam:
+                reg_partner = partner_naam
+                reg_status = RegistrationStatus.aangemeld
+            else:
+                reg_partner = None
+                reg_status = RegistrationStatus.beschikbaar_solo
             db.add(Registration(
                 evening_id=evt.id,
                 person1_id=current_user.id,
-                partner_naam=None,
+                partner_naam=reg_partner,
                 type=RegistrationType.vast,
-                status=RegistrationStatus.beschikbaar_solo,
+                status=reg_status,
             ))
             count += 1
 
@@ -655,7 +682,7 @@ async def definitief_aanmelden(
     db.add(RecurringRegistration(
         member_id=current_user.id,
         event_type=primary_type,
-        partner_naam=None,
+        partner_naam=partner_naam,
         interval=1,
         herhaal_tot=None,
         referentie_datum=today,
@@ -748,6 +775,23 @@ async def voor_alles_aanmelden(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_auth),
 ):
+    form = await request.form()
+    partner_naam = None
+    if form.get("met_partner") == "1":
+        partner_voornaam = form.get("partner_voornaam", "").strip()
+        partner_achternaam = form.get("partner_achternaam", "").strip()
+        if partner_voornaam and partner_achternaam:
+            lid = (
+                db.query(Lid)
+                .filter(
+                    func.lower(Lid.voornaam) == partner_voornaam.lower(),
+                    func.lower(Lid.achternaam) == partner_achternaam.lower(),
+                )
+                .first()
+            )
+            if lid:
+                partner_naam = f"{partner_voornaam} {partner_achternaam}"
+
     today = date.today()
     all_db_types = ["clubavond", "regulier", "eten voor jeugdtraining", "speciaal"]
     if current_user.training_eligible:
@@ -777,12 +821,22 @@ async def voor_alles_aanmelden(
             .first()
         )
         if not existing:
+            deelnemers_type = evt.deelnemers_type or "paren"
+            if deelnemers_type == "individueel":
+                reg_partner = None
+                reg_status = RegistrationStatus.aangemeld
+            elif deelnemers_type == "paren" and partner_naam:
+                reg_partner = partner_naam
+                reg_status = RegistrationStatus.aangemeld
+            else:
+                reg_partner = None
+                reg_status = RegistrationStatus.beschikbaar_solo
             db.add(Registration(
                 evening_id=evt.id,
                 person1_id=current_user.id,
-                partner_naam=None,
+                partner_naam=reg_partner,
                 type=RegistrationType.los,
-                status=RegistrationStatus.beschikbaar_solo,
+                status=reg_status,
             ))
             count += 1
 

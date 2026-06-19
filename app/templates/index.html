@@ -138,6 +138,14 @@
     <form method="post" action="/voor-alles-aanmelden"
           data-bevestig="Wil je je aanmelden voor alle komende evenementen?">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+      <label class="toggle-item bulk-partner-label">
+        <input type="checkbox" id="bulk-met-partner" name="met_partner" value="1" autocomplete="off">
+        Met partner
+      </label>
+      <div id="bulk-partner-velden" class="bulk-partner-velden" hidden>
+        <input type="text" name="partner_voornaam" placeholder="Voornaam partner" autocomplete="off">
+        <input type="text" name="partner_achternaam" placeholder="Achternaam" autocomplete="off">
+      </div>
       <button type="submit" class="btn btn-primary">Voor alles aanmelden</button>
     </form>
   </div>
@@ -149,11 +157,20 @@
     <form method="post" action="/definitief-aanmelden/{{ active_filter }}"
           data-bevestig="Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-      <button type="submit" class="btn btn-primary">
+      <label class="toggle-item bulk-partner-label">
+        <input type="checkbox" id="definitief-met-partner" name="met_partner" value="1" autocomplete="off">
+        Met partner aanmelden
+      </label>
+      <div id="definitief-partner-velden" class="bulk-partner-velden" hidden>
+        <input type="text" name="partner_voornaam" placeholder="Voornaam partner" autocomplete="off">
+        <input type="text" name="partner_achternaam" placeholder="Achternaam" autocomplete="off">
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-top:.5rem;">
         Meld mij definitief aan voor alle {{ type_plural[active_filter] }}
       </button>
       <p class="definitief-hint">
-        Je wordt zonder partner aangemeld voor alle toekomstige {{ type_plural[active_filter] }}, ook nieuw geplande.
+        Je wordt aangemeld voor alle toekomstige {{ type_plural[active_filter] }}, ook nieuw geplande.
+        Bij evenementen in paren word je met de opgegeven partner aangemeld; bij individuele evenementen individueel.
         Je kunt dit later aanpassen via de aanmeldknop bij elk evenement.
       </p>
     </form>
@@ -247,6 +264,22 @@
     }
   });
 })();
+
+(function() {
+  function koppelPartnerToggle(checkboxId, veldenId) {
+    var cb = document.getElementById(checkboxId);
+    var velden = document.getElementById(veldenId);
+    if (!cb || !velden) return;
+    cb.addEventListener('change', function() {
+      velden.hidden = !cb.checked;
+      if (!cb.checked) {
+        velden.querySelectorAll('input[type="text"]').forEach(function(inp) { inp.value = ''; });
+      }
+    });
+  }
+  koppelPartnerToggle('bulk-met-partner', 'bulk-partner-velden');
+  koppelPartnerToggle('definitief-met-partner', 'definitief-partner-velden');
+})();
 </script>
 <style>
 .filter-tabs-wrapper { display: flex; align-items: center; }
@@ -256,6 +289,30 @@
   gap: .75rem;
   margin-top: .75rem;
   flex-wrap: wrap;
+  align-items: flex-start;
+}
+.bulk-partner-label {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  font-size: .875rem;
+  margin-bottom: .35rem;
+  cursor: pointer;
+}
+.bulk-partner-velden {
+  display: flex;
+  gap: .4rem;
+  flex-wrap: wrap;
+  margin-bottom: .4rem;
+}
+.bulk-partner-velden input {
+  flex: 1;
+  min-width: 100px;
+  padding: .3rem .5rem;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 4px;
+  font: inherit;
+  font-size: .875rem;
 }
 </style>
 {% endblock %}

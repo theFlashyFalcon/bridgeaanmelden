@@ -86,11 +86,20 @@ def _apply_recurring_registrations(db: Session, event: ClubEvening, sender_id: O
             .first()
         )
         if not existing:
-            status = RegistrationStatus.aangemeld if rr.partner_naam else RegistrationStatus.beschikbaar_solo
+            deelnemers_type = event.deelnemers_type or "paren"
+            if deelnemers_type == "individueel":
+                reg_partner = None
+                status = RegistrationStatus.aangemeld
+            elif deelnemers_type == "paren" and rr.partner_naam:
+                reg_partner = rr.partner_naam
+                status = RegistrationStatus.aangemeld
+            else:
+                reg_partner = None
+                status = RegistrationStatus.beschikbaar_solo
             db.add(Registration(
                 evening_id=event.id,
                 person1_id=rr.member_id,
-                partner_naam=rr.partner_naam,
+                partner_naam=reg_partner,
                 type=RegistrationType.vast,
                 status=status,
             ))
