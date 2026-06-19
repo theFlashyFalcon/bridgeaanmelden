@@ -12,6 +12,9 @@
 {% if request.query_params.get('upload_ok') %}
   <div class="alert alert-success">Uitslag succesvol geüpload.</div>
 {% endif %}
+{% if request.query_params.get('verwijderd') %}
+  <div class="alert alert-success">Uitslag verwijderd.</div>
+{% endif %}
 
 <form method="get" action="/uitslagen" style="margin-bottom:1.5rem;">
   <div style="display:flex;gap:.5rem;align-items:center;max-width:460px;">
@@ -54,6 +57,15 @@
             {% endif %}
             {% if kan_uploaden %}
               <a href="/uitslagen/{{ evening.id }}/uploaden" class="btn btn-secondary" style="font-size:.85em;padding:.35rem .9rem;">Uploaden</a>
+              {% if uitslag %}
+                <form method="post" action="/uitslagen/{{ evening.id }}/verwijderen" style="display:inline;">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+                  <button type="submit" class="btn btn-danger" style="font-size:.85em;padding:.35rem .9rem;"
+                    data-bevestig="Weet je zeker dat je de uitslag van {{ evening.naam if evening.naam else evening.datum.strftime('%d/%m/%Y') }} wilt verwijderen?">
+                    Verwijderen
+                  </button>
+                </form>
+              {% endif %}
             {% endif %}
           </div>
         </li>

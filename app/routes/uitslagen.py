@@ -246,6 +246,21 @@ async def uitslag_bestand(
     )
 
 
+@router.post("/{event_id}/verwijderen")
+async def uitslag_verwijderen(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    uitslag = db.query(Uitslag).filter(Uitslag.evening_id == event_id).first()
+    if not uitslag:
+        raise HTTPException(status_code=404, detail="Uitslag niet gevonden")
+    db.delete(uitslag)
+    db.commit()
+    return RedirectResponse(url="/uitslagen?verwijderd=1", status_code=302)
+
+
 @router.get("/{event_id}/uploaden")
 async def uitslag_upload_form(
     event_id: int,
