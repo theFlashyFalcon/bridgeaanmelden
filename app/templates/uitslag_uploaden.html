@@ -10,7 +10,7 @@
   </p>
 
   {% if request.query_params.get('fout') == 'bestand' %}
-    <div class="alert alert-error">Kies een geldig PDF-bestand om te uploaden.</div>
+    <div class="alert alert-error">Kies een geldig XML-bestand om te uploaden.</div>
   {% endif %}
 
   {% if bestaande_uitslag %}
@@ -22,8 +22,8 @@
   <form method="post" action="/uitslagen/{{ evening.id }}/uploaden" enctype="multipart/form-data" class="form-stack">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
     <div class="form-group">
-      <label for="bestand">PDF-bestand</label>
-      <input type="file" id="bestand" name="bestand" accept=".pdf,application/pdf" required>
+      <label for="bestand">XML-bestand (NBB export)</label>
+      <input type="file" id="bestand" name="bestand" accept=".xml,application/xml,text/xml" required>
     </div>
 
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1.5rem;">

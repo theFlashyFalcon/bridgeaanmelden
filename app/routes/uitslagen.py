@@ -8,11 +8,11 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, require_auth, require_wedstrijdleider
 from app.database import get_db
 from app.models import ClubEvening, Member, Uitslag
+from app.utils.nbb_xml import parse_nbb_xml
 
 router = APIRouter(prefix="/uitslagen")
 from app.templates_env import templates
 
-# Evenement-typen die niet in uitslagen worden getoond
 EXCLUDED_TYPES = ["jeugdtraining", "training", "eten voor jeugdtraining"]
 
 
@@ -21,6 +21,19 @@ def _get_display_role(request: Request, current_user) -> str:
         view_as = request.session.get("view_as_role")
         return view_as if view_as else current_user.role
     return current_user.role
+
+
+def _is_xml(inhoud: bytes) -> bool:
+    return bool(inhoud) and inhoud[:200].lstrip().startswith(b"<")
+
+
+def _decode(inhoud: bytes) -> str | None:
+    for enc in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            return inhoud.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return None
 
 
 @router.get("")
@@ -154,6 +167,64 @@ async def uitslag_upload_algemeen(
     return RedirectResponse(url="/uitslagen?upload_ok=1", status_code=302)
 
 
+@router.get("/{event_id}/weergave")
+async def uitslag_weergave(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_auth),
+):
+    uitslag = db.query(Uitslag).filter(Uitslag.evening_id == event_id).first()
+    if not uitslag:
+        raise HTTPException(status_code=404, detail="Uitslag niet gevonden")
+
+    evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+
+    if not _is_xml(uitslag.inhoud):
+        return RedirectResponse(url=f"/uitslagen/{event_id}/bestand")
+
+    tekst = _decode(uitslag.inhoud)
+    parse_fout = None
+    wedstrijd_naam = ""
+    sessie_datum = ""
+    spanning_paren = []
+    lijn_a_paren = []
+    lijn_b_paren = []
+
+    if tekst:
+        try:
+            data = parse_nbb_xml(tekst)
+            wedstrijd_naam = data["wedstrijd_naam"]
+            sessie_datum = data["sessie_datum"]
+            spanning_paren = data["spanning_paren"]
+            lijn_a_paren = data["lijn_a_paren"]
+            lijn_b_paren = data["lijn_b_paren"]
+        except Exception as exc:
+            parse_fout = str(exc)
+    else:
+        parse_fout = "Bestand kon niet gelezen worden."
+
+    display_role = _get_display_role(request, current_user)
+
+    return templates.TemplateResponse(
+        request,
+        "uitslag_weergave.html",
+        {
+            "current_user": current_user,
+            "display_role": display_role,
+            "evening": evening,
+            "uitslag": uitslag,
+            "wedstrijd_naam": wedstrijd_naam,
+            "sessie_datum": sessie_datum,
+            "spanning_paren": spanning_paren,
+            "lijn_a_paren": lijn_a_paren,
+            "lijn_b_paren": lijn_b_paren,
+            "parse_fout": parse_fout,
+            "welkom": False,
+        },
+    )
+
+
 @router.get("/{event_id}/bestand")
 async def uitslag_bestand(
     event_id: int,
@@ -165,11 +236,13 @@ async def uitslag_bestand(
     if not uitslag:
         raise HTTPException(status_code=404, detail="Uitslag niet gevonden")
 
-    filename = uitslag.bestandsnaam or "uitslag.pdf"
+    is_xml = _is_xml(uitslag.inhoud)
+    media_type = "application/xml" if is_xml else "application/pdf"
+    filename = uitslag.bestandsnaam or ("uitslag.xml" if is_xml else "uitslag.pdf")
     return Response(
         content=uitslag.inhoud,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

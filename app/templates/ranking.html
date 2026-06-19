@@ -2,46 +2,444 @@
 {% block title %}Ranking — Crash{% endblock %}
 {% block content %}
 
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:.75rem;">
-  <h1 style="margin:0;">Ranking</h1>
-  {% if kan_uploaden %}
-  <a href="/ranking/uploaden" class="btn btn-primary">Uploaden</a>
-  {% endif %}
+<div style="margin-bottom:1.25rem;">
+  <h1 style="margin:0 0 1rem;">Ranking</h1>
+
+  {# ── Seizoenskeuze ── #}
+  <form method="get" action="/ranking" style="margin-bottom:1rem;">
+    <input type="hidden" name="weergave" value="{{ weergave }}">
+    {% if weergave == 'vorm' %}<input type="hidden" name="n_avonden" value="{{ n_avonden }}">{% endif %}
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+      <label for="seizoen_id" style="font-weight:500;white-space:nowrap;">Seizoen:</label>
+      <select id="seizoen_id" name="seizoen_id" onchange="this.form.submit()"
+        style="padding:.45rem .75rem;border:1px solid var(--color-border,#ccc);border-radius:6px;font-size:.95rem;background:var(--color-card,#fff);color:var(--color-text,#222);">
+        {% if not seizoenen %}<option>Geen seizoenen</option>{% endif %}
+        {% for s in seizoenen %}
+          <option value="{{ s.id }}" {% if s.id == seizoen_id %}selected{% endif %}>{{ s.naam }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  {# ── Tabs rij 1: Standaard weergaven ── #}
+  {% set base = "/ranking?seizoen_id=" ~ (seizoen_id or '') %}
+  <div style="margin-bottom:.4rem;">
+    <span style="font-size:.78rem;font-weight:600;color:var(--color-muted,#888);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:.35rem;">Ranglijsten</span>
+    <div class="filter-tabs">
+      <a href="{{ base }}&weergave=spanning"  class="filter-tab {% if weergave=='spanning'  %}filter-tab--active{% endif %}">Algemene ranking</a>
+      <a href="{{ base }}&weergave=lijn_a"    class="filter-tab {% if weergave=='lijn_a'    %}filter-tab--active{% endif %}">Lijn A</a>
+      <a href="{{ base }}&weergave=lijn_b"    class="filter-tab {% if weergave=='lijn_b'    %}filter-tab--active{% endif %}">Lijn B</a>
+      <a href="{{ base }}&weergave=iedereen"  class="filter-tab {% if weergave=='iedereen'  %}filter-tab--active{% endif %}">Iedereen</a>
+    </div>
+  </div>
+
+  {# ── Tabs rij 2: Extra statistieken ── #}
+  <div style="margin-bottom:1.25rem;">
+    <span style="font-size:.78rem;font-weight:600;color:var(--color-muted,#888);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:.35rem;">Statistieken</span>
+    <div class="filter-tabs">
+      <a href="{{ base }}&weergave=imp_totaal"      class="filter-tab {% if weergave=='imp_totaal'      %}filter-tab--active{% endif %}">IMP totaal</a>
+      <a href="{{ base }}&weergave=consistentie"    class="filter-tab {% if weergave=='consistentie'    %}filter-tab--active{% endif %}">Consistentie</a>
+      <a href="{{ base }}&weergave=vaste_partners"  class="filter-tab {% if weergave=='vaste_partners'  %}filter-tab--active{% endif %}">Vaste partners</a>
+      <a href="{{ base }}&weergave=vorm"            class="filter-tab {% if weergave=='vorm'            %}filter-tab--active{% endif %}">Vorm</a>
+    </div>
+  </div>
 </div>
 
-{% if request.query_params.get('upload_ok') %}
-  <div class="alert alert-success">Rankings zijn succesvol geüpload en nu zichtbaar.</div>
-{% endif %}
+{# ── Waarschuwingen ── #}
+{% for w in waarschuwingen %}
+  <div class="alert alert-error" style="margin-bottom:.75rem;">{{ w }}</div>
+{% endfor %}
 
-{% if ranking %}
-  <div class="card" style="padding:0;overflow:hidden;">
-    <table class="data-table" style="margin:0;">
-      <thead>
-        <tr>
-          {% for kop in headers %}
-            <th>{{ kop }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for rij in rijen %}
-          <tr>
-            {% for cel in rij %}
-              <td>{{ cel }}</td>
-            {% endfor %}
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+{# ── Geen data ── #}
+{% if not seizoenen %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted,#888);">Nog geen seizoenen aangemaakt.</div>
+
+{% elif n_uitslagen == 0 %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted,#888);">
+    Nog geen XML-uitslagen geüpload voor dit seizoen.
   </div>
-  <p style="color:var(--text-muted,#888);font-size:.85em;margin-top:.75rem;">
-    Geüpload op {{ ranking.aangemaakt_op.strftime('%d-%m-%Y om %H:%M') }}
-    {% if ranking.aangemaakt_door %}door {{ ranking.aangemaakt_door.voornaam }} {{ ranking.aangemaakt_door.achternaam }}{% endif %}
-  </p>
+
 {% else %}
-  <div class="card" style="text-align:center;padding:2rem;color:var(--text-muted,#888);">
-    Er zijn nog geen rankings geüpload.
-  </div>
+
+{# ═══════════════════════════════════════════════════════════════
+   SPANNING / LIJN A / LIJN B
+   ═══════════════════════════════════════════════════════════════ #}
+{% if weergave == 'spanning' %}
+
+  <p style="color:var(--color-muted,#888);font-size:.875rem;margin-bottom:1rem;">
+    {{ n_uitslagen }} uitslag{{ 'en' if n_uitslagen != 1 else '' }} dit seizoen —
+    minimaal <strong>{{ drempel }}</strong> deelname{{ 's' if drempel != 1 else '' }} vereist voor de ranking.
+  </p>
+  <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">Algemene ranking</h2>
+  {% if hoofd_ranking %}
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:2rem;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Naam</th>
+          <th style="width:6rem;text-align:center;">Deelnames</th>
+          <th style="width:7rem;text-align:center;">Gem. rang</th>
+        </tr></thead>
+        <tbody>
+          {% for s in hoofd_ranking %}
+            <tr>
+              <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
+              <td>{{ s.naam }}</td>
+              <td style="text-align:center;">{{ s.deelnames }}</td>
+              <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card" style="text-align:center;padding:1.5rem;color:var(--color-muted,#888);margin-bottom:2rem;">
+      Geen spelers voldoen aan de drempelwaarde.
+    </div>
+  {% endif %}
+
+  {% if volledige_lijst %}
+    <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">Alle deelnemers</h2>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Naam</th>
+          <th style="width:6rem;text-align:center;">Deelnames</th>
+          <th style="width:7rem;text-align:center;">Gem. rang</th>
+        </tr></thead>
+        <tbody>
+          {% for s in volledige_lijst %}
+            <tr {% if s.deelnames < drempel %}style="opacity:.5;"{% endif %}>
+              <td style="font-weight:600;">{{ s.rang }}</td>
+              <td>{{ s.naam }}</td>
+              <td style="text-align:center;">{{ s.deelnames }}</td>
+              <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--color-muted,#888);font-size:.8rem;margin-top:.5rem;">
+      Transparant = minder dan {{ drempel }} deelname{{ 's' if drempel != 1 else '' }}, telt niet mee in de hoofdranking.
+    </p>
+  {% endif %}
+
+{% elif weergave in ['lijn_a', 'lijn_b'] %}
+
+  {% if weergave == 'lijn_a' %}{% set titel = 'Ranking Lijn A' %}
+  {% else %}{% set titel = 'Ranking Lijn B' %}{% endif %}
+
+  <p style="color:var(--color-muted,#888);font-size:.875rem;margin-bottom:1rem;">
+    {{ n_uitslagen }} uitslag{{ 'en' if n_uitslagen != 1 else '' }} dit seizoen —
+    minimaal <strong>{{ drempel }}</strong> deelname{{ 's' if drempel != 1 else '' }} vereist voor de ranking.
+  </p>
+
+  <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">{{ titel }}</h2>
+
+  {% if hoofd_ranking %}
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:2rem;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Naam</th>
+          <th style="width:6rem;text-align:center;">Deelnames</th>
+          <th style="width:7rem;text-align:center;">Gem. rang</th>
+        </tr></thead>
+        <tbody>
+          {% for s in hoofd_ranking %}
+            <tr>
+              <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
+              <td>{{ s.naam }}</td>
+              <td style="text-align:center;">{{ s.deelnames }}</td>
+              <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card" style="text-align:center;padding:1.5rem;color:var(--color-muted,#888);margin-bottom:2rem;">
+      Geen spelers voldoen aan de drempelwaarde.
+    </div>
+  {% endif %}
+
+  {% if volledige_lijst %}
+    <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">Alle deelnemers</h2>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Naam</th>
+          <th style="width:6rem;text-align:center;">Deelnames</th>
+          <th style="width:7rem;text-align:center;">Gem. rang</th>
+        </tr></thead>
+        <tbody>
+          {% for s in volledige_lijst %}
+            <tr {% if s.deelnames < drempel %}style="opacity:.5;"{% endif %}>
+              <td style="font-weight:600;">{{ s.rang }}</td>
+              <td>{{ s.naam }}</td>
+              <td style="text-align:center;">{{ s.deelnames }}</td>
+              <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--color-muted,#888);font-size:.8rem;margin-top:.5rem;">
+      Transparant = minder dan {{ drempel }} deelname{{ 's' if drempel != 1 else '' }}, telt niet mee in de hoofdranking.
+    </p>
+  {% endif %}
+
+
+{# ═══════════════════════════════════════════════════════════════
+   IEDEREEN
+   ═══════════════════════════════════════════════════════════════ #}
+{% elif weergave == 'iedereen' %}
+
+  <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">Ranglijst — iedereen (geen drempel)</h2>
+  {% if hoofd_ranking %}
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Naam</th>
+          <th style="width:6rem;text-align:center;">Deelnames</th>
+          <th style="width:7rem;text-align:center;">Gem. rang</th>
+        </tr></thead>
+        <tbody>
+          {% for s in hoofd_ranking %}
+            <tr>
+              <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
+              <td>{{ s.naam }}</td>
+              <td style="text-align:center;">{{ s.deelnames }}</td>
+              <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+
+{# ═══════════════════════════════════════════════════════════════
+   IMP TOTAAL
+   ═══════════════════════════════════════════════════════════════ #}
+{% elif weergave == 'imp_totaal' %}
+
+  <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">IMP totaalranking</h2>
+  {% if hoofd_ranking %}
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Naam</th>
+          <th style="width:6rem;text-align:center;">Deelnames</th>
+          <th style="width:7rem;text-align:right;">Totaal IMP</th>
+          <th style="width:8rem;text-align:right;">IMP per spel</th>
+        </tr></thead>
+        <tbody>
+          {% for s in hoofd_ranking %}
+            <tr>
+              <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
+              <td>{{ s.naam }}</td>
+              <td style="text-align:center;">{{ s.deelnames }}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                {% if s.imp_totaal > 0 %}+{% endif %}{{ s.imp_totaal }}
+              </td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                {% if s.gem_imp_per_board > 0 %}+{% endif %}{{ "%.3f"|format(s.gem_imp_per_board) }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card" style="text-align:center;padding:1.5rem;color:var(--color-muted,#888);">
+      Geen resultaten voor dit seizoen.
+    </div>
+  {% endif %}
+
+  {% if volledige_lijst %}
+    <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">Alle deelnemers</h2>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Naam</th>
+          <th style="width:6rem;text-align:center;">Deelnames</th>
+          <th style="width:7rem;text-align:right;">Totaal IMP</th>
+          <th style="width:8rem;text-align:right;">IMP per spel</th>
+        </tr></thead>
+        <tbody>
+          {% for s in volledige_lijst %}
+            <tr {% if s.deelnames < drempel %}style="opacity:.5;"{% endif %}>
+              <td style="font-weight:600;">{{ s.rang }}</td>
+              <td>{{ s.naam }}</td>
+              <td style="text-align:center;">{{ s.deelnames }}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                {% if s.imp_totaal > 0 %}+{% endif %}{{ s.imp_totaal }}
+              </td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                {% if s.gem_imp_per_board > 0 %}+{% endif %}{{ "%.3f"|format(s.gem_imp_per_board) }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--color-muted,#888);font-size:.8rem;margin-top:.5rem;">
+      Transparant = minder dan {{ drempel }} deelname{{ 's' if drempel != 1 else '' }}.
+    </p>
+  {% endif %}
+
+
+{# ═══════════════════════════════════════════════════════════════
+   CONSISTENTIE
+   ═══════════════════════════════════════════════════════════════ #}
+{% elif weergave == 'consistentie' %}
+
+  <p style="color:var(--color-muted,#888);font-size:.875rem;margin-bottom:1rem;">
+    Standaardafwijking van de spanning-rangpositie per avond. Hoe lager, hoe consistenter.
+    Minimaal 2 deelnames vereist.
+  </p>
+
+  <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">Consistentieranking</h2>
+  {% if hoofd_ranking %}
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Naam</th>
+          <th style="width:6rem;text-align:center;">Deelnames</th>
+          <th style="width:7rem;text-align:center;">Gem. rang</th>
+          <th style="width:7rem;text-align:center;">Std. afw.</th>
+        </tr></thead>
+        <tbody>
+          {% for s in hoofd_ranking %}
+            <tr>
+              <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
+              <td>{{ s.naam }}</td>
+              <td style="text-align:center;">{{ s.deelnames }}</td>
+              <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+              <td style="text-align:center;font-weight:500;">{{ "%.2f"|format(s.std_dev) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted,#888);">
+      Minimaal 2 deelnames nodig om consistentie te berekenen.
+    </div>
+  {% endif %}
+
+
+{# ═══════════════════════════════════════════════════════════════
+   VASTE PARTNERS
+   ═══════════════════════════════════════════════════════════════ #}
+{% elif weergave == 'vaste_partners' %}
+
+  <p style="color:var(--color-muted,#888);font-size:.875rem;margin-bottom:1rem;">
+    Paren die minstens 2 keer samen hebben gespeeld dit seizoen, gesorteerd op aantal keren samen.
+  </p>
+
+  <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">Vaste partners</h2>
+  {% if partner_lijst %}
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Paar</th>
+          <th style="width:7rem;text-align:center;">Keren samen</th>
+          <th style="width:7rem;text-align:center;">Gem. rang</th>
+          <th style="width:8rem;text-align:right;">IMP per spel</th>
+        </tr></thead>
+        <tbody>
+          {% for s in partner_lijst %}
+            <tr>
+              <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
+              <td>{{ s.display_naam }}</td>
+              <td style="text-align:center;font-weight:600;">{{ s.samen }}</td>
+              <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+              <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                {% if s.gem_imp_per_board > 0 %}+{% endif %}{{ "%.3f"|format(s.gem_imp_per_board) }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted,#888);">
+      Nog geen paren die 2 of meer keer samen hebben gespeeld dit seizoen.
+    </div>
+  {% endif %}
+
+
+{# ═══════════════════════════════════════════════════════════════
+   VORM
+   ═══════════════════════════════════════════════════════════════ #}
+{% elif weergave == 'vorm' %}
+
+  {# N-kiezer #}
+  <form method="get" action="/ranking" style="margin-bottom:1.25rem;">
+    <input type="hidden" name="seizoen_id" value="{{ seizoen_id or '' }}">
+    <input type="hidden" name="weergave" value="vorm">
+    <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+      <label for="n_avonden" style="font-weight:500;white-space:nowrap;">Laatste</label>
+      <select id="n_avonden" name="n_avonden" onchange="this.form.submit()"
+        style="padding:.45rem .75rem;border:1px solid var(--color-border,#ccc);border-radius:6px;font-size:.95rem;background:var(--color-card,#fff);color:var(--color-text,#222);">
+        {% for n in [3, 5, 8, 10, 15] %}
+          <option value="{{ n }}" {% if n == n_avonden %}selected{% endif %}>{{ n }}</option>
+        {% endfor %}
+      </select>
+      <span style="font-weight:500;white-space:nowrap;">avonden</span>
+      <span style="color:var(--color-muted,#888);font-size:.875rem;">
+        (seizoen heeft {{ n_uitslagen }} uitslag{{ 'en' if n_uitslagen != 1 else '' }})
+      </span>
+    </div>
+  </form>
+
+  <h2 style="font-size:1.05rem;font-weight:600;margin-bottom:.75rem;">
+    Vormranking — laatste {{ [n_avonden, n_uitslagen]|min }} van {{ n_uitslagen }} avonden
+  </h2>
+
+  {% if hoofd_ranking %}
+    <div class="card" style="padding:0;overflow:hidden;">
+      <table class="data-table" style="margin:0;">
+        <thead><tr>
+          <th style="width:3.5rem;">#</th>
+          <th>Naam</th>
+          <th style="width:7rem;text-align:center;">Deelnames</th>
+          <th style="width:7rem;text-align:center;">Gem. rang</th>
+        </tr></thead>
+        <tbody>
+          {% for s in hoofd_ranking %}
+            <tr>
+              <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
+              <td>{{ s.naam }}</td>
+              <td style="text-align:center;">{{ s.deelnames }}</td>
+              <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p style="color:var(--color-muted,#888);font-size:.8rem;margin-top:.5rem;">
+      Geen drempelwaarde — iedereen die in de geselecteerde periode heeft gespeeld telt mee.
+    </p>
+  {% else %}
+    <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted,#888);">
+      Geen resultaten voor de geselecteerde periode.
+    </div>
+  {% endif %}
+
 {% endif %}
+{# einde weergave-blokken #}
+
+{% endif %}
+{# einde n_uitslagen check #}
 
 {% endblock %}

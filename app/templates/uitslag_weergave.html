@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Uitslag — Crash{% endblock %}
+{% block content %}
+
+{# ── Terug-knop ── #}
+<div style="margin-bottom:1.25rem;">
+  <a href="/uitslagen" class="btn btn-secondary" style="font-size:.9rem;">&#8592; Terug naar uitslagen</a>
+</div>
+
+{# ── Header ── #}
+<div style="margin-bottom:1.5rem;">
+  <h1 style="margin:0 0 .25rem;">
+    {{ wedstrijd_naam if wedstrijd_naam else (evening.naam if evening and evening.naam else 'Uitslag') }}
+  </h1>
+  {% if evening %}
+    <p style="color:var(--color-muted,#888);margin:0;font-size:.9rem;">
+      {{ evening.datum.strftime('%d/%m/%Y') }}
+      {% if sessie_datum and sessie_datum != evening.datum.strftime('%Y-%m-%d') %}
+        &mdash; {{ sessie_datum }}
+      {% endif %}
+    </p>
+  {% endif %}
+</div>
+
+{% if parse_fout %}
+  <div class="alert alert-error">
+    Kon de uitslag niet tonen: {{ parse_fout }}
+    <br><a href="/uitslagen/{{ evening.id }}/bestand" style="color:inherit;">Download het bestand</a>
+  </div>
+
+{% else %}
+
+  {# ── Tabs ── #}
+  <div class="filter-tabs" style="margin-bottom:1.25rem;" id="uitslag-tabs">
+    {% if spanning_paren %}
+      <button type="button" class="filter-tab filter-tab--active" onclick="toonTab('spanning', this)">
+        Spanning (alle lijnen)
+      </button>
+    {% endif %}
+    {% if lijn_a_paren %}
+      <button type="button" class="filter-tab" onclick="toonTab('lijn_a', this)">
+        Lijn A
+      </button>
+    {% endif %}
+    {% if lijn_b_paren %}
+      <button type="button" class="filter-tab" onclick="toonTab('lijn_b', this)">
+        Lijn B
+      </button>
+    {% endif %}
+  </div>
+
+  {# ── Spanning tabel ── #}
+  {% if spanning_paren %}
+    <div id="tab-spanning">
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table class="data-table" style="margin:0;">
+          <thead>
+            <tr>
+              <th style="width:3.5rem;">#</th>
+              <th>Paar</th>
+              <th style="width:5rem;text-align:center;">Lijn</th>
+              <th style="width:6rem;text-align:right;">Score (IMP)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in spanning_paren %}
+              <tr>
+                <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ p.rang }}</td>
+                <td>{{ p.paar_naam }}</td>
+                <td style="text-align:center;">{{ p.sectie }}</td>
+                <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                  {% if p.score > 0 %}+{% endif %}{{ "%.2f"|format(p.score) }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ── Lijn A tabel ── #}
+  {% if lijn_a_paren %}
+    <div id="tab-lijn_a" style="display:none;">
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table class="data-table" style="margin:0;">
+          <thead>
+            <tr>
+              <th style="width:3.5rem;">#</th>
+              <th>Paar</th>
+              <th style="width:6rem;text-align:right;">Score (IMP)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in lijn_a_paren %}
+              <tr>
+                <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ p.rang }}</td>
+                <td>{{ p.paar_naam }}</td>
+                <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                  {% if p.score > 0 %}+{% endif %}{{ "%.2f"|format(p.score) }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ── Lijn B tabel ── #}
+  {% if lijn_b_paren %}
+    <div id="tab-lijn_b" style="display:none;">
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table class="data-table" style="margin:0;">
+          <thead>
+            <tr>
+              <th style="width:3.5rem;">#</th>
+              <th>Paar</th>
+              <th style="width:6rem;text-align:right;">Score (IMP)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in lijn_b_paren %}
+              <tr>
+                <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ p.rang }}</td>
+                <td>{{ p.paar_naam }}</td>
+                <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                  {% if p.score > 0 %}+{% endif %}{{ "%.2f"|format(p.score) }}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if not spanning_paren and not lijn_a_paren and not lijn_b_paren %}
+    <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted,#888);">
+      Geen resultaten gevonden in dit bestand.
+    </div>
+  {% endif %}
+
+{% endif %}
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function toonTab(naam, knop) {
+  ['spanning', 'lijn_a', 'lijn_b'].forEach(function(id) {
+    var el = document.getElementById('tab-' + id);
+    if (el) el.style.display = (id === naam) ? '' : 'none';
+  });
+  document.querySelectorAll('#uitslag-tabs .filter-tab').forEach(function(btn) {
+    btn.classList.remove('filter-tab--active');
+  });
+  knop.classList.add('filter-tab--active');
+}
+</script>
+{% endblock %}

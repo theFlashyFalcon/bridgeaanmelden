@@ -6,7 +6,7 @@
   <h1 style="margin-top:0;">Uitslag uploaden</h1>
 
   {% if request.query_params.get('fout') == 'bestand' %}
-    <div class="alert alert-error">Kies een geldig PDF-bestand om te uploaden.</div>
+    <div class="alert alert-error">Kies een geldig XML-bestand om te uploaden.</div>
   {% elif request.query_params.get('fout') == 'evening' %}
     <div class="alert alert-error">Selecteer een evenement.</div>
   {% endif %}
@@ -30,8 +30,8 @@
     </div>
 
     <div class="form-group">
-      <label for="bestand">PDF-bestand</label>
-      <input type="file" id="bestand" name="bestand" accept=".pdf,application/pdf" required>
+      <label for="bestand">XML-bestand (NBB export)</label>
+      <input type="file" id="bestand" name="bestand" accept=".xml,application/xml,text/xml" required>
     </div>
 
     <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;margin-top:1.5rem;">
