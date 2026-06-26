@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Agenda — Crash{% endblock %}
+{% block title %}Agenda — {{ club_naam }}{% endblock %}
 
 {% block content %}
 
@@ -39,7 +39,12 @@
 {% endif %}
 
 <section class="page-header">
-  <h1>&#127968;</h1>
+  <div class="page-header-icon">
+    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z"/>
+      <path d="M9 21V13h6v8"/>
+    </svg>
+  </div>
   {% if current_user %}
     <p class="subtitle">Welkom, {{ current_user.voornaam }}</p>
   {% endif %}
@@ -129,25 +134,31 @@
   </div>
 
   {# ── Bulk acties ─────────────────────────────────────────────────────────── #}
-  <div class="bulk-acties">
-    <form method="post" action="/voor-alles-afmelden"
-          data-bevestig="Wil je je afmelden voor alle komende evenementen waarvoor je bent aangemeld?">
-  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-      <button type="submit" class="btn btn-secondary">Voor alles afmelden</button>
-    </form>
-    <form method="post" action="/voor-alles-aanmelden"
-          data-bevestig="Wil je je aanmelden voor alle komende evenementen?">
-  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+  <div class="bulk-acties-wrapper">
+    <div class="bulk-partner-keuze">
       <label class="toggle-item bulk-partner-label">
-        <input type="checkbox" id="bulk-met-partner" name="met_partner" value="1" autocomplete="off">
+        <input type="checkbox" id="bulk-met-partner" autocomplete="off">
         Met partner
       </label>
       <div id="bulk-partner-velden" class="bulk-partner-velden" hidden>
-        <input type="text" name="partner_voornaam" placeholder="Voornaam partner" autocomplete="off">
-        <input type="text" name="partner_achternaam" placeholder="Achternaam" autocomplete="off">
+        <input type="text" id="bulk-partner-voornaam" placeholder="Voornaam partner" autocomplete="off">
+        <input type="text" id="bulk-partner-achternaam" placeholder="Achternaam" autocomplete="off">
       </div>
-      <button type="submit" class="btn btn-primary">Voor alles aanmelden</button>
-    </form>
+    </div>
+    <div class="bulk-acties">
+      <form method="post" action="/voor-alles-afmelden"
+            id="bulk-afmelden-form"
+            data-bevestig="Wil je je afmelden voor alle komende evenementen waarvoor je bent aangemeld?">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+        <button type="submit" class="btn btn-secondary">Voor alles afmelden</button>
+      </form>
+      <form method="post" action="/voor-alles-aanmelden"
+            id="bulk-aanmelden-form"
+            data-bevestig="Wil je je aanmelden voor alle komende evenementen?">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+        <button type="submit" class="btn btn-primary">Voor alles aanmelden</button>
+      </form>
+    </div>
   </div>
 {% endif %}
 
@@ -184,15 +195,21 @@
     {% set reg = user_regs.get(evening.id) %}
     <section class="card event-card">
       <div class="event-header">
-        <div>
-          <div class="event-date">{{ evening.datum.strftime('%A %d %B %Y') }}</div>
-          <div class="event-name">{{ evening.naam or evening.type }}</div>
-          {% if termijn_deadlines.get(evening.id) %}
-            {% set dl = termijn_deadlines[evening.id] %}
-            <div class="event-termijn">
-              &#9200; Inschrijven voor {{ dl.strftime('%A %d %B, %H:%M') }}
-            </div>
-          {% endif %}
+        <div class="event-header-left">
+          <div class="event-date-badge">
+            <span class="date-badge-month">{{ evening.datum.strftime('%b') }}</span>
+            <span class="date-badge-day">{{ evening.datum.strftime('%d') }}</span>
+            <span class="date-badge-weekday">{{ evening.datum.strftime('%a') }}</span>
+          </div>
+          <div>
+            <div class="event-name">{{ evening.naam or evening.type }}</div>
+            {% if termijn_deadlines.get(evening.id) %}
+              {% set dl = termijn_deadlines[evening.id] %}
+              <div class="event-termijn">
+                &#9200; Inschrijven voor {{ dl.strftime('%A %d %B, %H:%M') }}
+              </div>
+            {% endif %}
+          </div>
         </div>
         <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
       </div>
@@ -266,48 +283,90 @@
 })();
 
 (function() {
-  function koppelPartnerToggle(checkboxId, veldenId) {
-    var cb = document.getElementById(checkboxId);
-    var velden = document.getElementById(veldenId);
-    if (!cb || !velden) return;
-    cb.addEventListener('change', function() {
-      velden.hidden = !cb.checked;
-      if (!cb.checked) {
-        velden.querySelectorAll('input[type="text"]').forEach(function(inp) { inp.value = ''; });
+  // Toggle voor "definitief aanmelden" (ongewijzigd)
+  var cbDef = document.getElementById('definitief-met-partner');
+  var veldenDef = document.getElementById('definitief-partner-velden');
+  if (cbDef && veldenDef) {
+    cbDef.addEventListener('change', function() {
+      veldenDef.hidden = !cbDef.checked;
+      if (!cbDef.checked) {
+        veldenDef.querySelectorAll('input[type="text"]').forEach(function(inp) { inp.value = ''; });
       }
     });
   }
-  koppelPartnerToggle('bulk-met-partner', 'bulk-partner-velden');
-  koppelPartnerToggle('definitief-met-partner', 'definitief-partner-velden');
+})();
+
+(function() {
+  // Bulk "Met partner": gedeeld boven beide knoppen
+  var cb       = document.getElementById('bulk-met-partner');
+  var velden   = document.getElementById('bulk-partner-velden');
+  var vnInput  = document.getElementById('bulk-partner-voornaam');
+  var anInput  = document.getElementById('bulk-partner-achternaam');
+  if (!cb || !velden) return;
+
+  cb.addEventListener('change', function() {
+    velden.hidden = !cb.checked;
+    if (!cb.checked) {
+      if (vnInput) vnInput.value = '';
+      if (anInput) anInput.value = '';
+    }
+  });
+
+  // Injecteer partner-velden in een form vlak voor submit
+  function injecteer(form) {
+    ['met_partner','partner_voornaam','partner_achternaam'].forEach(function(n) {
+      form.querySelectorAll('input[name="'+n+'"]').forEach(function(el) { el.remove(); });
+    });
+    if (!cb.checked) return;
+    [
+      ['met_partner', '1'],
+      ['partner_voornaam', vnInput ? vnInput.value.trim() : ''],
+      ['partner_achternaam', anInput ? anInput.value.trim() : ''],
+    ].forEach(function(paar) {
+      var inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = paar[0]; inp.value = paar[1];
+      form.appendChild(inp);
+    });
+  }
+
+  // Patch form.submit() zodat injectie ook werkt via het bevestig-modal
+  ['bulk-afmelden-form','bulk-aanmelden-form'].forEach(function(id) {
+    var form = document.getElementById(id);
+    if (!form) return;
+    var origSubmit = HTMLFormElement.prototype.submit.bind(form);
+    form.submit = function() { injecteer(form); origSubmit(); };
+    form.addEventListener('submit', function() { injecteer(form); });
+  });
 })();
 </script>
 <style>
 .filter-tabs-wrapper { display: flex; align-items: center; }
 .filter-tab--weergave { background: none; border: none; cursor: pointer; font: inherit; }
+.bulk-acties-wrapper { margin-top: .75rem; }
+.bulk-partner-keuze { margin-bottom: .6rem; }
 .bulk-acties {
   display: flex;
   gap: .75rem;
-  margin-top: .75rem;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
 }
 .bulk-partner-label {
   display: flex;
   align-items: center;
   gap: .35rem;
   font-size: .875rem;
-  margin-bottom: .35rem;
   cursor: pointer;
+  margin-bottom: 0;
 }
 .bulk-partner-velden {
   display: flex;
   gap: .4rem;
   flex-wrap: wrap;
-  margin-bottom: .4rem;
+  margin-top: .35rem;
 }
 .bulk-partner-velden input {
   flex: 1;
-  min-width: 100px;
+  min-width: 120px;
   padding: .3rem .5rem;
   border: 1px solid var(--border, #ccc);
   border-radius: 4px;

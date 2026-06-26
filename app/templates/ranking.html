@@ -1,9 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Ranking — Crash{% endblock %}
+{% block title %}Ranking — {{ club_naam }}{% endblock %}
 {% block content %}
 
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem;">
+  <h1 style="margin:0;">Ranking</h1>
+  <a href="/ranking/mijn-overzicht{% if seizoen_id %}?seizoen_id={{ seizoen_id }}{% endif %}"
+     class="btn btn-secondary" style="font-size:.875rem;">Mijn overzicht</a>
+</div>
+
 <div style="margin-bottom:1.25rem;">
-  <h1 style="margin:0 0 1rem;">Ranking</h1>
 
   {# ── Seizoenskeuze ── #}
   <form method="get" action="/ranking" style="margin-bottom:1rem;">
@@ -79,14 +84,16 @@
           <th>Naam</th>
           <th style="width:6rem;text-align:center;">Deelnames</th>
           <th style="width:7rem;text-align:center;">Gem. rang</th>
+          <th style="width:7rem;text-align:center;">Gem. deeln.</th>
         </tr></thead>
         <tbody>
           {% for s in hoofd_ranking %}
             <tr>
               <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
-              <td>{{ s.naam }}</td>
+              <td {% if (s.key is defined and s.key == huidig_lidnummer) or s.naam == huidig_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.naam }}</td>
               <td style="text-align:center;">{{ s.deelnames }}</td>
               <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+              <td style="text-align:center;">{{ "%.1f"|format(s.gem_n_deelnemers) }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -107,14 +114,16 @@
           <th>Naam</th>
           <th style="width:6rem;text-align:center;">Deelnames</th>
           <th style="width:7rem;text-align:center;">Gem. rang</th>
+          <th style="width:7rem;text-align:center;">Gem. deeln.</th>
         </tr></thead>
         <tbody>
           {% for s in volledige_lijst %}
             <tr {% if s.deelnames < drempel %}style="opacity:.5;"{% endif %}>
               <td style="font-weight:600;">{{ s.rang }}</td>
-              <td>{{ s.naam }}</td>
+              <td {% if (s.key is defined and s.key == huidig_lidnummer) or s.naam == huidig_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.naam }}</td>
               <td style="text-align:center;">{{ s.deelnames }}</td>
               <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+              <td style="text-align:center;">{{ "%.1f"|format(s.gem_n_deelnemers) }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -145,14 +154,16 @@
           <th>Naam</th>
           <th style="width:6rem;text-align:center;">Deelnames</th>
           <th style="width:7rem;text-align:center;">Gem. rang</th>
+          <th style="width:7rem;text-align:center;">Gem. deeln.</th>
         </tr></thead>
         <tbody>
           {% for s in hoofd_ranking %}
             <tr>
               <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
-              <td>{{ s.naam }}</td>
+              <td {% if (s.key is defined and s.key == huidig_lidnummer) or s.naam == huidig_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.naam }}</td>
               <td style="text-align:center;">{{ s.deelnames }}</td>
               <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+              <td style="text-align:center;">{{ "%.1f"|format(s.gem_n_deelnemers) }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -173,14 +184,16 @@
           <th>Naam</th>
           <th style="width:6rem;text-align:center;">Deelnames</th>
           <th style="width:7rem;text-align:center;">Gem. rang</th>
+          <th style="width:7rem;text-align:center;">Gem. deeln.</th>
         </tr></thead>
         <tbody>
           {% for s in volledige_lijst %}
             <tr {% if s.deelnames < drempel %}style="opacity:.5;"{% endif %}>
               <td style="font-weight:600;">{{ s.rang }}</td>
-              <td>{{ s.naam }}</td>
+              <td {% if (s.key is defined and s.key == huidig_lidnummer) or s.naam == huidig_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.naam }}</td>
               <td style="text-align:center;">{{ s.deelnames }}</td>
               <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+              <td style="text-align:center;">{{ "%.1f"|format(s.gem_n_deelnemers) }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -206,14 +219,16 @@
           <th>Naam</th>
           <th style="width:6rem;text-align:center;">Deelnames</th>
           <th style="width:7rem;text-align:center;">Gem. rang</th>
+          <th style="width:7rem;text-align:center;">Gem. deeln.</th>
         </tr></thead>
         <tbody>
           {% for s in hoofd_ranking %}
             <tr>
               <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
-              <td>{{ s.naam }}</td>
+              <td {% if (s.key is defined and s.key == huidig_lidnummer) or s.naam == huidig_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.naam }}</td>
               <td style="text-align:center;">{{ s.deelnames }}</td>
               <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+              <td style="text-align:center;">{{ "%.1f"|format(s.gem_n_deelnemers) }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -242,7 +257,7 @@
           {% for s in hoofd_ranking %}
             <tr>
               <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
-              <td>{{ s.naam }}</td>
+              <td {% if (s.key is defined and s.key == huidig_lidnummer) or s.naam == huidig_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.naam }}</td>
               <td style="text-align:center;">{{ s.deelnames }}</td>
               <td style="text-align:right;font-variant-numeric:tabular-nums;">
                 {% if s.imp_totaal > 0 %}+{% endif %}{{ s.imp_totaal }}
@@ -276,7 +291,7 @@
           {% for s in volledige_lijst %}
             <tr {% if s.deelnames < drempel %}style="opacity:.5;"{% endif %}>
               <td style="font-weight:600;">{{ s.rang }}</td>
-              <td>{{ s.naam }}</td>
+              <td {% if (s.key is defined and s.key == huidig_lidnummer) or s.naam == huidig_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.naam }}</td>
               <td style="text-align:center;">{{ s.deelnames }}</td>
               <td style="text-align:right;font-variant-numeric:tabular-nums;">
                 {% if s.imp_totaal > 0 %}+{% endif %}{{ s.imp_totaal }}
@@ -320,7 +335,7 @@
           {% for s in hoofd_ranking %}
             <tr>
               <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
-              <td>{{ s.naam }}</td>
+              <td {% if (s.key is defined and s.key == huidig_lidnummer) or s.naam == huidig_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.naam }}</td>
               <td style="text-align:center;">{{ s.deelnames }}</td>
               <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
               <td style="text-align:center;font-weight:500;">{{ "%.2f"|format(s.std_dev) }}</td>
@@ -360,7 +375,7 @@
           {% for s in partner_lijst %}
             <tr>
               <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
-              <td>{{ s.display_naam }}</td>
+              <td {% if huidig_naam in s.display_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.display_naam }}</td>
               <td style="text-align:center;font-weight:600;">{{ s.samen }}</td>
               <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
               <td style="text-align:right;font-variant-numeric:tabular-nums;">
@@ -414,14 +429,16 @@
           <th>Naam</th>
           <th style="width:7rem;text-align:center;">Deelnames</th>
           <th style="width:7rem;text-align:center;">Gem. rang</th>
+          <th style="width:7rem;text-align:center;">Gem. deeln.</th>
         </tr></thead>
         <tbody>
           {% for s in hoofd_ranking %}
             <tr>
               <td style="font-weight:600;color:var(--color-primary,#1e3a5f);">{{ s.rang }}</td>
-              <td>{{ s.naam }}</td>
+              <td {% if (s.key is defined and s.key == huidig_lidnummer) or s.naam == huidig_naam %}style="font-weight:600;color:var(--color-link,#1a6fb5);"{% endif %}>{{ s.naam }}</td>
               <td style="text-align:center;">{{ s.deelnames }}</td>
               <td style="text-align:center;">{{ "%.2f"|format(s.gem_rang) }}</td>
+              <td style="text-align:center;">{{ "%.1f"|format(s.gem_n_deelnemers) }}</td>
             </tr>
           {% endfor %}
         </tbody>

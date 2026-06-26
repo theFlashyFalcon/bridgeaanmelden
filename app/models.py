@@ -72,6 +72,7 @@ class Member(Base):
     wachtwoord_hash = Column(String, nullable=True)
     verwijderd_op = Column(DateTime, nullable=True)
     verborgen_types = Column(String, nullable=True)
+    toestemming_op = Column(DateTime, nullable=True)
 
     invitations = relationship("Invitation", back_populates="member")
     registrations_as_person1 = relationship(
@@ -104,6 +105,7 @@ class AccountRequest(Base):
     status = Column(String, default=AccountRequestStatus.wachtend, nullable=False)
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
     beoordeeld_op = Column(DateTime, nullable=True)
+    toestemming_op = Column(DateTime, nullable=True)
 
 
 class Invitation(Base):

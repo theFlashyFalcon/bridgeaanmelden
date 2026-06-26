@@ -13,7 +13,7 @@
       <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
         <span class="role-badge-tabel role-{{ member.role }}">{{ member.role }}</span>
         {% if lid_match %}
-          <span class="badge badge-lid">Crash-lid</span>
+          <span class="badge badge-lid">{{ club_naam }}-lid</span>
         {% endif %}
         {% if member.verwijderd_op %}
           <span class="badge badge-danger">Verwijderd</span>
@@ -44,7 +44,7 @@
     <dd>{{ member.role }}</dd>
     <dt>Training toegestaan</dt>
     <dd>{{ 'Ja' if member.training_eligible else 'Nee' }}</dd>
-    <dt>Crash-lid (NBB-lijst)</dt>
+    <dt>{{ club_naam }}-lid (NBB-lijst)</dt>
     <dd>
       {% if lid_match %}
         Ja — {{ lid_match.voornaam }} {{ lid_match.achternaam }}

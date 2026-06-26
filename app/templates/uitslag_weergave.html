@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Uitslag — Crash{% endblock %}
+{% block title %}Uitslag — {{ club_naam }}{% endblock %}
 {% block content %}
 
 {# ── Terug-knop ── #}
@@ -59,7 +59,8 @@
               <th style="width:3.5rem;">#</th>
               <th>Paar</th>
               <th style="width:5rem;text-align:center;">Lijn</th>
-              <th style="width:6rem;text-align:right;">Score (IMP)</th>
+              <th style="width:6rem;text-align:right;">Gem. IMP</th>
+              <th style="width:6rem;text-align:right;">Totaal IMP</th>
             </tr>
           </thead>
           <tbody>
@@ -70,6 +71,9 @@
                 <td style="text-align:center;">{{ p.sectie }}</td>
                 <td style="text-align:right;font-variant-numeric:tabular-nums;">
                   {% if p.score > 0 %}+{% endif %}{{ "%.2f"|format(p.score) }}
+                </td>
+                <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                  {% if p.absolute_result > 0 %}+{% endif %}{{ p.absolute_result }}
                 </td>
               </tr>
             {% endfor %}
@@ -88,7 +92,8 @@
             <tr>
               <th style="width:3.5rem;">#</th>
               <th>Paar</th>
-              <th style="width:6rem;text-align:right;">Score (IMP)</th>
+              <th style="width:6rem;text-align:right;">Gem. IMP</th>
+              <th style="width:6rem;text-align:right;">Totaal IMP</th>
             </tr>
           </thead>
           <tbody>
@@ -98,6 +103,9 @@
                 <td>{{ p.paar_naam }}</td>
                 <td style="text-align:right;font-variant-numeric:tabular-nums;">
                   {% if p.score > 0 %}+{% endif %}{{ "%.2f"|format(p.score) }}
+                </td>
+                <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                  {% if p.absolute_result > 0 %}+{% endif %}{{ p.absolute_result }}
                 </td>
               </tr>
             {% endfor %}
@@ -116,7 +124,8 @@
             <tr>
               <th style="width:3.5rem;">#</th>
               <th>Paar</th>
-              <th style="width:6rem;text-align:right;">Score (IMP)</th>
+              <th style="width:6rem;text-align:right;">Gem. IMP</th>
+              <th style="width:6rem;text-align:right;">Totaal IMP</th>
             </tr>
           </thead>
           <tbody>
@@ -126,6 +135,9 @@
                 <td>{{ p.paar_naam }}</td>
                 <td style="text-align:right;font-variant-numeric:tabular-nums;">
                   {% if p.score > 0 %}+{% endif %}{{ "%.2f"|format(p.score) }}
+                </td>
+                <td style="text-align:right;font-variant-numeric:tabular-nums;">
+                  {% if p.absolute_result > 0 %}+{% endif %}{{ p.absolute_result }}
                 </td>
               </tr>
             {% endfor %}

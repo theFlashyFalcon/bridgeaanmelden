@@ -107,21 +107,25 @@ def _speler_key(r: SpelerResultaat) -> str:
     return r.league_id or r.global_id or r.naam
 
 
-def _aggregeer_rang(spelers: list[SpelerResultaat]) -> list[dict]:
+def _aggregeer_rang(spelers_per_avond: list[list[SpelerResultaat]]) -> list[dict]:
     """Gemiddelde rangpositie per speler. Laag = goed."""
     per: dict[str, dict] = {}
-    for r in spelers:
-        k = _speler_key(r)
-        if not k:
-            continue
-        if k not in per:
-            per[k] = {"naam": r.naam, "deelnames": 0, "rang_totaal": 0}
-        per[k]["deelnames"] += 1
-        per[k]["rang_totaal"] += r.rang
+    for spelers in spelers_per_avond:
+        n = len(spelers)
+        for r in spelers:
+            k = _speler_key(r)
+            if not k:
+                continue
+            if k not in per:
+                per[k] = {"naam": r.naam, "key": k, "deelnames": 0, "rang_totaal": 0, "n_deelnemers_totaal": 0}
+            per[k]["deelnames"] += 1
+            per[k]["rang_totaal"] += r.rang
+            per[k]["n_deelnemers_totaal"] += n
 
     resultaat = []
     for s in per.values():
         s["gem_rang"] = round(s["rang_totaal"] / s["deelnames"], 2)
+        s["gem_n_deelnemers"] = round(s["n_deelnemers_totaal"] / s["deelnames"], 1)
         resultaat.append(s)
 
     resultaat.sort(key=lambda s: (s["gem_rang"], -s["deelnames"]))
@@ -137,7 +141,7 @@ def _aggregeer_imps(avonden: list[dict]) -> list[dict]:
             if not k:
                 continue
             if k not in per:
-                per[k] = {"naam": r.naam, "deelnames": 0, "imp_totaal": 0, "boards_totaal": 0}
+                per[k] = {"naam": r.naam, "key": k, "deelnames": 0, "imp_totaal": 0, "boards_totaal": 0}
             per[k]["deelnames"] += 1
             per[k]["imp_totaal"] += r.absolute_result
             per[k]["boards_totaal"] += r.number_of_boards
@@ -167,7 +171,7 @@ def _aggregeer_consistentie(avonden: list[dict], sleutel: str = "spanning_speler
             if not k:
                 continue
             if k not in per:
-                per[k] = {"naam": r.naam, "rangen": []}
+                per[k] = {"naam": r.naam, "key": k, "rangen": []}
             per[k]["rangen"].append(r.rang)
 
     resultaat = []
@@ -227,8 +231,7 @@ def _aggregeer_vaste_partners(avonden: list[dict], min_samen: int = 2) -> list[d
 def _aggregeer_vorm(avonden: list[dict], n_avonden: int) -> list[dict]:
     """Spanning-ranking van de meest recente N avonden."""
     recente = avonden[-n_avonden:] if n_avonden < len(avonden) else avonden
-    spelers = [r for avond in recente for r in avond["spanning_spelers"]]
-    return _aggregeer_rang(spelers)
+    return _aggregeer_rang([avond["spanning_spelers"] for avond in recente])
 
 
 # ── Route ──────────────────────────────────────────────────────────────────────
@@ -278,26 +281,22 @@ async def ranking_pagina(request: Request, db: Session = Depends(get_db)):
 
     if n_uitslagen > 0:
         if weergave == "spanning":
-            spelers = [r for a in avonden for r in a["spanning_spelers"]]
-            alle = _aggregeer_rang(spelers)
+            alle = _aggregeer_rang([a["spanning_spelers"] for a in avonden])
             hoofd_ranking = [s for s in alle if s["deelnames"] >= drempel]
             volledige_lijst = alle
 
         elif weergave == "lijn_a":
-            spelers = [r for a in avonden for r in a["lijn_a_spelers"]]
-            alle = _aggregeer_rang(spelers)
+            alle = _aggregeer_rang([a["lijn_a_spelers"] for a in avonden])
             hoofd_ranking = [s for s in alle if s["deelnames"] >= drempel]
             volledige_lijst = alle
 
         elif weergave == "lijn_b":
-            spelers = [r for a in avonden for r in a["lijn_b_spelers"]]
-            alle = _aggregeer_rang(spelers)
+            alle = _aggregeer_rang([a["lijn_b_spelers"] for a in avonden])
             hoofd_ranking = [s for s in alle if s["deelnames"] >= drempel]
             volledige_lijst = alle
 
         elif weergave == "iedereen":
-            spelers = [r for a in avonden for r in a["spanning_spelers"]]
-            hoofd_ranking = _aggregeer_rang(spelers)
+            hoofd_ranking = _aggregeer_rang([a["spanning_spelers"] for a in avonden])
 
         elif weergave == "imp_totaal":
             hoofd_ranking = _aggregeer_imps(avonden)
@@ -320,6 +319,9 @@ async def ranking_pagina(request: Request, db: Session = Depends(get_db)):
     for i, s in enumerate(partner_lijst, 1):
         s["rang"] = i
 
+    huidig_naam = f"{current_user.voornaam} {current_user.achternaam}"
+    huidig_lidnummer = current_user.lidnummer
+
     return templates.TemplateResponse(
         request,
         "ranking.html",
@@ -337,6 +339,154 @@ async def ranking_pagina(request: Request, db: Session = Depends(get_db)):
             "volledige_lijst": volledige_lijst,
             "partner_lijst": partner_lijst,
             "waarschuwingen": waarschuwingen,
+            "huidig_naam": huidig_naam,
+            "huidig_lidnummer": huidig_lidnummer,
+            "welkom": False,
+        },
+    )
+
+
+# ── Mijn overzicht ─────────────────────────────────────────────────────────────
+
+def _zoek_speler(lijst: list[dict], lidnummer: str, naam: str) -> dict | None:
+    for s in lijst:
+        if (s.get("key") == lidnummer) or s.get("naam") == naam:
+            return s
+    return None
+
+
+@router.get("/mijn-overzicht")
+async def mijn_overzicht(request: Request, db: Session = Depends(get_db)):
+    current_user = get_current_user(request, db)
+    if not current_user:
+        raise HTTPException(status_code=401)
+
+    display_role = _get_display_role(request, current_user)
+    seizoenen = db.query(Season).order_by(Season.start_datum.desc()).all()
+    actief = next((s for s in seizoenen if s.actief), None)
+
+    try:
+        seizoen_id = int(request.query_params.get("seizoen_id", ""))
+    except (ValueError, TypeError):
+        seizoen_id = actief.id if actief else (seizoenen[0].id if seizoenen else None)
+
+    avonden, _ = _laad_avonden(db, seizoen_id) if seizoen_id else ([], [])
+    n_uitslagen = len(avonden)
+
+    huidig_naam = f"{current_user.voornaam} {current_user.achternaam}"
+    huidig_lidnummer = current_user.lidnummer
+
+    mijn_rankings: list[dict] = []
+
+    if n_uitslagen > 0:
+        drempel = _drempel(n_uitslagen)
+
+        def _voeg_toe(type_label: str, weergave_key: str, alle: list[dict], hoofd: list[dict],
+                      stat_label: str, stat_fn):
+            for i, s in enumerate(alle, 1):
+                s["rang_totaal_pos"] = i
+            for i, s in enumerate(hoofd, 1):
+                s["hoofd_rang"] = i
+            mijn = _zoek_speler(alle, huidig_lidnummer, huidig_naam)
+            if mijn:
+                mijn_rankings.append({
+                    "type": type_label,
+                    "weergave": weergave_key,
+                    "rang": mijn.get("hoofd_rang"),
+                    "totaal": len(hoofd),
+                    "in_hoofdranking": mijn["deelnames"] >= drempel,
+                    "deelnames": mijn["deelnames"],
+                    "stat_label": stat_label,
+                    "stat": stat_fn(mijn),
+                })
+
+        # Spanning
+        alle_sp = _aggregeer_rang([a["spanning_spelers"] for a in avonden])
+        _voeg_toe("Algemene ranking", "spanning",
+                  alle_sp, [s for s in alle_sp if s["deelnames"] >= drempel],
+                  "Gem. rang", lambda s: f"{s['gem_rang']:.2f}")
+
+        # Lijn A
+        lijn_a_per_avond = [a["lijn_a_spelers"] for a in avonden if a["lijn_a_spelers"]]
+        if lijn_a_per_avond:
+            alle_a = _aggregeer_rang(lijn_a_per_avond)
+            _voeg_toe("Lijn A", "lijn_a",
+                      alle_a, [s for s in alle_a if s["deelnames"] >= drempel],
+                      "Gem. rang", lambda s: f"{s['gem_rang']:.2f}")
+
+        # Lijn B
+        lijn_b_per_avond = [a["lijn_b_spelers"] for a in avonden if a["lijn_b_spelers"]]
+        if lijn_b_per_avond:
+            alle_b = _aggregeer_rang(lijn_b_per_avond)
+            _voeg_toe("Lijn B", "lijn_b",
+                      alle_b, [s for s in alle_b if s["deelnames"] >= drempel],
+                      "Gem. rang", lambda s: f"{s['gem_rang']:.2f}")
+
+        # IMP totaal
+        alle_imp = _aggregeer_imps(avonden)
+        for i, s in enumerate(alle_imp, 1):
+            s["rang"] = i
+            s["hoofd_rang"] = i
+        mijn_imp = _zoek_speler(alle_imp, huidig_lidnummer, huidig_naam)
+        if mijn_imp:
+            mijn_rankings.append({
+                "type": "IMP totaal",
+                "weergave": "imp_totaal",
+                "rang": mijn_imp["rang"],
+                "totaal": len(alle_imp),
+                "in_hoofdranking": True,
+                "deelnames": mijn_imp["deelnames"],
+                "stat_label": "Totaal IMP",
+                "stat": f"{'+' if mijn_imp['imp_totaal'] > 0 else ''}{mijn_imp['imp_totaal']}",
+            })
+
+        # Consistentie
+        alle_cons = _aggregeer_consistentie(avonden)
+        for i, s in enumerate(alle_cons, 1):
+            s["rang"] = i
+            s["hoofd_rang"] = i
+        mijn_cons = _zoek_speler(alle_cons, huidig_lidnummer, huidig_naam)
+        if mijn_cons:
+            mijn_rankings.append({
+                "type": "Consistentie",
+                "weergave": "consistentie",
+                "rang": mijn_cons["rang"],
+                "totaal": len(alle_cons),
+                "in_hoofdranking": True,
+                "deelnames": mijn_cons["deelnames"],
+                "stat_label": "Std. afwijking",
+                "stat": f"{mijn_cons['std_dev']:.2f}",
+            })
+
+        # Vorm (laatste 5)
+        alle_vorm = _aggregeer_vorm(avonden, 5)
+        for i, s in enumerate(alle_vorm, 1):
+            s["rang"] = i
+            s["hoofd_rang"] = i
+        mijn_vorm = _zoek_speler(alle_vorm, huidig_lidnummer, huidig_naam)
+        if mijn_vorm:
+            mijn_rankings.append({
+                "type": "Vorm (laatste 5 avonden)",
+                "weergave": "vorm",
+                "rang": mijn_vorm["rang"],
+                "totaal": len(alle_vorm),
+                "in_hoofdranking": True,
+                "deelnames": mijn_vorm["deelnames"],
+                "stat_label": "Gem. rang",
+                "stat": f"{mijn_vorm['gem_rang']:.2f}",
+            })
+
+    return templates.TemplateResponse(
+        request,
+        "mijn_overzicht.html",
+        {
+            "current_user": current_user,
+            "display_role": display_role,
+            "seizoenen": seizoenen,
+            "seizoen_id": seizoen_id,
+            "n_uitslagen": n_uitslagen,
+            "mijn_rankings": mijn_rankings,
+            "huidig_naam": huidig_naam,
             "welkom": False,
         },
     )

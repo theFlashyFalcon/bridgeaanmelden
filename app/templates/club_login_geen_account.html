@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Geen account — {{ club_naam }}{% endblock %}
+
+{% block content %}
+<section class="card login-card" style="max-width: 460px;">
+  <h1>Geen account bij {{ club_naam }}</h1>
+  <div class="alert alert-warning">
+    Er is geen account gevonden voor <strong>{{ email }}</strong> bij {{ club_naam }}.
+    Vraag een beheerder om je een uitnodigingslink te sturen, of maak een account aan.
+  </div>
+  <div style="display:flex;gap:.75rem;margin-top:1.25rem;flex-wrap:wrap;">
+    <a href="/registreren" class="btn btn-primary">Account aanmaken</a>
+    <a href="/login" class="btn btn-secondary">Inloggen</a>
+  </div>
+</section>
+{% endblock %}

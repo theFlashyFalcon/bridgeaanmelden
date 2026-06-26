@@ -10,6 +10,7 @@ class PaarResultaat:
     rang: int
     score: float
     sectie: str  # 'A' of 'B'
+    absolute_result: int = 0  # totale IMP die avond
 
 
 @dataclass
@@ -98,7 +99,7 @@ def parse_nbb_xml(xml_tekst: str) -> dict:
         sectie = (res.findtext("SectionLetters") or "").strip()
         paar_naam = (res.findtext("ParticipantName") or "").strip()
 
-        paar = PaarResultaat(paar_naam=paar_naam, rang=rang, score=score, sectie=sectie)
+        paar = PaarResultaat(paar_naam=paar_naam, rang=rang, score=score, sectie=sectie, absolute_result=absolute_result)
         if is_spanning:
             spanning_paren.append(paar)
         if is_eigen:

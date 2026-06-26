@@ -12,16 +12,18 @@
   --color-error:     #dc2626;
   --color-success:   #16a34a;
   --color-warning:   #d97706;
-  --radius:          5px;
-  --shadow:          0 1px 3px rgba(0,0,0,.06);
+  --radius:          10px;
+  --shadow:          0 2px 8px rgba(0,0,0,.08);
   --transition:      0.15s ease;
-  --max-width:       640px;
+  --max-width:       860px;
 }
 
 html { font-size: 16px; }
 
+[hidden] { display: none !important; }
+
 body {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   background: var(--color-bg);
   color: var(--color-text);
   line-height: 1.6;
@@ -48,11 +50,12 @@ a:hover { text-decoration: underline; }
 }
 
 .nav-brand {
-  font-size: .95rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #fff;
   text-decoration: none;
-  letter-spacing: .01em;
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
 .nav-brand:hover { opacity: .8; text-decoration: none; }
 
@@ -113,12 +116,15 @@ a:hover { text-decoration: underline; }
   transition: opacity var(--transition);
   line-height: 1.4;
 }
-.btn:hover { opacity: .82; text-decoration: none; }
-.btn:active { opacity: .7; }
+.btn:hover { text-decoration: none; }
+.btn:active { opacity: .85; }
 
 .btn-primary  { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+.btn-primary:hover { background: #162d4a; border-color: #162d4a; }
 .btn-secondary { background: #fff; color: var(--color-text); border-color: var(--color-border); }
+.btn-secondary:hover { background: #f3f4f6; }
 .btn-danger   { background: var(--color-error); color: #fff; border-color: var(--color-error); }
+.btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
 
 .action-buttons { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
 
@@ -164,6 +170,7 @@ a:hover { text-decoration: underline; }
 .page-header { padding: .25rem 0 1rem; }
 .page-header h1 { font-size: 1.35rem; font-weight: 600; color: var(--color-text); }
 .page-header .subtitle { color: var(--color-muted); font-size: .875rem; margin-top: .2rem; }
+.page-header-icon { color: var(--color-primary); margin-bottom: .25rem; }
 
 /* ── Tables ─────────────────────────────────────────────────────────────────── */
 .data-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
@@ -487,8 +494,62 @@ footer {
   .events-grid { grid-template-columns: 1fr; }
 }
 
+/* ── Kalender-badge ──────────────────────────────────────────────────────────── */
+.event-header-left {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+.event-date-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 42px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 7px;
+  overflow: hidden;
+  flex-shrink: 0;
+  text-align: center;
+}
+.date-badge-month {
+  background: var(--color-primary);
+  color: #fff;
+  font-size: .6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: .15rem .4rem;
+  width: 100%;
+}
+.date-badge-day {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.2;
+  padding: .1rem .4rem .05rem;
+}
+.date-badge-weekday {
+  font-size: .55rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding-bottom: .2rem;
+}
+
 /* ── Event cards ─────────────────────────────────────────────────────────────── */
-.event-card { padding: 1rem; }
+.event-card {
+  padding: 1rem;
+  border-width: 2px;
+  transition: box-shadow var(--transition), border-color var(--transition);
+}
+.event-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+.event-card:has(.label-clubavond),
+.event-card:has(.label-regulier)            { border-color: #a5b4fc; }
+.event-card:has(.label-training),
+.event-card:has(.label-jeugdtraining)       { border-color: #86efac; }
+.event-card:has(.label-avondeten),
+.event-card:has(.label-eten-voor-jeugdtraining) { border-color: #fcd34d; }
+.event-card:has(.label-speciaal)            { border-color: #f9a8d4; }
 .event-header {
   display: flex;
   justify-content: space-between;
@@ -509,7 +570,7 @@ footer {
   display: inline-block;
 }
 .event-status--aangemeld { background: #f0fdf4; color: #166534; }
-.event-status--niet { background: var(--color-bg); color: var(--color-muted); }
+.event-status--niet { background: #fff7ed; color: #c2410c; }
 
 .event-actions { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .5rem; }
 
@@ -733,15 +794,15 @@ footer {
 
 .filter-tab {
   display: inline-block;
-  padding: .3rem .75rem;
-  border-radius: 3px;
+  padding: .3rem .9rem;
+  border-radius: 999px;
   font-size: .8rem;
   font-weight: 500;
   border: 1px solid var(--color-border);
   background: #fff;
   color: var(--color-muted);
   text-decoration: none;
-  transition: background .12s, color .12s;
+  transition: background .12s, color .12s, border-color .12s;
 }
 .filter-tab:hover { background: var(--color-bg); color: var(--color-text); text-decoration: none; }
 
@@ -750,7 +811,7 @@ footer {
   color: #fff;
   border-color: var(--color-primary);
 }
-.filter-tab--active:hover { opacity: .88; }
+.filter-tab--active:hover { background: #162d4a; border-color: #162d4a; }
 
 .filter-tab--clubavond.filter-tab--active,
 .filter-tab--avondeten.filter-tab--active,

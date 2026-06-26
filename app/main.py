@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 from app.auth import SECRET_KEY  # noqa: E402 — must be after load_dotenv
 from app.csrf import require_csrf  # noqa: E402
 from app.database import Base, engine  # noqa: E402
-from app.routes import admin, auth, berichten, evenings, members, registrations, rankings, uitslagen  # noqa: E402
+from app.routes import admin, auth, berichten, clubs, evenings, gdpr, members, registrations, rankings, uitslagen  # noqa: E402
 from app.templates_env import templates as _templates  # noqa: E402
 
 
@@ -105,6 +105,8 @@ def _migrate():
         "ALTER TABLE registrations ADD COLUMN reserve2_naam VARCHAR",
         "ALTER TABLE manual_pairs ADD COLUMN naam_5 VARCHAR",
         "ALTER TABLE manual_pairs ADD COLUMN naam_6 VARCHAR",
+        "ALTER TABLE members ADD COLUMN toestemming_op TIMESTAMP",
+        "ALTER TABLE account_requests ADD COLUMN toestemming_op TIMESTAMP",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -251,24 +253,76 @@ def _seed_admin():
 _seed_admin()
 
 
-def _seed_crash_leden():
+def _seed_leden():
+    from app.config import CLUB_LEDENLIJST_CSV, CLUB_NAAM
     from app.database import SessionLocal
     from app.models import Lid
+    from pathlib import Path
+
+    csv_path = Path(CLUB_LEDENLIJST_CSV)
+    if not csv_path.exists():
+        return
 
     db = SessionLocal()
     try:
         if db.query(Lid).first() is None:
             from scripts.seed_crash_leden import seed
-            n = seed(db)
+            n = seed(db, csv_path=csv_path)
             if n:
-                logger.info("%d leden van Crash geladen.", n)
+                logger.info("%d leden van %s geladen.", n, CLUB_NAAM)
     except Exception as e:
-        logger.warning("Seed crash-leden mislukt: %s", e)
+        logger.warning("Seed leden mislukt: %s", e)
     finally:
         db.close()
 
 
-_seed_crash_leden()
+_seed_leden()
+
+
+def _cleanup_expired_data():
+    """Verwijder verlopen tokens en afgewezen aanvragen (bewaartermijn handhaving)."""
+    from datetime import datetime, timedelta, timezone
+    from app.database import SessionLocal
+    from app.models import AccountRequest, AccountRequestStatus, PasswordResetToken
+
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+
+        deleted_tokens = (
+            db.query(PasswordResetToken)
+            .filter(
+                PasswordResetToken.aangemaakt_op < now - timedelta(hours=24),
+                PasswordResetToken.gebruikt_op.is_(None),
+            )
+            .delete(synchronize_session=False)
+        )
+
+        deleted_requests = (
+            db.query(AccountRequest)
+            .filter(
+                AccountRequest.status == AccountRequestStatus.afgewezen,
+                AccountRequest.aangemaakt_op < now - timedelta(days=90),
+            )
+            .delete(synchronize_session=False)
+        )
+
+        db.commit()
+        if deleted_tokens or deleted_requests:
+            logger.info(
+                "Opschoning: %d verlopen tokens, %d afgewezen aanvragen verwijderd",
+                deleted_tokens,
+                deleted_requests,
+            )
+    except Exception as e:
+        db.rollback()
+        logger.warning("Opschoning mislukt: %s", e)
+    finally:
+        db.close()
+
+
+_cleanup_expired_data()
+
 
 app = FastAPI(
     title="Bridge Club Aanmeldingsapp",
@@ -340,6 +394,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(auth.router)
+app.include_router(clubs.router)
 app.include_router(evenings.router)
 app.include_router(registrations.router)
 app.include_router(members.router)
@@ -347,3 +402,4 @@ app.include_router(admin.router)
 app.include_router(berichten.router)
 app.include_router(rankings.router)
 app.include_router(uitslagen.router)
+app.include_router(gdpr.router)

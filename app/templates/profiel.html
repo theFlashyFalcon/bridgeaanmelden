@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Mijn profiel — Crash{% endblock %}
+{% block title %}Mijn profiel — {{ club_naam }}{% endblock %}
 {% block content %}
 
 <section class="page-header">
@@ -106,6 +106,25 @@
     </div>
   {% else %}
     <p class="empty-state">Nog geen aanmeldingen gevonden.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Mijn gegevens (AVG)</h2>
+  <p style="font-size:.875rem;color:var(--color-muted);margin-bottom:1rem;">
+    Op grond van de AVG heeft u het recht uw gegevens in te zien, te downloaden of uw account te verwijderen.
+    Zie ook het <a href="/privacy">privacybeleid</a>.
+  </p>
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;">
+    <a href="/gdpr/download" class="btn btn-secondary">Mijn gegevens downloaden</a>
+    <form method="post" action="/gdpr/verwijder-account"
+          data-bevestig="Weet u zeker dat u uw account wilt verwijderen? Al uw aanmeldingen worden gewist en dit kan niet ongedaan worden gemaakt.">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+      <button type="submit" class="btn btn-danger">Account verwijderen</button>
+    </form>
+  </div>
+  {% if fout_verwijdering %}
+  <div class="alert alert-error" style="margin-top:.75rem;">Er is een fout opgetreden bij het verwijderen. Neem contact op met de beheerder.</div>
   {% endif %}
 </section>
 

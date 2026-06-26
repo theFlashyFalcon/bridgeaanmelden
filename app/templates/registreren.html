@@ -9,7 +9,7 @@
   {# ── Eindstaten: geen formulier meer nodig ── #}
   {% if melding == "geen_lid_crash" %}
     <div class="alert alert-warning">
-      Volgens onze database ben je geen lid van Crash, een admin moet je aanvraag goedkeuren voordat je de app kunt gebruiken. U krijgt een mail als uw aanvraag goed gekeurd is.
+      Volgens onze database ben je geen lid van {{ club_naam }}, een admin moet je aanvraag goedkeuren voordat je de app kunt gebruiken. U krijgt een mail als uw aanvraag goed gekeurd is.
     </div>
     <p style="text-align:center; margin-top: 1rem;">
       <a href="/" class="btn btn-secondary">Terug naar home</a>
@@ -26,7 +26,7 @@
 
   {% else %}
     <p style="color: var(--color-muted); margin-bottom: 1.25rem;">
-      Vul je gegevens in. Leden van Crash kunnen direct een account aanmaken; anderen worden beoordeeld door een beheerder.
+      Vul je gegevens in. Leden van {{ club_naam }} kunnen direct een account aanmaken; anderen worden beoordeeld door een beheerder.
     </p>
 
     {# ── Specifieke foutmeldingen ── #}
@@ -88,6 +88,12 @@
         <label for="password2">Wachtwoord bevestigen</label>
         <input type="password" id="password2" name="password2" required
                autocomplete="new-password" minlength="8" maxlength="128" placeholder="Herhaal wachtwoord">
+      </div>
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="toestemming" required value="1">
+          Ik ga akkoord met het <a href="/privacy" target="_blank">privacybeleid</a> en geef toestemming voor verwerking van mijn persoonsgegevens voor clubbeheer.
+        </label>
       </div>
       <button type="submit" class="btn btn-primary btn-full">Account aanmaken</button>
     </form>

@@ -21,7 +21,7 @@ from app.database import SessionLocal
 from app.models import Lid
 
 
-CSV_PATH = Path(__file__).parent.parent / "data" / "ledenlijst_nbbr_9040.csv"
+_DEFAULT_CSV_PATH = Path(__file__).parent.parent / "data" / "ledenlijst_nbbr_9040.csv"
 
 # Aantal velden per record in het NBB-Rekenprogramma exportformaat
 _RECORD_SIZE = 16
@@ -77,8 +77,8 @@ def parse_nbbr_csv(content: str) -> list[dict]:
     return records
 
 
-def seed(db=None) -> int:
-    """Voeg ontbrekende Crash-leden toe aan de leden-tabel.
+def seed(db=None, csv_path: Path | None = None) -> int:
+    """Voeg ontbrekende leden toe aan de leden-tabel vanuit een NBB-Rekenprogramma CSV.
 
     Geeft het aantal nieuw toegevoegde records terug.
     """
@@ -86,8 +86,11 @@ def seed(db=None) -> int:
     if db is None:
         db = SessionLocal()
 
+    if csv_path is None:
+        csv_path = _DEFAULT_CSV_PATH
+
     try:
-        content = CSV_PATH.read_text(encoding="utf-8")
+        content = csv_path.read_text(encoding="utf-8")
         records = parse_nbbr_csv(content)
 
         toegevoegd = 0
@@ -114,4 +117,4 @@ def seed(db=None) -> int:
 
 if __name__ == "__main__":
     n = seed()
-    print(f"{n} leden van Crash toegevoegd aan de database.")
+    print(f"{n} leden toegevoegd aan de database.")

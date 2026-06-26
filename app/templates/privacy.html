@@ -1,29 +1,72 @@
 {% extends "base.html" %}
 
-{% block title %}Privacybeleid — Bridge Club{% endblock %}
+{% block title %}Privacybeleid — {{ club_naam }}{% endblock %}
 
 {% block content %}
 <section class="card">
   <h1>Privacybeleid</h1>
+  <p style="color:var(--color-muted);font-size:.875rem;">Laatst bijgewerkt: juni 2026</p>
 
-  <h2>Welke gegevens slaan wij op?</h2>
+  <h2>1. Verwerkingsverantwoordelijke</h2>
+  <p>
+    Bridgeclub {{ club_naam }}<br>
+    Vragen over dit privacybeleid of over uw persoonsgegevens kunt u sturen naar de beheerder via
+    <a href="/login">het contactformulier</a> of per e-mail naar de clubbeheerder.
+  </p>
+
+  <h2>2. Welke gegevens verzamelen wij?</h2>
   <ul>
     <li>Voornaam en achternaam</li>
-    <li>Lidnummer</li>
-    <li>Google-accountidentificator (voor inloggen)</li>
-    <li>Aanmeldingen voor clubavonden en trainingen</li>
+    <li>E-mailadres</li>
+    <li>NBB-lidnummer</li>
+    <li>Wachtwoord (versleuteld opgeslagen, nooit leesbaar)</li>
+    <li>Aanmeldingen voor clubavonden en trainingen (datum, partner, status)</li>
+    <li>Accountrol (lid / wedstrijdleider / admin)</li>
   </ul>
 
-  <h2>Waarvoor gebruiken wij uw gegevens?</h2>
-  <p>Uitsluitend voor het beheren van aanmeldingen voor clubavonden en trainingen van de bridgeclub.</p>
+  <h2>3. Waarvoor gebruiken wij uw gegevens?</h2>
+  <p>Uitsluitend voor:</p>
+  <ul>
+    <li>Het beheren van aanmeldingen voor clubavonden en trainingen</li>
+    <li>Het versturen van uitnodigingen en wachtwoordresetmails</li>
+    <li>Het tonen van de aanwezigheidslijst en ranking aan clubleden</li>
+  </ul>
+  <p><strong>Wettelijke grondslag:</strong> gerechtvaardigd belang van de bridgeclub voor het organiseren van clubactiviteiten (art. 6 lid 1 sub f AVG). Bij aanmelding geeft u ook uitdrukkelijke toestemming voor verwerking van uw gegevens (art. 6 lid 1 sub a AVG).</p>
 
-  <h2>Hoe lang bewaren wij uw gegevens?</h2>
-  <p>Gegevens worden bewaard zolang u lid bent van de club. Na afloop van een seizoen kunnen historische aanmeldingen worden gearchiveerd of verwijderd door de beheerder.</p>
+  <h2>4. Hoe lang bewaren wij uw gegevens?</h2>
+  <ul>
+    <li><strong>Accountgegevens:</strong> zolang u lid bent van de club. Na verwijdering van uw account worden uw gegevens binnen 30 dagen definitief gewist.</li>
+    <li><strong>Aanmeldhistorie:</strong> maximaal 2 jaar na het betreffende seizoen, daarna anoniem gearchiveerd of verwijderd.</li>
+    <li><strong>Wachtwoordresettokens:</strong> automatisch verwijderd na 24 uur.</li>
+    <li><strong>Niet-goedgekeurde accountaanvragen:</strong> verwijderd 90 dagen na afwijzing.</li>
+  </ul>
 
-  <h2>Recht op vergetelheid</h2>
-  <p>U kunt de beheerder verzoeken om uw gegevens te verwijderen. Neem hiervoor contact op via onderstaand e-mailadres.</p>
+  <h2>5. Uw rechten</h2>
+  <p>U heeft de volgende rechten op grond van de AVG:</p>
+  <ul>
+    <li><strong>Inzage (art. 15):</strong> u kunt al uw opgeslagen gegevens downloaden via <a href="/profiel">uw profielpagina</a>.</li>
+    <li><strong>Verwijdering (art. 17):</strong> u kunt uw account zelf verwijderen via <a href="/profiel">uw profielpagina</a>. Alle aan uw account gekoppelde gegevens worden dan gewist.</li>
+    <li><strong>Bezwaar (art. 21):</strong> u kunt bezwaar maken tegen verwerking via de beheerder.</li>
+    <li><strong>Klacht:</strong> u heeft het recht een klacht in te dienen bij de Autoriteit Persoonsgegevens (<a href="https://www.autoriteitpersoonsgegevens.nl" target="_blank" rel="noopener">autoriteitpersoonsgegevens.nl</a>).</li>
+  </ul>
+  <p>Voor verzoeken kunt u contact opnemen via het contactformulier op de <a href="/login">loginpagina</a>. Wij reageren binnen 30 dagen.</p>
 
-  <h2>Verwerkingsverantwoordelijke</h2>
-  <p>Bridgeclub — neem contact op met de beheerder voor vragen over privacy.</p>
+  <h2>6. Sub-verwerkers</h2>
+  <p>Wij maken gebruik van de volgende externe partijen die mogelijk persoonsgegevens verwerken:</p>
+  <ul>
+    <li><strong>E-mailprovider (SMTP):</strong> voor het versturen van uitnodigings- en resetmails. Met deze partij is een verwerkersovereenkomst gesloten.</li>
+    <li><strong>Hostingprovider:</strong> de database met uw gegevens staat op een beveiligde server. Met deze partij is een verwerkersovereenkomst gesloten.</li>
+  </ul>
+  <p>Er worden geen gegevens doorgegeven buiten de Europese Economische Ruimte (EER).</p>
+
+  <h2>7. Cookies</h2>
+  <p>
+    Deze applicatie gebruikt uitsluitend een functionele sessiecookie om u ingelogd te houden. Er worden geen tracking- of advertentiecookies geplaatst. De sessiecookie vervalt automatisch na 7 dagen of bij uitloggen.
+  </p>
+
+  <h2>8. Beveiliging</h2>
+  <p>
+    Wachtwoorden worden versleuteld opgeslagen (PBKDF2-HMAC-SHA256). Verbindingen verlopen via HTTPS. Toegang tot persoonsgegevens is beperkt tot geautoriseerde gebruikers.
+  </p>
 </section>
 {% endblock %}

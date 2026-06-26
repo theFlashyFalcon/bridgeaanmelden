@@ -162,6 +162,8 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
 
     # ── Basisvalidatie ────────────────────────────────────────────────────────
     errors = []
+    toestemming = form.get("toestemming", "")
+
     if not voornaam:
         errors.append("Voornaam is verplicht.")
     if not achternaam:
@@ -174,6 +176,8 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         errors.append("Wachtwoord moet minimaal 8 tekens bevatten.")
     if password != password2:
         errors.append("Wachtwoorden komen niet overeen.")
+    if not toestemming:
+        errors.append("U moet akkoord gaan met het privacybeleid.")
     if errors:
         return _render({"errors": errors})
 
@@ -211,7 +215,7 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
                 base_url=base_url,
             )
         except Exception:
-            logger.exception("Admin-notificatie mislukt voor nieuwe aanvraag van %s", email)
+            logger.exception("Admin-notificatie mislukt voor nieuwe aanvraag")
 
     # ── Zoek in Crash-ledenlijst ──────────────────────────────────────────────
     crash_lid = db.query(Lid).filter(Lid.nbb_nummer == nbb_nummer).first()
@@ -224,14 +228,15 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
             email=email,
             lidnummer=nbb_nummer,
             wachtwoord_hash=hash_password(password),
+            toestemming_op=datetime.now(timezone.utc),
         ))
         try:
             db.commit()
         except Exception:
             db.rollback()
-            logger.exception("DB-fout bij aanvraag aanmaken voor %s", email)
+            logger.exception("DB-fout bij aanvraag aanmaken")
             return _render({"errors": ["Er is een technische fout opgetreden. Probeer het later opnieuw."]})
-        _stuur_admin_mail("Aanvrager staat niet in de Crash-ledenlijst.")
+        _stuur_admin_mail("Aanvrager staat niet in de ledenlijst.")
         return _render({"melding": "geen_lid_crash"}, status=200)
 
     # ── Controleer naamovereenkomst ───────────────────────────────────────────
@@ -260,15 +265,16 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
             email=email,
             lidnummer=nbb_nummer,
             wachtwoord_hash=hash_password(password),
+            toestemming_op=datetime.now(timezone.utc),
         ))
         try:
             db.commit()
         except Exception:
             db.rollback()
-            logger.exception("DB-fout bij aanvraag aanmaken voor %s", email)
+            logger.exception("DB-fout bij aanvraag aanmaken")
             return _render({"errors": ["Er is een technische fout opgetreden. Probeer het later opnieuw."]})
         _stuur_admin_mail(
-            "Crash-lid, maar er bestaat al een account met dezelfde voor- en achternaam."
+            "Lid in de ledenlijst, maar er bestaat al een account met dezelfde voor- en achternaam."
         )
         return _render({"melding": "aanvraag_ontvangen"}, status=200)
 
@@ -283,6 +289,7 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         email=email,
         wachtwoord_hash=hash_password(password),
         role=role,
+        toestemming_op=datetime.now(timezone.utc),
     )
     db.add(member)
     try:
@@ -290,7 +297,7 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         db.refresh(member)
     except Exception:
         db.rollback()
-        logger.exception("DB-fout bij aanmaken account voor %s", email)
+        logger.exception("DB-fout bij aanmaken account voor lid-id [verborgen]")
         return _render({"errors": ["Er is een technische fout opgetreden. Probeer het later opnieuw."]})
 
     request.session["user_id"] = member.id
@@ -389,6 +396,7 @@ async def register_submit(token: str, request: Request, db: Session = Depends(ge
         email=email,
         wachtwoord_hash=hash_password(password),
         role=role,
+        toestemming_op=datetime.now(timezone.utc),
     )
     db.add(member)
     db.flush()
@@ -428,9 +436,9 @@ async def wachtwoord_vergeten_submit(request: Request, db: Session = Depends(get
         reset_url = f"{base_url}/wachtwoord-reset/{token}"
         try:
             send_password_reset_email(member.email, member.voornaam, reset_url)
-            logger.info("Wachtwoord-reset e-mail verstuurd naar %s", member.email)
+            logger.info("Wachtwoord-reset e-mail verstuurd naar member-id %d", member.id)
         except Exception:
-            logger.exception("Wachtwoord-reset e-mail mislukt voor %s", member.email)
+            logger.exception("Wachtwoord-reset e-mail mislukt voor member-id %d", member.id)
             return templates.TemplateResponse(
                 request, "wachtwoord_vergeten.html",
                 {"error": "Het versturen van de e-mail is mislukt. Probeer het later opnieuw of neem contact op met de beheerder."},

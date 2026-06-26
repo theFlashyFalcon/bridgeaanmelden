@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Mijn overzicht — {{ club_naam }}{% endblock %}
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1.25rem;">
+  <div>
+    <h1 style="margin:0 0 .25rem;">Mijn overzicht</h1>
+    <p style="margin:0;color:var(--color-muted,#888);font-size:.9rem;">{{ huidig_naam }}</p>
+  </div>
+  <a href="/ranking{% if seizoen_id %}?seizoen_id={{ seizoen_id }}{% endif %}"
+     class="btn btn-secondary" style="font-size:.875rem;">Terug naar ranking</a>
+</div>
+
+{# ── Seizoenskeuze ── #}
+<form method="get" action="/ranking/mijn-overzicht" style="margin-bottom:1.5rem;">
+  <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+    <label for="seizoen_id" style="font-weight:500;white-space:nowrap;">Seizoen:</label>
+    <select id="seizoen_id" name="seizoen_id" onchange="this.form.submit()"
+      style="padding:.45rem .75rem;border:1px solid var(--color-border,#ccc);border-radius:6px;font-size:.95rem;background:var(--color-card,#fff);color:var(--color-text,#222);">
+      {% if not seizoenen %}<option>Geen seizoenen</option>{% endif %}
+      {% for s in seizoenen %}
+        <option value="{{ s.id }}" {% if s.id == seizoen_id %}selected{% endif %}>{{ s.naam }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+
+{% if not seizoenen %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted,#888);">Nog geen seizoenen aangemaakt.</div>
+
+{% elif n_uitslagen == 0 %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted,#888);">
+    Nog geen XML-uitslagen geüpload voor dit seizoen.
+  </div>
+
+{% elif not mijn_rankings %}
+  <div class="card" style="text-align:center;padding:2rem;color:var(--color-muted,#888);">
+    Je bent nog niet gevonden in de rankings voor dit seizoen.<br>
+    <span style="font-size:.875rem;">Controleer of je naam in de geüploade uitslagen overeenkomt met je lidnaam.</span>
+  </div>
+
+{% else %}
+  <div class="card" style="padding:0;overflow:hidden;">
+    <table class="data-table" style="margin:0;">
+      <thead><tr>
+        <th>Ranking</th>
+        <th style="width:9rem;text-align:center;">Positie</th>
+        <th style="width:6rem;text-align:center;">Deelnames</th>
+        <th style="width:9rem;text-align:center;">Statistiek</th>
+      </tr></thead>
+      <tbody>
+        {% for r in mijn_rankings %}
+          <tr>
+            <td>
+              <a href="/ranking?seizoen_id={{ seizoen_id }}&weergave={{ r.weergave }}"
+                 style="color:var(--color-link,#1a6fb5);text-decoration:none;font-weight:500;">
+                {{ r.type }}
+              </a>
+            </td>
+            <td style="text-align:center;">
+              {% if r.rang %}
+                <span style="font-weight:600;color:var(--color-primary,#1e3a5f);">#{{ r.rang }}</span>
+                <span style="color:var(--color-muted,#888);font-size:.85rem;"> / {{ r.totaal }}</span>
+              {% elif not r.in_hoofdranking %}
+                <span style="color:var(--color-muted,#888);font-size:.85rem;">Te weinig deelnames</span>
+              {% else %}
+                <span style="color:var(--color-muted,#888);">—</span>
+              {% endif %}
+            </td>
+            <td style="text-align:center;">{{ r.deelnames }}</td>
+            <td style="text-align:center;">
+              <span style="font-size:.85rem;color:var(--color-muted,#888);">{{ r.stat_label }}:</span>
+              <strong>{{ r.stat }}</strong>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p style="color:var(--color-muted,#888);font-size:.8rem;margin-top:.5rem;">
+    Klik op een ranking om de volledige lijst te bekijken.
+  </p>
+{% endif %}
+
+{% endblock %}

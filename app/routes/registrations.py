@@ -850,9 +850,17 @@ async def voor_alles_afmelden(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_auth),
 ):
+    form = await request.form()
+    partner_naam = None
+    if form.get("met_partner") == "1":
+        vn = form.get("partner_voornaam", "").strip()
+        an = form.get("partner_achternaam", "").strip()
+        if vn and an:
+            partner_naam = f"{vn} {an}"
+
     today = date.today()
 
-    upcoming_regs = (
+    query = (
         db.query(Registration)
         .join(ClubEvening)
         .filter(
@@ -860,8 +868,12 @@ async def voor_alles_afmelden(
             Registration.status != RegistrationStatus.afgemeld,
             ClubEvening.datum >= today,
         )
-        .all()
     )
+    if partner_naam:
+        query = query.filter(
+            func.lower(Registration.partner_naam) == partner_naam.lower()
+        )
+    upcoming_regs = query.all()
 
     count = len(upcoming_regs)
     for reg in upcoming_regs:
