@@ -1,20 +1,18 @@
 import logging
 import math
 from datetime import date
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, get_member_club_ids
 from app.database import get_db
 from app.models import ClubEvening, Season, Uitslag
+from app.templates_env import templates
 from app.utils.nbb_xml import PaarSpelers, SpelerResultaat, parse_nbb_xml
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ranking")
-templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
 
 EXCLUDED_TYPES = ["jeugdtraining", "training", "eten voor jeugdtraining"]
 WEERGAVES = [
@@ -52,21 +50,22 @@ def _decode(inhoud: bytes) -> str | None:
 
 # ── Data laden ─────────────────────────────────────────────────────────────────
 
-def _laad_avonden(db: Session, seizoen_id: int) -> tuple[list[dict], list[str]]:
+def _laad_avonden(db: Session, seizoen_id: int, club_ids: list[int] | None = None) -> tuple[list[dict], list[str]]:
     """
     Laad en parse alle XML-uitslagen voor een seizoen.
     Elke avond is een dict met datum + alle SpelerResultaat- en PaarSpelers-lijsten.
     Gesorteerd op datum oplopend (oudste eerst).
     """
-    evenings = (
-        db.query(ClubEvening)
-        .filter(
-            ClubEvening.season_id == seizoen_id,
-            ClubEvening.datum < date.today(),
-            ClubEvening.type.notin_(EXCLUDED_TYPES),
-        )
-        .all()
+    q = db.query(ClubEvening).filter(
+        ClubEvening.season_id == seizoen_id,
+        ClubEvening.datum < date.today(),
+        ClubEvening.type.notin_(EXCLUDED_TYPES),
     )
+    if club_ids:
+        q = q.filter(
+            (ClubEvening.club_id.in_(club_ids)) | (ClubEvening.club_id.is_(None))
+        )
+    evenings = q.all()
     evening_map = {e.id: e for e in evenings}
     evening_ids = list(evening_map)
     if not evening_ids:
@@ -250,7 +249,14 @@ async def ranking_pagina(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401)
 
     display_role = _get_display_role(request, current_user)
-    seizoenen = db.query(Season).order_by(Season.start_datum.desc()).all()
+    user_club_ids = get_member_club_ids(current_user, db)
+
+    seizoenen_q = db.query(Season)
+    if user_club_ids:
+        seizoenen_q = seizoenen_q.filter(
+            (Season.club_id.in_(user_club_ids)) | (Season.club_id.is_(None))
+        )
+    seizoenen = seizoenen_q.order_by(Season.start_datum.desc()).all()
     actief = next((s for s in seizoenen if s.actief), None)
 
     try:
@@ -270,7 +276,7 @@ async def ranking_pagina(request: Request, db: Session = Depends(get_db)):
         n_avonden = 5
 
     # Laad alle avonden voor dit seizoen
-    avonden, waarschuwingen = _laad_avonden(db, seizoen_id) if seizoen_id else ([], [])
+    avonden, waarschuwingen = _laad_avonden(db, seizoen_id, user_club_ids) if seizoen_id else ([], [])
     n_uitslagen = len(avonden)
     drempel = _drempel(n_uitslagen)
 
@@ -362,7 +368,14 @@ async def mijn_overzicht(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401)
 
     display_role = _get_display_role(request, current_user)
-    seizoenen = db.query(Season).order_by(Season.start_datum.desc()).all()
+    user_club_ids = get_member_club_ids(current_user, db)
+
+    seizoenen_q = db.query(Season)
+    if user_club_ids:
+        seizoenen_q = seizoenen_q.filter(
+            (Season.club_id.in_(user_club_ids)) | (Season.club_id.is_(None))
+        )
+    seizoenen = seizoenen_q.order_by(Season.start_datum.desc()).all()
     actief = next((s for s in seizoenen if s.actief), None)
 
     try:
@@ -370,7 +383,7 @@ async def mijn_overzicht(request: Request, db: Session = Depends(get_db)):
     except (ValueError, TypeError):
         seizoen_id = actief.id if actief else (seizoenen[0].id if seizoenen else None)
 
-    avonden, _ = _laad_avonden(db, seizoen_id) if seizoen_id else ([], [])
+    avonden, _ = _laad_avonden(db, seizoen_id, user_club_ids) if seizoen_id else ([], [])
     n_uitslagen = len(avonden)
 
     huidig_naam = f"{current_user.voornaam} {current_user.achternaam}"

@@ -50,14 +50,15 @@ a:hover { text-decoration: underline; }
 }
 
 .nav-brand {
-  font-size: 1.1rem;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
   color: #fff;
   text-decoration: none;
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  opacity: 1;
+  transition: opacity var(--transition);
 }
-.nav-brand:hover { opacity: .8; text-decoration: none; }
+.nav-brand:hover { opacity: .75; text-decoration: none; }
+.nav-brand svg { display: block; }
 
 .nav-links {
   display: flex;
@@ -102,6 +103,21 @@ a:hover { text-decoration: underline; }
 
 .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: .75rem; color: var(--color-text); }
 .card h1 { font-size: 1.25rem; font-weight: 600; margin-bottom: .75rem; color: var(--color-text); }
+
+/* ── Privacyverklaring ───────────────────────────────────────────────────────── */
+.privacy-content h2 {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-top: 1.75rem;
+  margin-bottom: .5rem;
+  padding-bottom: .3rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.privacy-content h2:first-of-type { margin-top: 1rem; }
+.privacy-content p, .privacy-content ul { margin-bottom: .75rem; font-size: .9rem; line-height: 1.65; }
+.privacy-content ul { padding-left: 1.4rem; }
 
 /* ── Buttons ────────────────────────────────────────────────────────────────── */
 .btn {
@@ -167,10 +183,10 @@ a:hover { text-decoration: underline; }
 .badge-danger  { background: #fee2e2; color: #991b1b; }
 
 /* ── Page header ─────────────────────────────────────────────────────────────── */
-.page-header { padding: .25rem 0 1rem; }
+.page-header { padding: .25rem 0 1rem; display: flex; align-items: center; gap: .75rem; }
 .page-header h1 { font-size: 1.35rem; font-weight: 600; color: var(--color-text); }
-.page-header .subtitle { color: var(--color-muted); font-size: .875rem; margin-top: .2rem; }
-.page-header-icon { color: var(--color-primary); margin-bottom: .25rem; }
+.page-header .subtitle { color: var(--color-text); font-size: 1.25rem; font-weight: 600; margin-top: 0; }
+.page-header-icon { color: var(--color-primary); flex-shrink: 0; }
 
 /* ── Tables ─────────────────────────────────────────────────────────────────── */
 .data-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
@@ -201,6 +217,46 @@ a:hover { text-decoration: underline; }
   min-width: 200px;
 }
 
+
+/* ── Club-switcher balk ──────────────────────────────────────────────────────── */
+.club-switcher-bar {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .4rem 1rem;
+  background: #1e3a5f;
+  border-bottom: 1px solid rgba(255,255,255,.15);
+  flex-wrap: wrap;
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+.club-switcher-label {
+  color: rgba(255,255,255,.6);
+  font-size: .75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-right: .25rem;
+  white-space: nowrap;
+}
+.club-switcher-item {
+  color: rgba(255,255,255,.75);
+  font-size: .82rem;
+  font-weight: 500;
+  padding: .2rem .65rem;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  text-decoration: none;
+  transition: color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.club-switcher-item:hover { color: #fff; border-color: rgba(255,255,255,.4); }
+.club-switcher-actief {
+  color: #fff;
+  border-color: #60a5fa !important;
+  background: rgba(96,165,250,.15);
+}
 
 /* ── Weergave-modus banner ───────────────────────────────────────────────────── */
 .weergave-banner {
@@ -325,6 +381,26 @@ a:hover { text-decoration: underline; }
   font-size: .875rem;
   width: 100%;
   transition: border-color .15s;
+}
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  cursor: pointer;
+  font-size: .875rem;
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  color: inherit;
+}
+.checkbox-label input[type="checkbox"] {
+  flex-shrink: 0;
+  margin-top: .15rem;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  width: 1rem;
+  height: 1rem;
+  border-radius: 3px;
 }
 .form-group input:focus {
   outline: none;
@@ -487,7 +563,6 @@ footer {
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: .75rem;
-  align-items: start;
 }
 
 @media (max-width: 640px) {

@@ -4,7 +4,17 @@
 <section class="card">
   <div class="gebruikers-header">
     <h1>Lijst met gebruikers <span class="badge">{{ members | length }}</span></h1>
-    <div class="gebruikers-acties">
+    <div class="gebruikers-acties" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
+
+      {% if clubs | length > 1 %}
+      <div style="display:flex;gap:.35rem;flex-wrap:wrap;">
+        <a href="/leden" class="btn btn-sm {% if not active_club %}btn-primary{% else %}btn-secondary{% endif %}">Alle clubs</a>
+        {% for c in clubs %}
+        <a href="/leden?club={{ c.id }}" class="btn btn-sm {% if active_club and active_club.id == c.id %}btn-primary{% else %}btn-secondary{% endif %}">{{ c.naam }}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       <div class="sort-container">
         <button type="button" class="btn btn-secondary btn-sm" id="sort-btn" onclick="toggleSortMenu()">&#9660; Sorteren</button>
         <div class="sort-menu" id="sort-menu">
@@ -18,6 +28,7 @@
           </div>
         </div>
       </div>
+
     </div>
   </div>
 

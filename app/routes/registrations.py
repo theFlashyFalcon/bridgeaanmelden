@@ -1,6 +1,7 @@
 import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -15,10 +16,12 @@ from app.email import (
     smtp_geconfigureerd,
 )
 from app.models import (
+    Club,
     ClubEvening,
     EveningType,
     Lid,
     Member,
+    MemberClub,
     MemberRole,
     PartnerRequest,
     RecurringRegistration,
@@ -37,7 +40,7 @@ from app.templates_env import templates
 # ── Per-evenement aanmelden ───────────────────────────────────────────────────
 
 _TRAINING_TYPES = {EveningType.jeugdtraining, EveningType.jeugdtraining.value,
-                   "eten voor jeugdtraining", EveningType.eten_voor_jeugdtraining}
+                   EveningType.training, EveningType.training.value}
 
 
 def _is_training(evening: ClubEvening) -> bool:
@@ -335,11 +338,25 @@ async def registration_submit(
 @router.get("/instellingen")
 async def instellingen_form(
     request: Request,
+    club: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_auth),
 ):
     today = date.today()
-    upcoming_clubavonden = (
+
+    user_clubs = (
+        db.query(Club)
+        .join(MemberClub, MemberClub.club_id == Club.id)
+        .filter(MemberClub.member_id == current_user.id)
+        .order_by(Club.naam)
+        .all()
+    )
+
+    active_club: Optional[Club] = None
+    if club:
+        active_club = next((c for c in user_clubs if c.id == club), None)
+
+    q = (
         db.query(ClubEvening)
         .join(Season)
         .filter(
@@ -347,9 +364,10 @@ async def instellingen_form(
             ClubEvening.type.in_([EveningType.clubavond, "regulier"]),
             Season.actief == True,  # noqa: E712
         )
-        .order_by(ClubEvening.datum)
-        .all()
     )
+    if active_club:
+        q = q.filter(ClubEvening.club_id == active_club.id)
+    upcoming_clubavonden = q.order_by(ClubEvening.datum).all()
 
     herhalingen = (
         db.query(RecurringRegistration)
@@ -368,6 +386,8 @@ async def instellingen_form(
             "current_user": current_user,
             "upcoming_clubavonden": upcoming_clubavonden,
             "herhalingen": herhalingen,
+            "user_clubs": user_clubs,
+            "active_club": active_club,
         },
     )
 
@@ -402,6 +422,8 @@ async def instellingen_submit(
     form = await request.form()
     partner_voornaam = form.get("partner_voornaam", "").strip()
     partner_achternaam = form.get("partner_achternaam", "").strip()
+    club_id_raw = form.get("club_id", "").strip()
+    club_id = int(club_id_raw) if club_id_raw.isdigit() else None
 
     partner_naam = None
     if partner_voornaam and partner_achternaam:
@@ -417,7 +439,7 @@ async def instellingen_submit(
             partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
     today = date.today()
-    upcoming_clubavonden = (
+    q = (
         db.query(ClubEvening)
         .join(Season)
         .filter(
@@ -425,8 +447,10 @@ async def instellingen_submit(
             ClubEvening.type.in_([EveningType.clubavond, "regulier"]),
             Season.actief == True,  # noqa: E712
         )
-        .all()
     )
+    if club_id:
+        q = q.filter(ClubEvening.club_id == club_id)
+    upcoming_clubavonden = q.all()
 
     count = 0
     for evening in upcoming_clubavonden:
@@ -626,10 +650,13 @@ async def definitief_aanmelden(
             if lid:
                 partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
+    club_id_raw = form.get("club_id", "").strip()
+    club_id = int(club_id_raw) if club_id_raw.isdigit() else None
+
     db_types = _TYPE_MAP[event_type]
     today = date.today()
 
-    future_events = (
+    q = (
         db.query(ClubEvening)
         .join(Season)
         .filter(
@@ -637,9 +664,10 @@ async def definitief_aanmelden(
             ClubEvening.datum >= today,
             Season.actief == True,  # noqa: E712
         )
-        .order_by(ClubEvening.datum)
-        .all()
     )
+    if club_id:
+        q = q.filter(ClubEvening.club_id == club_id)
+    future_events = q.order_by(ClubEvening.datum).all()
 
     count = 0
     for evt in future_events:
@@ -792,12 +820,15 @@ async def voor_alles_aanmelden(
             if lid:
                 partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
+    club_id_raw = form.get("club_id", "").strip()
+    club_id = int(club_id_raw) if club_id_raw.isdigit() else None
+
     today = date.today()
     all_db_types = ["clubavond", "regulier", "eten voor jeugdtraining", "speciaal"]
     if current_user.training_eligible:
         all_db_types += ["jeugdtraining", "training"]
 
-    future_events = (
+    q = (
         db.query(ClubEvening)
         .join(Season)
         .filter(
@@ -805,9 +836,10 @@ async def voor_alles_aanmelden(
             ClubEvening.type.in_(all_db_types),
             Season.actief == True,  # noqa: E712
         )
-        .order_by(ClubEvening.datum)
-        .all()
     )
+    if club_id:
+        q = q.filter(ClubEvening.club_id == club_id)
+    future_events = q.order_by(ClubEvening.datum).all()
 
     count = 0
     for evt in future_events:

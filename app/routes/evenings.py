@@ -5,9 +5,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_auth
+from app.auth import get_current_user, get_member_club_ids, require_auth
 from app.database import get_db
 from app.models import (
+    Club,
     ClubEvening,
     ManualPair,
     Member,
@@ -41,11 +42,37 @@ async def index(
     if current_user and current_user.verborgen_types:
         hidden_types = [t for t in current_user.verborgen_types.split(",") if t]
 
+    # ── Club-filtering ────────────────────────────────────────────────────────
+    user_club_ids: list[int] = []
+    user_clubs: list[Club] = []
+    active_club_filter: int | None = None
+
+    if current_user:
+        user_club_ids = get_member_club_ids(current_user, db)
+        if user_club_ids:
+            user_clubs = db.query(Club).filter(Club.id.in_(user_club_ids)).order_by(Club.naam).all()
+        try:
+            raw_club = request.query_params.get("club", "")
+            if raw_club:
+                cid = int(raw_club)
+                if cid in user_club_ids:
+                    active_club_filter = cid
+        except ValueError:
+            pass
+
     query = (
         db.query(ClubEvening)
         .join(Season)
         .filter(Season.actief == True, ClubEvening.datum >= today)  # noqa: E712
     )
+
+    if current_user and user_club_ids:
+        if active_club_filter:
+            query = query.filter(ClubEvening.club_id == active_club_filter)
+        else:
+            query = query.filter(
+                (ClubEvening.club_id.in_(user_club_ids)) | (ClubEvening.club_id.is_(None))
+            )
 
     if active_filter and active_filter in _TYPE_MAP:
         query = query.filter(ClubEvening.type.in_(_TYPE_MAP[active_filter]))
@@ -57,6 +84,9 @@ async def index(
             query = query.filter(ClubEvening.type.notin_(all_hidden_db))
 
     evenings = query.order_by(ClubEvening.datum).limit(30).all()
+
+    # Club-opzoektabel voor gebruik in de template (club_id → Club)
+    club_map: dict[int, Club] = {c.id: c for c in user_clubs}
 
     user_regs: dict[int, Registration] = {}
     if current_user:
@@ -100,6 +130,9 @@ async def index(
             "active_filter": active_filter,
             "hidden_types": hidden_types,
             "termijn_deadlines": termijn_deadlines,
+            "user_clubs": user_clubs,
+            "club_map": club_map,
+            "active_club_filter": active_club_filter,
         },
     )
 

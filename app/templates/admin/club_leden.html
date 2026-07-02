@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Leden van {{ club.naam }} — {{ club_naam }}{% endblock %}
+{% block content %}
+<section class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.75rem;margin-bottom:1.25rem;">
+    <div>
+      <h1 style="margin:0 0 .2rem;">{{ club.naam }} — Leden</h1>
+      {% if club.stad %}<p style="margin:0;color:var(--color-muted);font-size:.9rem;">{{ club.stad }}</p>{% endif %}
+    </div>
+    <a href="/beheer/clubs" class="btn btn-secondary" style="padding:.35rem .9rem;font-size:.9rem;">← Terug naar clubs</a>
+  </div>
+
+  {% if request.query_params.get('toegevoegd') %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">Lid toegevoegd aan club.</div>
+  {% elif request.query_params.get('opgeslagen') %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">Rol opgeslagen.</div>
+  {% elif request.query_params.get('verwijderd') %}
+    <div class="alert alert-info" style="margin-bottom:1rem;">Lid verwijderd uit club.</div>
+  {% elif request.query_params.get('fout') %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">Er is een fout opgetreden. Controleer de gegevens.</div>
+  {% endif %}
+
+  <!-- Huidige leden -->
+  <h2>Huidige leden <span class="badge">{{ club_leden | length }}</span></h2>
+  {% if club_leden %}
+  <table class="data-table" style="margin-bottom:2rem;">
+    <thead>
+      <tr>
+        <th>Naam</th>
+        <th>NBB-nummer</th>
+        <th>E-mail</th>
+        <th>Rol in club</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in club_leden %}
+      {% set m = item.member %}
+      {% set mc = item.mc %}
+      <tr>
+        <td>{{ m.voornaam }} {{ m.achternaam }}</td>
+        <td>{{ m.lidnummer or '—' }}</td>
+        <td>{{ m.email or '—' }}</td>
+        <td>
+          <form method="post" action="/beheer/clubs/{{ club.id }}/leden/{{ m.id }}/rol"
+                style="display:flex;gap:.4rem;align-items:center;">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+            <select name="role" style="font-size:.85rem;padding:.2rem .4rem;border-radius:4px;border:1px solid var(--color-border);">
+              {% for r in roles %}
+              <option value="{{ r }}"{% if mc.role == r %} selected{% endif %}>{{ r }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary" style="padding:.2rem .6rem;font-size:.8rem;">Opslaan</button>
+          </form>
+          <p style="font-size:.75rem;color:var(--color-muted);margin:.25rem 0 0;">
+            Alleen admins kunnen de admin-rol toewijzen.
+          </p>
+        </td>
+        <td style="text-align:right;">
+          {% if m.id != current_user.id %}
+          <form method="post" action="/beheer/clubs/{{ club.id }}/leden/{{ m.id }}/verwijder"
+                data-bevestig="Lid {{ m.voornaam }} {{ m.achternaam }} uit club verwijderen?">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+            <button type="submit" class="btn btn-danger" style="padding:.2rem .5rem;font-size:.8rem;">Uit club</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <p class="empty-state" style="margin-bottom:2rem;">Nog geen leden gekoppeld aan deze club.</p>
+  {% endif %}
+
+  <!-- Lid toevoegen aan club -->
+  <h2>Lid toevoegen aan club</h2>
+  {% if alle_members %}
+  <form method="post" action="/beheer/clubs/{{ club.id }}/leden/toevoegen" class="form-stack" style="max-width:500px;">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+    <div class="form-group">
+      <label for="member_id">Gebruiker</label>
+      <select id="member_id" name="member_id" required style="width:100%;">
+        <option value="">— Kies een gebruiker —</option>
+        {% for m in alle_members %}
+        <option value="{{ m.id }}">{{ m.voornaam }} {{ m.achternaam }}{% if m.lidnummer %} ({{ m.lidnummer }}){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="nieuwe_rol">Rol</label>
+      <select id="nieuwe_rol" name="role" style="width:100%;">
+        {% for r in roles %}
+        <option value="{{ r }}">{{ r }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Toevoegen</button>
+  </form>
+  {% else %}
+    <p class="empty-state">Alle gebruikers zijn al lid van deze club.</p>
+  {% endif %}
+
+</section>
+{% endblock %}

@@ -84,16 +84,37 @@
   'speciaal': 'speciale evenementen',
 } %}
 
+{# ── Club-filterrij (alleen bij meerdere clubs) ──────────────────────────── #}
+{% if current_user and user_clubs | length > 1 %}
+{% set type_qs = ('&type=' ~ active_filter) if active_filter else '' %}
+<div class="filter-tabs-wrapper" style="margin-bottom:.25rem;">
+  <div class="filter-tabs">
+    <a href="/{# type_qs #}{{ type_qs }}"
+       class="filter-tab {% if not active_club_filter %}filter-tab--active{% endif %}">
+      Alle clubs
+    </a>
+    {% for club in user_clubs %}
+    <a href="/?club={{ club.id }}{{ type_qs }}"
+       class="filter-tab filter-tab--club-{{ loop.index }} {% if active_club_filter == club.id %}filter-tab--active{% endif %}">
+      {{ club.naam }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
 <div class="filter-tabs-wrapper">
   <div class="filter-tabs">
-    <a href="/" class="filter-tab {% if not active_filter %}filter-tab--active{% endif %}">Alle</a>
-    <a href="/?type=clubavond" class="filter-tab filter-tab--clubavond {% if active_filter == 'clubavond' %}filter-tab--active{% endif %}">Clubavond</a>
-    <a href="/?type=avondeten" class="filter-tab filter-tab--avondeten {% if active_filter == 'avondeten' %}filter-tab--active{% endif %}">Avondeten</a>
-    <a href="/?type=training"  class="filter-tab filter-tab--training  {% if active_filter == 'training'  %}filter-tab--active{% endif %}">Training</a>
-    <a href="/?type=speciaal"  class="filter-tab filter-tab--speciaal  {% if active_filter == 'speciaal'  %}filter-tab--active{% endif %}">Speciaal</a>
+    {% set club_qs = ('&club=' ~ active_club_filter) if active_club_filter else '' %}
+    <a href="/{{ ('?club=' ~ active_club_filter) if active_club_filter else '' }}"
+       class="filter-tab {% if not active_filter %}filter-tab--active{% endif %}">Alle</a>
+    <a href="/?type=clubavond{{ club_qs }}" class="filter-tab filter-tab--clubavond {% if active_filter == 'clubavond' %}filter-tab--active{% endif %}">Clubavond</a>
+    <a href="/?type=avondeten{{ club_qs }}" class="filter-tab filter-tab--avondeten {% if active_filter == 'avondeten' %}filter-tab--active{% endif %}">Avondeten</a>
+    <a href="/?type=training{{ club_qs }}"  class="filter-tab filter-tab--training  {% if active_filter == 'training'  %}filter-tab--active{% endif %}">Training</a>
+    <a href="/?type=speciaal{{ club_qs }}"  class="filter-tab filter-tab--speciaal  {% if active_filter == 'speciaal'  %}filter-tab--active{% endif %}">Speciaal</a>
     {% if current_user %}
       <button type="button" class="filter-tab filter-tab--weergave" id="weergave-toggle" aria-expanded="false">
-        &#9881; Weergave
+        &#9881; Filteren
       </button>
     {% endif %}
   </div>
@@ -133,19 +154,14 @@
     </form>
   </div>
 
-  {# ── Bulk acties ─────────────────────────────────────────────────────────── #}
+  {# ── Bulk acties (alleen zichtbaar zonder type-filter) ───────────────────── #}
+  {% if not active_filter %}
   <div class="bulk-acties-wrapper">
-    <div class="bulk-partner-keuze">
+    <div class="bulk-acties">
       <label class="toggle-item bulk-partner-label">
         <input type="checkbox" id="bulk-met-partner" autocomplete="off">
         Met partner
       </label>
-      <div id="bulk-partner-velden" class="bulk-partner-velden" hidden>
-        <input type="text" id="bulk-partner-voornaam" placeholder="Voornaam partner" autocomplete="off">
-        <input type="text" id="bulk-partner-achternaam" placeholder="Achternaam" autocomplete="off">
-      </div>
-    </div>
-    <div class="bulk-acties">
       <form method="post" action="/voor-alles-afmelden"
             id="bulk-afmelden-form"
             data-bevestig="Wil je je afmelden voor alle komende evenementen waarvoor je bent aangemeld?">
@@ -159,7 +175,12 @@
         <button type="submit" class="btn btn-primary">Voor alles aanmelden</button>
       </form>
     </div>
+    <div id="bulk-partner-velden" class="bulk-partner-velden" hidden>
+      <input type="text" id="bulk-partner-voornaam" placeholder="Voornaam partner" autocomplete="off">
+      <input type="text" id="bulk-partner-achternaam" placeholder="Achternaam" autocomplete="off">
+    </div>
   </div>
+  {% endif %}
 {% endif %}
 
 {# ── Definitief aanmelden (zichtbaar bij gefilterd type) ─────────────────── #}
@@ -181,8 +202,6 @@
       </button>
       <p class="definitief-hint">
         Je wordt aangemeld voor alle toekomstige {{ type_plural[active_filter] }}, ook nieuw geplande.
-        Bij evenementen in paren word je met de opgegeven partner aangemeld; bij individuele evenementen individueel.
-        Je kunt dit later aanpassen via de aanmeldknop bij elk evenement.
       </p>
     </form>
   </div>
@@ -193,6 +212,7 @@
   <div class="events-grid">
   {% for evening in evenings %}
     {% set reg = user_regs.get(evening.id) %}
+    {% set evening_club = club_map.get(evening.club_id) if evening.club_id else none %}
     <section class="card event-card">
       <div class="event-header">
         <div class="event-header-left">
@@ -245,6 +265,9 @@
             {% if reg %}Wijzigen{% else %}Aanmelden{% endif %}
           </a>
           <a href="/beheer/aanmeldingen/{{ evening.id }}" class="btn btn-secondary btn-sm">Bekijk aanmeldingen</a>
+        {% endif %}
+        {% if evening_club %}
+          <span class="club-badge club-badge--{{ evening_club.naam | lower | replace(' ', '-') }}" style="margin-left:auto;align-self:center;">{{ evening_club.naam }}</span>
         {% endif %}
       </div>
     </section>
@@ -342,7 +365,35 @@
 <style>
 .filter-tabs-wrapper { display: flex; align-items: center; }
 .filter-tab--weergave { background: none; border: none; cursor: pointer; font: inherit; }
-.bulk-acties-wrapper { margin-top: .75rem; }
+
+/* Club-filterrij kleuren */
+.filter-tab--club-1 { border-bottom-color: #2563a8; }
+.filter-tab--club-2 { border-bottom-color: #16a34a; }
+.filter-tab--club-3 { border-bottom-color: #9333ea; }
+.filter-tab--club-4 { border-bottom-color: #ea580c; }
+
+/* Club-badge op event-kaarten */
+.club-badge {
+  display: inline-block;
+  padding: .2rem .6rem;
+  border-radius: 5px;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: #000;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+.club-badge--crash  { background: #fca5a5; }
+.club-badge--dombo  { background: #c4b5fd; }
+
+/* Club-naam onder event-naam */
+.event-club-naam {
+  font-size: .78rem;
+  color: var(--color-muted);
+  margin-top: .1rem;
+}
+.bulk-acties-wrapper { margin-top: .75rem; margin-bottom: 1.25rem; }
 .bulk-partner-keuze { margin-bottom: .6rem; }
 .bulk-acties {
   display: flex;

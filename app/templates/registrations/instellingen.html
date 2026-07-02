@@ -37,9 +37,18 @@
     Met één klik meld je je aan voor alle komende clubavonden waarvoor je nog niet aangemeld bent.
   </p>
 
+  {% if user_clubs | length > 1 %}
+  <div style="display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:1rem;">
+    <a href="/instellingen" class="btn btn-sm {% if not active_club %}btn-primary{% else %}btn-secondary{% endif %}">Alle clubs</a>
+    {% for c in user_clubs %}
+    <a href="/instellingen?club={{ c.id }}" class="btn btn-sm {% if active_club and active_club.id == c.id %}btn-primary{% else %}btn-secondary{% endif %}">{{ c.naam }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% if upcoming_clubavonden %}
     <p style="font-size:.9rem; margin-bottom:1rem;">
-      Dit zijn de <strong>{{ upcoming_clubavonden | length }}</strong> komende clubavond(en):
+      Dit zijn de <strong>{{ upcoming_clubavonden | length }}</strong> komende clubavond(en){% if active_club %} voor <strong>{{ active_club.naam }}</strong>{% endif %}:
     </p>
     <ul class="participant-list" style="margin-bottom:1rem;">
       {% for e in upcoming_clubavonden %}
@@ -49,6 +58,9 @@
 
     <form method="post" action="/instellingen" class="form-stack">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+      {% if active_club %}
+      <input type="hidden" name="club_id" value="{{ active_club.id }}">
+      {% endif %}
       <div class="form-row">
         <div class="form-group">
           <label for="partner_voornaam">Voornaam vaste partner <span class="form-hint">(optioneel)</span></label>
@@ -63,12 +75,12 @@
         De partner moet in de ledenlijst staan. Als de naam niet wordt herkend, wordt zonder partner aangemeld.
       </p>
       <div class="action-buttons">
-        <button type="submit" class="btn btn-primary">Aanmelden voor alle clubavonden</button>
+        <button type="submit" class="btn btn-primary">Aanmelden voor alle clubavonden{% if active_club %} ({{ active_club.naam }}){% endif %}</button>
         <a href="/" class="btn btn-secondary">Annuleren</a>
       </div>
     </form>
   {% else %}
-    <p class="empty-state">Er zijn geen komende clubavonden waarvoor je je nog kunt aanmelden.</p>
+    <p class="empty-state">Er zijn geen komende clubavonden waarvoor je je nog kunt aanmelden{% if active_club %} bij {{ active_club.naam }}{% endif %}.</p>
     <a href="/" class="btn btn-secondary" style="margin-top:1rem;">Terug</a>
   {% endif %}
 </section>

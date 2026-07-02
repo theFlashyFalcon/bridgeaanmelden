@@ -107,6 +107,27 @@ def _migrate():
         "ALTER TABLE manual_pairs ADD COLUMN naam_6 VARCHAR",
         "ALTER TABLE members ADD COLUMN toestemming_op TIMESTAMP",
         "ALTER TABLE account_requests ADD COLUMN toestemming_op TIMESTAMP",
+        # ── Multi-club uitbreiding ────────────────────────────────────────────
+        (
+            "CREATE TABLE IF NOT EXISTS clubs ("
+            "id INTEGER PRIMARY KEY, "
+            "naam VARCHAR NOT NULL, "
+            "stad VARCHAR)"
+        ),
+        (
+            "CREATE TABLE IF NOT EXISTS member_clubs ("
+            "id INTEGER PRIMARY KEY, "
+            "member_id INTEGER NOT NULL REFERENCES members(id), "
+            "club_id INTEGER NOT NULL REFERENCES clubs(id), "
+            "role VARCHAR NOT NULL DEFAULT 'lid')"
+        ),
+        "ALTER TABLE seasons ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
+        "ALTER TABLE club_evenings ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
+        "ALTER TABLE leden ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
+        "ALTER TABLE rankings ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
+        "ALTER TABLE berichten ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
+        "ALTER TABLE account_requests ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
+        "ALTER TABLE invitations ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -251,6 +272,52 @@ def _seed_admin():
 
 
 _seed_admin()
+
+
+def _seed_club():
+    """Maak de initiële club aan en koppel bestaande data als er nog geen clubs zijn."""
+    from sqlalchemy import text
+    from app.config import CLUB_NAAM, CLUB_STAD
+    from app.database import SessionLocal
+    from app.models import Club, Member, MemberClub
+
+    db = SessionLocal()
+    try:
+        club = db.query(Club).first()
+        if club is None:
+            club = Club(naam=CLUB_NAAM, stad=CLUB_STAD or None)
+            db.add(club)
+            db.flush()
+
+            cid = club.id
+            for tabel in ("seasons", "club_evenings", "leden", "rankings",
+                          "berichten", "account_requests", "invitations"):
+                db.execute(text(f"UPDATE {tabel} SET club_id = :cid WHERE club_id IS NULL"), {"cid": cid})
+
+            members = db.query(Member).filter(Member.verwijderd_op.is_(None)).all()
+            for m in members:
+                exists = db.query(MemberClub).filter(
+                    MemberClub.member_id == m.id,
+                    MemberClub.club_id == cid,
+                ).first()
+                if not exists:
+                    db.add(MemberClub(member_id=m.id, club_id=cid, role=m.role))
+
+            db.commit()
+            logger.info("Club '%s' aangemaakt (id=%d), bestaande data gekoppeld.", CLUB_NAAM, cid)
+        else:
+            cid = club.id
+            for tabel in ("seasons", "club_evenings", "leden"):
+                db.execute(text(f"UPDATE {tabel} SET club_id = :cid WHERE club_id IS NULL"), {"cid": cid})
+            db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("Seed club mislukt: %s", e)
+    finally:
+        db.close()
+
+
+_seed_club()
 
 
 def _seed_leden():

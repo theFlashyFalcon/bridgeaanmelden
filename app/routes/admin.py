@@ -17,13 +17,14 @@ def _base_url(request: Request) -> str:
     configured = os.getenv("BASE_URL", "").rstrip("/")
     return configured or str(request.base_url).rstrip("/")
 
-from app.auth import get_current_user, require_admin, require_auth, require_wedstrijdleider
+from app.auth import get_admin_club, get_current_user, require_admin, require_auth, require_wedstrijdleider
 from app.database import get_db
 from app.models import (
     AccountRequest,
     AccountRequestStatus,
     AdminBericht,
     Bericht,
+    Club,
     ClubEvening,
     EmailRoleAssignment,
     EveningType,
@@ -31,6 +32,7 @@ from app.models import (
     Lid,
     ManualPair,
     Member,
+    MemberClub,
     MemberRole,
     PartnerRequest,
     RecurringRegistration,
@@ -127,19 +129,26 @@ async def avonden_list(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
+    club = get_admin_club(current_user, db, request)
     PER_PAGINA = 30
-    totaal = db.query(ClubEvening).count()
+    totaal = db.query(ClubEvening).filter(ClubEvening.club_id == club.id).count() if club else 0
     totaal_paginas = max(1, (totaal + PER_PAGINA - 1) // PER_PAGINA)
     pagina = max(1, min(pagina, totaal_paginas))
-    seasons = db.query(Season).order_by(Season.start_datum.desc()).all()
+    seasons = (
+        db.query(Season)
+        .filter(Season.club_id == club.id)
+        .order_by(Season.start_datum.desc())
+        .all()
+    ) if club else []
     evenings = (
         db.query(ClubEvening)
         .join(Season)
+        .filter(ClubEvening.club_id == club.id)
         .order_by(ClubEvening.datum.desc())
         .offset((pagina - 1) * PER_PAGINA)
         .limit(PER_PAGINA)
         .all()
-    )
+    ) if club else []
     return templates.TemplateResponse(
         request,
         "admin/avonden.html",
@@ -160,6 +169,7 @@ async def seizoen_add_from_beheren(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
+    club = get_admin_club(current_user, db, request)
     form = await request.form()
     naam = form.get("naam", "").strip()
     start_str = form.get("start_datum", "")
@@ -183,9 +193,9 @@ async def seizoen_add_from_beheren(
         return RedirectResponse(url="/beheer/avonden?fout=datum", status_code=302)
 
     actief = form.get("actief") == "on"
-    if actief:
-        db.query(Season).update({"actief": False})
-    db.add(Season(naam=naam, start_datum=start, eind_datum=eind, actief=actief))
+    if actief and club:
+        db.query(Season).filter(Season.club_id == club.id).update({"actief": False})
+    db.add(Season(naam=naam, start_datum=start, eind_datum=eind, actief=actief, club_id=club.id if club else None))
     db.commit()
     return RedirectResponse(url="/beheer/avonden?seizoen_aangemaakt=1", status_code=302)
 
@@ -196,6 +206,7 @@ async def avonden_add(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
+    club = get_admin_club(current_user, db, request)
     form = await request.form()
     naam = form.get("naam", "").strip()
     datum_str = form.get("datum", "")
@@ -216,18 +227,29 @@ async def avonden_add(
             errors.append("Ongeldige datumformat (gebruik JJJJ-MM-DD).")
 
     season = None
-    if datum:
+    if datum and club:
         season = (
             db.query(Season)
-            .filter(Season.start_datum <= datum, Season.eind_datum >= datum)
+            .filter(Season.start_datum <= datum, Season.eind_datum >= datum, Season.club_id == club.id)
             .first()
         )
         if not season:
             errors.append(f"Geen seizoen gevonden voor {datum_str}. Maak eerst een seizoen aan dat deze datum omvat.")
 
     if errors:
-        seasons = db.query(Season).order_by(Season.start_datum.desc()).all()
-        evenings = db.query(ClubEvening).join(Season).order_by(ClubEvening.datum).all()
+        seasons = (
+            db.query(Season)
+            .filter(Season.club_id == club.id)
+            .order_by(Season.start_datum.desc())
+            .all()
+        ) if club else []
+        evenings = (
+            db.query(ClubEvening)
+            .join(Season)
+            .filter(ClubEvening.club_id == club.id)
+            .order_by(ClubEvening.datum)
+            .all()
+        ) if club else []
         return templates.TemplateResponse(
             request,
             "admin/avonden.html",
@@ -255,9 +277,11 @@ async def avonden_add(
     herhaal_eenheid = form.get("herhaal_eenheid", "weken")
     herhaal_tot_str = form.get("herhaal_tot", "").strip()
 
+    club_id = club.id if club else None
     new_events = []
     first_event = ClubEvening(naam=naam, datum=datum, type=type_, deelnemers_type=deelnemers_type,
-                               inschrijftermijn_uren=inschrijftermijn_uren, season_id=season.id)
+                               inschrijftermijn_uren=inschrijftermijn_uren, season_id=season.id,
+                               club_id=club_id)
     db.add(first_event)
     db.flush()
     new_events.append(first_event)
@@ -275,12 +299,14 @@ async def avonden_add(
             while next_datum <= herhaal_tot:
                 next_season = (
                     db.query(Season)
-                    .filter(Season.start_datum <= next_datum, Season.eind_datum >= next_datum)
+                    .filter(Season.start_datum <= next_datum, Season.eind_datum >= next_datum,
+                            Season.club_id == club_id)
                     .first()
                 )
                 if next_season:
                     evt = ClubEvening(naam=naam, datum=next_datum, type=type_, deelnemers_type=deelnemers_type,
-                                      inschrijftermijn_uren=inschrijftermijn_uren, season_id=next_season.id)
+                                      inschrijftermijn_uren=inschrijftermijn_uren, season_id=next_season.id,
+                                      club_id=club_id)
                     db.add(evt)
                     db.flush()
                     new_events.append(evt)
@@ -324,13 +350,13 @@ async def aanmeldingen_overview(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
-    evenings = (
-        db.query(ClubEvening)
-        .join(Season)
-        .filter(Season.actief == True, ClubEvening.datum >= date.today())  # noqa: E712
-        .order_by(ClubEvening.datum)
-        .all()
+    club = get_admin_club(current_user, db, request)
+    q = db.query(ClubEvening).join(Season).filter(
+        Season.actief == True, ClubEvening.datum >= date.today()  # noqa: E712
     )
+    if club:
+        q = q.filter(ClubEvening.club_id == club.id)
+    evenings = q.order_by(ClubEvening.datum).all()
     return templates.TemplateResponse(
         request,
         "admin/aanmeldingen.html",
@@ -393,11 +419,13 @@ async def loslopers(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
-    solo = (
-        db.query(Registration)
-        .filter(Registration.status == RegistrationStatus.beschikbaar_solo)
-        .all()
+    club = get_admin_club(current_user, db, request)
+    q = db.query(Registration).join(ClubEvening, Registration.evening_id == ClubEvening.id).filter(
+        Registration.status == RegistrationStatus.beschikbaar_solo
     )
+    if club:
+        q = q.filter(ClubEvening.club_id == club.id)
+    solo = q.all()
     return templates.TemplateResponse(
         request,
         "admin/loslopers.html",
@@ -413,7 +441,13 @@ async def seizoenen(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
-    seasons = db.query(Season).order_by(Season.start_datum.desc()).all()
+    club = get_admin_club(current_user, db, request)
+    seasons = (
+        db.query(Season)
+        .filter(Season.club_id == club.id)
+        .order_by(Season.start_datum.desc())
+        .all()
+    ) if club else []
     return templates.TemplateResponse(
         request,
         "admin/seizoenen.html",
@@ -427,6 +461,7 @@ async def seizoen_add(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
+    club = get_admin_club(current_user, db, request)
     form = await request.form()
     naam = form.get("naam", "").strip()
     start = form.get("start_datum", "")
@@ -434,13 +469,14 @@ async def seizoen_add(
     actief = form.get("actief") == "on"
 
     if naam and start and eind:
-        if actief:
-            db.query(Season).update({"actief": False})
+        if actief and club:
+            db.query(Season).filter(Season.club_id == club.id).update({"actief": False})
         db.add(Season(
             naam=naam,
             start_datum=date.fromisoformat(start),
             eind_datum=date.fromisoformat(eind),
             actief=actief,
+            club_id=club.id if club else None,
         ))
         db.commit()
     return RedirectResponse(url="/beheer/seizoenen?aangemaakt=1", status_code=302)
@@ -453,9 +489,11 @@ async def seizoen_activeer(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
-    db.query(Season).update({"actief": False})
+    club = get_admin_club(current_user, db, request)
+    if club:
+        db.query(Season).filter(Season.club_id == club.id).update({"actief": False})
     season = db.query(Season).filter(Season.id == season_id).first()
-    if season:
+    if season and (not club or season.club_id == club.id):
         season.actief = True
     db.commit()
     return RedirectResponse(url="/beheer/seizoenen", status_code=302)
@@ -498,7 +536,13 @@ async def uitnodigingen(
     current_user: Member = Depends(require_admin),
 ):
     from app.email import smtp_geconfigureerd
-    invitations = db.query(Invitation).order_by(Invitation.aangemaakt_op.desc()).all()
+    club = get_admin_club(current_user, db, request)
+    invitations = (
+        db.query(Invitation)
+        .filter(Invitation.club_id == club.id)
+        .order_by(Invitation.aangemaakt_op.desc())
+        .all()
+    ) if club else []
     return templates.TemplateResponse(
         request,
         "admin/uitnodigingen.html",
@@ -519,6 +563,7 @@ async def create_invitation(
 ):
     from app.email import send_invitation_email
 
+    club = get_admin_club(current_user, db, request)
     form = await request.form()
     email = form.get("email", "").strip().lower()
     role = form.get("role", MemberRole.lid)
@@ -534,7 +579,7 @@ async def create_invitation(
         db.add(EmailRoleAssignment(email=email, role=role))
 
     token = secrets.token_urlsafe(32)
-    invitation = Invitation(token=token, email=email)
+    invitation = Invitation(token=token, email=email, club_id=club.id if club else None)
     db.add(invitation)
     db.commit()
 
@@ -593,19 +638,23 @@ async def aanvragen_list(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
+    club = get_admin_club(current_user, db, request)
     PER_PAGINA = 20
-    totaal = db.query(AccountRequest).count()
+    base_q = db.query(AccountRequest)
+    if club:
+        base_q = base_q.filter(AccountRequest.club_id == club.id)
+    totaal = base_q.count()
     totaal_paginas = max(1, (totaal + PER_PAGINA - 1) // PER_PAGINA)
     pagina = max(1, min(pagina, totaal_paginas))
     aanvragen = (
-        db.query(AccountRequest)
+        base_q
         .order_by(AccountRequest.aangemaakt_op.desc())
         .offset((pagina - 1) * PER_PAGINA)
         .limit(PER_PAGINA)
         .all()
     )
     pending_count = (
-        db.query(AccountRequest)
+        base_q
         .filter(AccountRequest.status == AccountRequestStatus.wachtend)
         .count()
     )
@@ -689,6 +738,10 @@ async def aanvraag_goedkeuren(
             role=role,
         )
         db.add(member)
+        db.flush()
+        club_id = aanvraag.club_id or (db.query(Club).first() or Club()).id
+        if club_id:
+            db.add(MemberClub(member_id=member.id, club_id=club_id, role=role))
         db.commit()
         try:
             send_approval_email(aanvraag.email, aanvraag.voornaam, f"{_base_url(request)}/login")
@@ -823,12 +876,16 @@ async def leden_list(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
+    club = get_admin_club(current_user, db, request)
     PER_PAGINA = 50
-    totaal = db.query(Lid).count()
+    base_q = db.query(Lid)
+    if club:
+        base_q = base_q.filter(Lid.club_id == club.id)
+    totaal = base_q.count()
     totaal_paginas = max(1, (totaal + PER_PAGINA - 1) // PER_PAGINA)
     pagina = max(1, min(pagina, totaal_paginas))
     leden = (
-        db.query(Lid)
+        base_q
         .order_by(Lid.achternaam, Lid.voornaam)
         .offset((pagina - 1) * PER_PAGINA)
         .limit(PER_PAGINA)
@@ -853,13 +910,15 @@ async def lid_toevoegen(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
+    club = get_admin_club(current_user, db, request)
     form = await request.form()
     voornaam = form.get("voornaam", "").strip()
     achternaam = form.get("achternaam", "").strip()
     nbb_nummer = form.get("nbb_nummer", "").strip() or None
 
     if voornaam and achternaam:
-        db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb_nummer))
+        db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb_nummer,
+                   club_id=club.id if club else None))
         db.commit()
     return RedirectResponse(url="/beheer/leden?toegevoegd=1", status_code=302)
 
@@ -887,6 +946,8 @@ async def leden_importeer(
     import csv
     import io
 
+    club = get_admin_club(current_user, db, request)
+    club_id = club.id if club else None
     form = await request.form()
     bestand = form.get("bestand")
     if not bestand or not bestand.filename:
@@ -913,11 +974,12 @@ async def leden_importeer(
             .filter(
                 func.lower(Lid.voornaam) == voornaam.lower(),
                 func.lower(Lid.achternaam) == achternaam.lower(),
+                Lid.club_id == club_id,
             )
             .first()
         )
         if not al_aanwezig:
-            db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb))
+            db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb, club_id=club_id))
             toegevoegd += 1
         else:
             overgeslagen += 1
@@ -941,6 +1003,7 @@ async def af_aanmeldingen_list(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
+    club = get_admin_club(current_user, db, request)
     active_filter = request.query_params.get("type", "")
     query = (
         db.query(ClubEvening)
@@ -948,6 +1011,8 @@ async def af_aanmeldingen_list(
         .filter(Season.actief == True, ClubEvening.datum >= date.today())  # noqa: E712
         .order_by(ClubEvening.datum)
     )
+    if club:
+        query = query.filter(ClubEvening.club_id == club.id)
     if active_filter and active_filter in _AF_TYPE_MAP:
         query = query.filter(ClubEvening.type.in_(_AF_TYPE_MAP[active_filter]))
     evenings = query.all()
@@ -1292,7 +1357,14 @@ async def aanwezigheid(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_auth),
 ):
-    seasons = db.query(Season).order_by(Season.start_datum.desc()).all()
+    from app.auth import get_member_club_ids
+    club = get_admin_club(current_user, db, request)
+
+    seasons_q = db.query(Season)
+    if club:
+        seasons_q = seasons_q.filter(Season.club_id == club.id)
+    seasons = seasons_q.order_by(Season.start_datum.desc()).all()
+
     selected_season_id = request.query_params.get("seizoen")
     selected_season = None
 
@@ -1302,7 +1374,7 @@ async def aanwezigheid(
         except ValueError:
             selected_season = None
     if not selected_season:
-        selected_season = db.query(Season).filter(Season.actief == True).first()  # noqa: E712
+        selected_season = next((s for s in seasons if s.actief), None)
     if not selected_season and seasons:
         selected_season = seasons[0]
 
@@ -1323,7 +1395,18 @@ async def aanwezigheid(
 
     is_beheerder = current_user.role in (MemberRole.wedstrijdleider.value, MemberRole.admin.value)
 
-    if is_beheerder:
+    if is_beheerder and club:
+        club_member_ids = [
+            mc.member_id
+            for mc in db.query(MemberClub).filter(MemberClub.club_id == club.id).all()
+        ]
+        members = (
+            db.query(Member)
+            .filter(Member.verwijderd_op.is_(None), Member.id.in_(club_member_ids))
+            .order_by(Member.achternaam, Member.voornaam)
+            .all()
+        )
+    elif is_beheerder:
         members = (
             db.query(Member)
             .filter(Member.verwijderd_op.is_(None))
@@ -1336,6 +1419,8 @@ async def aanwezigheid(
     stats = []
     if selected_season:
         evening_q = db.query(ClubEvening).filter(ClubEvening.season_id == selected_season.id)
+        if club:
+            evening_q = evening_q.filter(ClubEvening.club_id == club.id)
         if db_types is not None:
             evening_q = evening_q.filter(ClubEvening.type.in_(db_types))
         evening_count = evening_q.count()
@@ -1380,6 +1465,331 @@ async def aanwezigheid(
             "welkom": False,
         },
     )
+
+
+# ── Actieve beheer-club instellen (Admin + Wedstrijdleider) ──────────────────
+
+@router.get("/actieve-club/{club_id}")
+async def actieve_club_instellen(
+    club_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    """Slaat de actieve beheer-club op in de sessie en stuurt terug naar de vorige pagina."""
+    if current_user.role != MemberRole.admin.value:
+        mc = db.query(MemberClub).filter(
+            MemberClub.member_id == current_user.id,
+            MemberClub.club_id == club_id,
+            MemberClub.role.in_([MemberRole.admin.value, MemberRole.wedstrijdleider.value]),
+        ).first()
+        if not mc:
+            raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
+    else:
+        club = db.query(Club).filter(Club.id == club_id).first()
+        if not club:
+            raise HTTPException(status_code=404, detail="Club niet gevonden")
+
+    request.session["active_beheer_club_id"] = club_id
+    referer = request.headers.get("referer", "/beheer/avonden")
+    if not referer.startswith("/") or referer.startswith("//"):
+        referer = "/beheer/avonden"
+    return RedirectResponse(url=referer, status_code=302)
+
+
+# ── Clubs (Admin only) ────────────────────────────────────────────────────────
+
+@router.get("/clubs")
+async def clubs_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    clubs = db.query(Club).order_by(Club.naam).all()
+    lid_counts = {}
+    for club in clubs:
+        lid_counts[club.id] = db.query(MemberClub).filter(MemberClub.club_id == club.id).count()
+    ledenlijst_counts = {}
+    for club in clubs:
+        ledenlijst_counts[club.id] = db.query(Lid).filter(Lid.club_id == club.id).count()
+    return templates.TemplateResponse(
+        request,
+        "admin/clubs.html",
+        {
+            "current_user": current_user,
+            "clubs": clubs,
+            "lid_counts": lid_counts,
+            "ledenlijst_counts": ledenlijst_counts,
+        },
+    )
+
+
+@router.post("/clubs")
+async def club_toevoegen(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    form = await request.form()
+    naam = form.get("naam", "").strip()
+    stad = form.get("stad", "").strip() or None
+    if naam:
+        db.add(Club(naam=naam, stad=stad))
+        db.commit()
+    return RedirectResponse(url="/beheer/clubs?aangemaakt=1", status_code=302)
+
+
+@router.post("/clubs/{club_id}/update")
+async def club_update(
+    club_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    form = await request.form()
+    naam = form.get("naam", "").strip()
+    stad = form.get("stad", "").strip() or None
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if club and naam:
+        club.naam = naam
+        club.stad = stad
+        db.commit()
+    return RedirectResponse(url="/beheer/clubs?opgeslagen=1", status_code=302)
+
+
+@router.post("/clubs/{club_id}/verwijder")
+async def club_verwijder(
+    club_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if club:
+        db.delete(club)
+        db.commit()
+    return RedirectResponse(url="/beheer/clubs?verwijderd=1", status_code=302)
+
+
+@router.post("/clubs/{club_id}/leden/importeer")
+async def club_leden_importeer(
+    club_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    import csv
+    import io
+
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club niet gevonden")
+
+    form = await request.form()
+    bestand = form.get("bestand")
+    if not bestand or not bestand.filename:
+        return RedirectResponse(url="/beheer/clubs?import_fout=1", status_code=302)
+
+    inhoud = await bestand.read()
+    try:
+        tekst = inhoud.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        tekst = inhoud.decode("latin-1")
+
+    reader = csv.DictReader(io.StringIO(tekst))
+    toegevoegd = 0
+    overgeslagen = 0
+    for rij in reader:
+        voornaam = (rij.get("voornaam") or rij.get("Voornaam") or "").strip()
+        achternaam = (rij.get("achternaam") or rij.get("Achternaam") or "").strip()
+        nbb = (rij.get("nbb_nummer") or rij.get("NBB") or rij.get("nbb") or "").strip() or None
+        if not voornaam or not achternaam:
+            overgeslagen += 1
+            continue
+        al_aanwezig = (
+            db.query(Lid)
+            .filter(
+                func.lower(Lid.voornaam) == voornaam.lower(),
+                func.lower(Lid.achternaam) == achternaam.lower(),
+                Lid.club_id == club_id,
+            )
+            .first()
+        )
+        if not al_aanwezig:
+            db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb, club_id=club_id))
+            toegevoegd += 1
+        else:
+            overgeslagen += 1
+    db.commit()
+    return RedirectResponse(
+        url=f"/beheer/clubs?import_ok={toegevoegd}&overgeslagen={overgeslagen}",
+        status_code=302,
+    )
+
+
+# ── Club-ledenlijst beheren (Admin only) ──────────────────────────────────────
+
+@router.get("/clubs/{club_id}/leden")
+async def club_leden_beheer(
+    club_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club niet gevonden")
+
+    mc_rows = db.query(MemberClub).filter(MemberClub.club_id == club_id).all()
+    member_ids = [mc.member_id for mc in mc_rows]
+    member_map: dict[int, Member] = {}
+    if member_ids:
+        member_map = {
+            m.id: m for m in db.query(Member)
+            .filter(Member.id.in_(member_ids), Member.verwijderd_op.is_(None))
+            .all()
+        }
+
+    club_leden = sorted(
+        [{"mc": mc, "member": member_map[mc.member_id]}
+         for mc in mc_rows if mc.member_id in member_map],
+        key=lambda x: (x["member"].achternaam or "", x["member"].voornaam or ""),
+    )
+
+    existing_ids = set(member_ids)
+    if existing_ids:
+        alle_members = (
+            db.query(Member)
+            .filter(Member.verwijderd_op.is_(None), Member.id.notin_(existing_ids))
+            .order_by(Member.achternaam, Member.voornaam)
+            .all()
+        )
+    else:
+        alle_members = (
+            db.query(Member)
+            .filter(Member.verwijderd_op.is_(None))
+            .order_by(Member.achternaam, Member.voornaam)
+            .all()
+        )
+
+    return templates.TemplateResponse(
+        request,
+        "admin/club_leden.html",
+        {
+            "current_user": current_user,
+            "club": club,
+            "club_leden": club_leden,
+            "alle_members": alle_members,
+            "roles": [r.value for r in MemberRole],
+        },
+    )
+
+
+@router.post("/clubs/{club_id}/leden/toevoegen")
+async def club_lid_toevoegen(
+    club_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club niet gevonden")
+
+    form = await request.form()
+    member_id_str = form.get("member_id", "").strip()
+    role = form.get("role", MemberRole.lid.value).strip()
+
+    if role not in [r.value for r in MemberRole]:
+        role = MemberRole.lid.value
+
+    try:
+        member_id = int(member_id_str)
+    except (ValueError, TypeError):
+        return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?fout=lid", status_code=302)
+
+    member = db.query(Member).filter(Member.id == member_id, Member.verwijderd_op.is_(None)).first()
+    if not member:
+        return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?fout=lid", status_code=302)
+
+    existing = db.query(MemberClub).filter(
+        MemberClub.club_id == club_id, MemberClub.member_id == member_id,
+    ).first()
+    if not existing:
+        db.add(MemberClub(member_id=member_id, club_id=club_id, role=role))
+        _sync_global_role(member, db)
+        db.commit()
+
+    return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?toegevoegd=1", status_code=302)
+
+
+@router.post("/clubs/{club_id}/leden/{member_id}/rol")
+async def club_lid_rol_wijzigen(
+    club_id: int,
+    member_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    form = await request.form()
+    role = form.get("role", "").strip()
+    if role not in [r.value for r in MemberRole]:
+        return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?fout=rol", status_code=302)
+
+    mc = db.query(MemberClub).filter(
+        MemberClub.club_id == club_id, MemberClub.member_id == member_id,
+    ).first()
+    if not mc:
+        return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?fout=lid", status_code=302)
+
+    mc.role = role
+    member = db.query(Member).filter(Member.id == member_id).first()
+    if member:
+        _sync_global_role(member, db)
+    db.commit()
+    return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?opgeslagen=1", status_code=302)
+
+
+@router.post("/clubs/{club_id}/leden/{member_id}/verwijder")
+async def club_lid_uit_club_verwijder(
+    club_id: int,
+    member_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    mc = db.query(MemberClub).filter(
+        MemberClub.club_id == club_id, MemberClub.member_id == member_id,
+    ).first()
+    if mc:
+        db.delete(mc)
+        member = db.query(Member).filter(Member.id == member_id).first()
+        if member:
+            remaining = db.query(MemberClub).filter(
+                MemberClub.member_id == member_id, MemberClub.club_id != club_id,
+            ).all()
+            if remaining:
+                roles = [r.role for r in remaining]
+                if MemberRole.admin.value in roles:
+                    member.role = MemberRole.admin.value
+                elif MemberRole.wedstrijdleider.value in roles:
+                    member.role = MemberRole.wedstrijdleider.value
+                else:
+                    member.role = MemberRole.lid.value
+        db.commit()
+    return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?verwijderd=1", status_code=302)
+
+
+def _sync_global_role(member: Member, db: Session) -> None:
+    """Synchroniseert member.role met de hoogste rol in alle MemberClub rijen."""
+    all_mc = db.query(MemberClub).filter(MemberClub.member_id == member.id).all()
+    roles = [mc.role for mc in all_mc]
+    if MemberRole.admin.value in roles:
+        member.role = MemberRole.admin.value
+    elif MemberRole.wedstrijdleider.value in roles:
+        member.role = MemberRole.wedstrijdleider.value
+    else:
+        member.role = MemberRole.lid.value
 
 
 @router.get("/weergave/{rol}")

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Clubs beheren — {{ club_naam }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Clubs <span class="badge">{{ clubs | length }}</span></h1>
+
+  {% if request.query_params.get('aangemaakt') %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">Club aangemaakt.</div>
+  {% elif request.query_params.get('opgeslagen') %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">Wijzigingen opgeslagen.</div>
+  {% elif request.query_params.get('verwijderd') %}
+    <div class="alert alert-info" style="margin-bottom:1rem;">Club verwijderd.</div>
+  {% elif request.query_params.get('import_ok') is not none and request.query_params.get('import_ok') != '' %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">
+      Import klaar: <strong>{{ request.query_params.get('import_ok') }}</strong> leden toegevoegd,
+      {{ request.query_params.get('overgeslagen', '0') }} overgeslagen.
+    </div>
+  {% elif request.query_params.get('import_fout') %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">Upload mislukt. Kies een geldig CSV-bestand.</div>
+  {% endif %}
+
+  <!-- Nieuwe club toevoegen -->
+  <h2 style="margin-top:0;">Nieuwe club toevoegen</h2>
+  <form method="post" action="/beheer/clubs" class="form-stack" style="margin-bottom:2rem;">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="naam">Naam</label>
+        <input type="text" id="naam" name="naam" required autocomplete="off" placeholder="bijv. Bridge Club Dombo">
+      </div>
+      <div class="form-group">
+        <label for="stad">Stad <span class="form-hint">(optioneel)</span></label>
+        <input type="text" id="stad" name="stad" autocomplete="off" placeholder="bijv. Amsterdam">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Club toevoegen</button>
+  </form>
+
+  <!-- Overzicht bestaande clubs -->
+  {% if clubs %}
+    {% for club in clubs %}
+    <div class="card" style="margin-bottom:1.5rem;border:1px solid var(--color-border);padding:1.25rem;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.75rem;">
+        <div>
+          <h2 style="margin:0 0 .25rem;">{{ club.naam }}</h2>
+          {% if club.stad %}<p style="color:var(--color-muted);margin:0 0 .5rem;font-size:.9rem;">{{ club.stad }}</p>{% endif %}
+          <p style="margin:0;font-size:.85rem;color:var(--color-muted);">
+            <strong>{{ lid_counts.get(club.id, 0) }}</strong> leden &mdash;
+            <strong>{{ ledenlijst_counts.get(club.id, 0) }}</strong> in ledenlijst
+          </p>
+          <a href="/beheer/clubs/{{ club.id }}/leden" class="btn btn-secondary" style="margin-top:.5rem;padding:.3rem .7rem;font-size:.85rem;">Leden &amp; rollen beheren</a>
+        </div>
+        <form method="post" action="/beheer/clubs/{{ club.id }}/verwijder"
+              data-bevestig="Club '{{ club.naam }}' verwijderen? Dit verwijdert ook alle gekoppelde data.">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+          <button type="submit" class="btn btn-danger" style="padding:.3rem .7rem;font-size:.85rem;">Verwijderen</button>
+        </form>
+      </div>
+
+      <!-- Bewerken -->
+      <details style="margin-top:1rem;">
+        <summary style="cursor:pointer;font-weight:500;font-size:.9rem;color:var(--color-primary);">Naam / stad wijzigen</summary>
+        <form method="post" action="/beheer/clubs/{{ club.id }}/update" class="form-stack" style="margin-top:.75rem;">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Naam</label>
+              <input type="text" name="naam" value="{{ club.naam }}" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label>Stad</label>
+              <input type="text" name="stad" value="{{ club.stad or '' }}" autocomplete="off">
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary" style="padding:.35rem .9rem;font-size:.9rem;">Opslaan</button>
+        </form>
+      </details>
+
+      <!-- Ledenlijst importeren -->
+      <details style="margin-top:.75rem;">
+        <summary style="cursor:pointer;font-weight:500;font-size:.9rem;color:var(--color-primary);">Ledenlijst importeren (CSV)</summary>
+        <p style="color:var(--color-muted);font-size:.85rem;margin:.5rem 0 .5rem;">
+          Upload een CSV met kolommen <code>voornaam</code>, <code>achternaam</code> en optioneel <code>nbb_nummer</code>.
+          Bestaande leden worden overgeslagen.
+        </p>
+        <form method="post" action="/beheer/clubs/{{ club.id }}/leden/importeer"
+              enctype="multipart/form-data" class="form-stack">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+          <div class="form-group">
+            <label>CSV-bestand</label>
+            <input type="file" name="bestand" accept=".csv,text/csv" required>
+          </div>
+          <button type="submit" class="btn btn-primary" style="padding:.35rem .9rem;font-size:.9rem;">Importeer</button>
+        </form>
+      </details>
+    </div>
+    {% endfor %}
+  {% else %}
+    <p class="empty-state">Nog geen clubs aangemaakt.</p>
+  {% endif %}
+
+</section>
+{% endblock %}

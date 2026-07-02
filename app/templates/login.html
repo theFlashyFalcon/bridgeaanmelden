@@ -360,28 +360,42 @@
 
       <!-- Tabs -->
       <div class="lp-tabs">
-        <label class="lp-tab active" id="tab-naam">
-          <input type="radio" name="login_method" value="naam" checked onchange="toggleLoginMethod('naam')">
+        <label class="lp-tab active" id="tab-nbb">
+          <input type="radio" name="login_method" value="nbb" checked onchange="toggleLoginMethod('nbb')">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          NBB-nummer
+        </label>
+        <label class="lp-tab" id="tab-naam">
+          <input type="radio" name="login_method" value="naam" onchange="toggleLoginMethod('naam')">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          Voor- en achternaam
+          Naam
         </label>
         <label class="lp-tab" id="tab-email">
           <input type="radio" name="login_method" value="email" onchange="toggleLoginMethod('email')">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-          E-mailadres
+          E-mail
         </label>
       </div>
 
+      <!-- NBB-nummer veld -->
+      <div id="veld-nbb" class="form-group">
+        <label for="nbb_nummer">NBB-nummer</label>
+        <div class="input-icon-wrap">
+          <svg class="input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+          <input type="text" id="nbb_nummer" name="nbb_nummer" required autocomplete="username" placeholder="bijv. 669660" maxlength="20" inputmode="numeric">
+        </div>
+      </div>
+
       <!-- Naam velden -->
-      <div id="veld-naam" class="form-group">
+      <div id="veld-naam" class="form-group" style="display:none">
         <label>Voor- en achternaam</label>
         <div class="input-icon-wrap">
           <svg class="input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <input type="text" id="voornaam" name="voornaam" required autocomplete="given-name" placeholder="Voornaam" maxlength="100">
+          <input type="text" id="voornaam" name="voornaam" autocomplete="given-name" placeholder="Voornaam" maxlength="100">
         </div>
         <div class="input-icon-wrap" style="margin-top:.5rem">
           <svg class="input-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <input type="text" id="achternaam" name="achternaam" required autocomplete="family-name" placeholder="Achternaam" maxlength="100">
+          <input type="text" id="achternaam" name="achternaam" autocomplete="family-name" placeholder="Achternaam" maxlength="100">
         </div>
       </div>
 
@@ -476,31 +490,24 @@
   })();
 
   function toggleLoginMethod(method) {
-    const emailVeld = document.getElementById('veld-email');
-    const naamVeld  = document.getElementById('veld-naam');
-    const tabEmail  = document.getElementById('tab-email');
-    const tabNaam   = document.getElementById('tab-naam');
-    const emailInput      = document.getElementById('email');
-    const voornaamInput   = document.getElementById('voornaam');
-    const achternaamInput = document.getElementById('achternaam');
+    const velden = { nbb: 'veld-nbb', naam: 'veld-naam', email: 'veld-email' };
+    const tabs   = { nbb: 'tab-nbb', naam: 'tab-naam', email: 'tab-email' };
+    const inputs = {
+      nbb:       document.getElementById('nbb_nummer'),
+      voornaam:  document.getElementById('voornaam'),
+      achternaam:document.getElementById('achternaam'),
+      email:     document.getElementById('email'),
+    };
 
-    if (method === 'naam') {
-      naamVeld.style.display  = '';
-      emailVeld.style.display = 'none';
-      voornaamInput.setAttribute('required', '');
-      achternaamInput.setAttribute('required', '');
-      emailInput.removeAttribute('required');
-      tabNaam.classList.add('active');
-      tabEmail.classList.remove('active');
-    } else {
-      emailVeld.style.display = '';
-      naamVeld.style.display  = 'none';
-      emailInput.setAttribute('required', '');
-      voornaamInput.removeAttribute('required');
-      achternaamInput.removeAttribute('required');
-      tabEmail.classList.add('active');
-      tabNaam.classList.remove('active');
-    }
+    Object.keys(velden).forEach(function(m) {
+      document.getElementById(velden[m]).style.display = (m === method) ? '' : 'none';
+      document.getElementById(tabs[m]).classList.toggle('active', m === method);
+    });
+
+    inputs.nbb.required        = (method === 'nbb');
+    inputs.voornaam.required   = (method === 'naam');
+    inputs.achternaam.required = (method === 'naam');
+    inputs.email.required      = (method === 'email');
   }
 </script>
 

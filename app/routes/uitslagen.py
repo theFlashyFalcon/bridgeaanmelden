@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_auth, require_wedstrijdleider
+from app.auth import get_current_user, get_member_club_ids, require_auth, require_wedstrijdleider
 from app.database import get_db
 from app.models import ClubEvening, Member, Uitslag
 from app.utils.nbb_xml import parse_nbb_xml
@@ -48,10 +48,15 @@ async def uitslagen_pagina(
     q = request.query_params.get("q", "").strip()
     today = date.today()
 
+    user_club_ids = get_member_club_ids(current_user, db)
     query = db.query(ClubEvening).filter(
         ClubEvening.datum < today,
         ClubEvening.type.notin_(EXCLUDED_TYPES),
     )
+    if user_club_ids:
+        query = query.filter(
+            (ClubEvening.club_id.in_(user_club_ids)) | (ClubEvening.club_id.is_(None))
+        )
 
     if q:
         parsed_date = None
@@ -94,13 +99,13 @@ async def uitslag_upload_algemeen_form(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
+    from app.auth import get_admin_club
+    club = get_admin_club(current_user, db)
     today = date.today()
-    evenings = (
-        db.query(ClubEvening)
-        .filter(ClubEvening.datum < today, ClubEvening.type.notin_(EXCLUDED_TYPES))
-        .order_by(ClubEvening.datum.desc())
-        .all()
-    )
+    q = db.query(ClubEvening).filter(ClubEvening.datum < today, ClubEvening.type.notin_(EXCLUDED_TYPES))
+    if club:
+        q = q.filter(ClubEvening.club_id == club.id)
+    evenings = q.order_by(ClubEvening.datum.desc()).all()
     uitslagen_ids = {
         u.evening_id
         for u in db.query(Uitslag).filter(

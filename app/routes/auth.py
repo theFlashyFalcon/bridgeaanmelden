@@ -16,16 +16,33 @@ from app.database import get_db
 from app.models import (
     AccountRequest,
     AccountRequestStatus,
+    Club,
     EmailRoleAssignment,
     Invitation,
     Lid,
     Member,
+    MemberClub,
     MemberRole,
     PasswordResetToken,
 )
 
 router = APIRouter()
 from app.templates_env import templates
+
+
+def _koppel_aan_club(member: Member, db: Session, club_id: int | None = None) -> None:
+    """Maak een MemberClub record aan als die nog niet bestaat."""
+    if club_id is None:
+        club = db.query(Club).first()
+        if club is None:
+            return
+        club_id = club.id
+    exists = db.query(MemberClub).filter(
+        MemberClub.member_id == member.id,
+        MemberClub.club_id == club_id,
+    ).first()
+    if not exists:
+        db.add(MemberClub(member_id=member.id, club_id=club_id, role=member.role))
 
 
 # ── Login ──────────────────────────────────────────────────────────────────────
@@ -56,7 +73,11 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
     member = None
     email = ""
 
-    if login_method == "naam":
+    if login_method == "nbb":
+        nbb = form.get("nbb_nummer", "").strip()
+        member = db.query(Member).filter(Member.lidnummer == nbb).first()
+        email = member.email or "" if member else ""
+    elif login_method == "naam":
         voornaam = form.get("voornaam", "").strip()
         achternaam = form.get("achternaam", "").strip()
         matches = (
@@ -68,11 +89,10 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
             .all()
         )
         if len(matches) > 1:
-            # Ambiguous — multiple members share this name, email login is required
             return templates.TemplateResponse(
                 request,
                 "login.html",
-                {"error": "Meerdere accounts gevonden met deze naam. Gebruik je e-mailadres om in te loggen."},
+                {"error": "Meerdere accounts gevonden met deze naam. Gebruik je NBB-nummer om in te loggen."},
                 status_code=401,
             )
         if len(matches) == 1:
@@ -278,9 +298,11 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         )
         return _render({"melding": "aanvraag_ontvangen"}, status=200)
 
-    # ── Crash-lid geverifieerd: account direct aanmaken ───────────────────────
+    # ── Lid geverifieerd: account direct aanmaken ─────────────────────────────
     assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == email).first()
     role = assignment.role if assignment else MemberRole.lid
+
+    lid_club_id = getattr(club_lid, "club_id", None) if (club_lid := db.query(Lid).filter(Lid.nbb_nummer == nbb_nummer).first()) else None
 
     member = Member(
         voornaam=voornaam,
@@ -292,6 +314,8 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         toestemming_op=datetime.now(timezone.utc),
     )
     db.add(member)
+    db.flush()
+    _koppel_aan_club(member, db, club_id=lid_club_id)
     try:
         db.commit()
         db.refresh(member)
@@ -400,6 +424,8 @@ async def register_submit(token: str, request: Request, db: Session = Depends(ge
     )
     db.add(member)
     db.flush()
+
+    _koppel_aan_club(member, db, club_id=invitation.club_id)
 
     invitation.gebruikt_op = datetime.now(timezone.utc)
     invitation.member_id = member.id

@@ -58,6 +58,18 @@ class RegistrationStatus(str, enum.Enum):
     combipaar = "combipaar"
 
 
+class Club(Base):
+    __tablename__ = "clubs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    naam = Column(String, nullable=False)
+    stad = Column(String, nullable=True)
+
+    seasons = relationship("Season", back_populates="club")
+    evenings = relationship("ClubEvening", back_populates="club")
+    member_clubs = relationship("MemberClub", back_populates="club")
+
+
 class Member(Base):
     __tablename__ = "members"
 
@@ -75,6 +87,7 @@ class Member(Base):
     toestemming_op = Column(DateTime, nullable=True)
 
     invitations = relationship("Invitation", back_populates="member")
+    club_memberships = relationship("MemberClub", back_populates="member")
     registrations_as_person1 = relationship(
         "Registration",
         foreign_keys="Registration.person1_id",
@@ -85,6 +98,19 @@ class Member(Base):
         foreign_keys="Registration.person2_id",
         back_populates="person2",
     )
+
+
+class MemberClub(Base):
+    """Koppeltabel: welk lid hoort bij welke club, met welke rol."""
+    __tablename__ = "member_clubs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=False)
+    role = Column(String, default=MemberRole.lid, nullable=False)
+
+    member = relationship("Member", back_populates="club_memberships")
+    club = relationship("Club", back_populates="member_clubs")
 
 
 class AccountRequestStatus(str, enum.Enum):
@@ -106,6 +132,7 @@ class AccountRequest(Base):
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
     beoordeeld_op = Column(DateTime, nullable=True)
     toestemming_op = Column(DateTime, nullable=True)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
 
 
 class Invitation(Base):
@@ -118,6 +145,7 @@ class Invitation(Base):
     gebruikt_op = Column(DateTime, nullable=True)
     member_id = Column(Integer, ForeignKey("members.id"), nullable=True)
     account_request_id = Column(Integer, ForeignKey("account_requests.id"), nullable=True)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
 
     member = relationship("Member", back_populates="invitations")
     account_request = relationship("AccountRequest")
@@ -143,7 +171,9 @@ class Season(Base):
     start_datum = Column(Date, nullable=False)
     eind_datum = Column(Date, nullable=False)
     actief = Column(Boolean, default=False, nullable=False)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
 
+    club = relationship("Club", back_populates="seasons")
     club_evenings = relationship("ClubEvening", back_populates="season")
 
 
@@ -157,8 +187,10 @@ class ClubEvening(Base):
     deelnemers_type = Column(String, nullable=False, default=DeelnemersType.paren)
     inschrijftermijn_uren = Column(Integer, nullable=True)
     season_id = Column(Integer, ForeignKey("seasons.id"), nullable=False)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
 
     season = relationship("Season", back_populates="club_evenings")
+    club = relationship("Club", back_populates="evenings")
     registrations = relationship("Registration", back_populates="evening")
 
 
@@ -191,7 +223,8 @@ class Lid(Base):
     id = Column(Integer, primary_key=True, index=True)
     voornaam = Column(String, nullable=False)
     achternaam = Column(String, nullable=False)
-    nbb_nummer = Column(String, nullable=True, unique=True, index=True)
+    nbb_nummer = Column(String, nullable=True, index=True)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
 
 
 class PartnerRequest(Base):
@@ -266,6 +299,8 @@ class Bericht(Base):
     gelezen = Column(Boolean, default=False, nullable=False)
     parent_id = Column(Integer, ForeignKey("berichten.id"), nullable=True)
     is_nieuws = Column(Boolean, default=False, nullable=False)
+    is_systeem = Column(Boolean, default=False, nullable=False, server_default="0")
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
 
     afzender = relationship("Member", foreign_keys=[afzender_id])
     ontvanger = relationship("Member", foreign_keys=[ontvanger_id])
@@ -279,6 +314,7 @@ class Ranking(Base):
     bestandsnaam = Column(String, nullable=True)
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
     aangemaakt_door_id = Column(Integer, ForeignKey("members.id"), nullable=True)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
 
     aangemaakt_door = relationship("Member")
 

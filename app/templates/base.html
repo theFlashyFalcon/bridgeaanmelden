@@ -16,7 +16,12 @@
 
 <header>
   <nav class="navbar">
-    <a href="/" class="nav-brand">{{ club_naam }}</a>
+    <a href="/" class="nav-brand" aria-label="Home">
+      <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z"/>
+        <path d="M9 21V13h6v8"/>
+      </svg>
+    </a>
     <button class="nav-toggle" id="nav-toggle" aria-label="Menu openen" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
@@ -73,6 +78,7 @@
             <a href="/beheer/aanvragen">Inkomende verzoeken</a>
             <a href="/beheer/uitnodigingen">Uitnodigen</a>
             <a href="/beheer/rollen">Roltoewijzingen</a>
+            <a href="/beheer/clubs">Clubs beheren</a>
           </div>
         </div>
         {% endif %}
@@ -101,6 +107,22 @@
   Voorbeeldweergave als <strong>{{ request.session.get('view_as_role') }}</strong> &mdash;
   <a href="/beheer/weergave/reset">Terug naar admin</a>
 </div>
+{% endif %}
+
+{% if current_user %}
+{% set beheer_clubs = get_beheer_clubs(request) %}
+{% if beheer_clubs | length > 1 %}
+{% set active_beheer_id = request.session.get('active_beheer_club_id') %}
+<div class="club-switcher-bar">
+  <span class="club-switcher-label">Beheer:</span>
+  {% for c in beheer_clubs %}
+  <a href="/beheer/actieve-club/{{ c.id }}"
+     class="club-switcher-item{% if (active_beheer_id and c.id == active_beheer_id) or (not active_beheer_id and loop.first) %} club-switcher-actief{% endif %}">
+    {{ c.naam }}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
 {% endif %}
 
 <main class="container">
