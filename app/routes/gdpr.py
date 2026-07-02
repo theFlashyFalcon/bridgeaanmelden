@@ -35,7 +35,12 @@ async def download_mijn_gegevens(
     )
     berichten_verzonden = (
         db.query(Bericht)
-        .filter(Bericht.afzender_id == current_user.id)
+        .filter(Bericht.afzender_id == current_user.id, Bericht.is_systeem == False)  # noqa: E712
+        .all()
+    )
+    systeem_notificaties = (
+        db.query(Bericht)
+        .filter(Bericht.afzender_id == current_user.id, Bericht.is_systeem == True)  # noqa: E712
         .all()
     )
     berichten_ontvangen = (
@@ -43,6 +48,11 @@ async def download_mijn_gegevens(
         .filter(Bericht.ontvanger_id == current_user.id)
         .all()
     )
+
+    def _naam(member) -> str | None:
+        if member is None:
+            return None
+        return f"{member.voornaam} {member.achternaam}".strip() or None
 
     data = {
         "export_datum": datetime.now(timezone.utc).isoformat(),
@@ -68,6 +78,7 @@ async def download_mijn_gegevens(
         ],
         "berichten_verzonden": [
             {
+                "aan": _naam(b.ontvanger),
                 "onderwerp": b.onderwerp,
                 "tekst": b.tekst,
                 "aangemaakt_op": b.aangemaakt_op.isoformat() if b.aangemaakt_op else None,
@@ -76,11 +87,20 @@ async def download_mijn_gegevens(
         ],
         "berichten_ontvangen": [
             {
+                "van": _naam(b.afzender),
                 "onderwerp": b.onderwerp,
                 "tekst": b.tekst,
                 "aangemaakt_op": b.aangemaakt_op.isoformat() if b.aangemaakt_op else None,
             }
             for b in berichten_ontvangen
+        ],
+        "systeem_notificaties": [
+            {
+                "onderwerp": b.onderwerp,
+                "aan": _naam(b.ontvanger),
+                "aangemaakt_op": b.aangemaakt_op.isoformat() if b.aangemaakt_op else None,
+            }
+            for b in systeem_notificaties
         ],
     }
 

@@ -117,6 +117,7 @@ def _apply_recurring_registrations(db: Session, event: ClubEvening, sender_id: O
                         "Dit is een gevolg van je definitieve aanmelding voor dit type evenement. "
                         "Je kunt je aanmelding aanpassen via de agenda."
                     ),
+                    is_systeem=True,
                 ))
 
 

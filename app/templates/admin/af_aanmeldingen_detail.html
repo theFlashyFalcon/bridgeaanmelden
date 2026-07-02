@@ -170,7 +170,7 @@
             <input type="text" id="naam_1" name="naam_1" required autocomplete="off" placeholder="Volledige naam">
           </div>
           <div class="form-group">
-            <label for="naam_2">Naam speler 2 <span style="font-weight:400;color:var(--color-muted)">(optioneel → losloper)</span></label>
+            <label for="naam_2">Naam speler 2</label>
             <input type="text" id="naam_2" name="naam_2" autocomplete="off" placeholder="Volledige naam">
           </div>
         </div>
@@ -183,7 +183,30 @@
   <!-- Kolom 2: Loslopers (niet bij individueel) -->
   {% if dtype != 'individueel' %}
   <section class="card">
-    <h2>Loslopers <span class="badge">{{ loslopers | length + manual_loslopers | length }}</span></h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem;">
+      <h2 style="margin:0;">Loslopers <span class="badge">{{ loslopers | length + manual_loslopers | length }}</span></h2>
+      <button type="button" id="losloper-toevoegen-toggle"
+              style="background:none;border:1.5px solid var(--color-primary,#1e3a5f);border-radius:50%;width:1.75rem;height:1.75rem;font-size:1.1rem;line-height:1;cursor:pointer;color:var(--color-primary,#1e3a5f);display:flex;align-items:center;justify-content:center;flex-shrink:0;"
+              title="Losloper handmatig toevoegen">&#43;</button>
+    </div>
+    <div id="losloper-toevoegen-form" hidden style="margin-bottom:.75rem;">
+      <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/toevoegen" id="losloper-handmatig-form">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+        <input type="hidden" name="naam_1" id="losloper-naam-gecombineerd">
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-group" style="margin:0;flex:1;min-width:120px;">
+            <label for="losloper-voornaam" style="font-size:.85rem;">Voornaam</label>
+            <input type="text" id="losloper-voornaam" autocomplete="off" placeholder="Voornaam">
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:120px;">
+            <label for="losloper-achternaam" style="font-size:.85rem;">Achternaam</label>
+            <input type="text" id="losloper-achternaam" autocomplete="off" placeholder="Achternaam">
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="flex-shrink:0;">Toevoegen</button>
+          <button type="button" id="losloper-toevoegen-annuleer" class="btn btn-secondary btn-sm" style="flex-shrink:0;">Annuleren</button>
+        </div>
+      </form>
+    </div>
     {% if loslopers or manual_loslopers %}
       <ul class="participant-list">
         {% for reg in loslopers | sort(attribute='person1.achternaam') %}
@@ -493,6 +516,33 @@
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && teamModal.style.display !== 'none') teamModal.style.display = 'none';
   });
+
+  /* ── Losloper handmatig toevoegen ── */
+  var losloperToggle = document.getElementById('losloper-toevoegen-toggle');
+  var losloperFormDiv = document.getElementById('losloper-toevoegen-form');
+  var losloperAnnuleer = document.getElementById('losloper-toevoegen-annuleer');
+  var losloperForm = document.getElementById('losloper-handmatig-form');
+  var losloperVoornaam = document.getElementById('losloper-voornaam');
+  var losloperAchternaam = document.getElementById('losloper-achternaam');
+  var losloperNaam = document.getElementById('losloper-naam-gecombineerd');
+
+  if (losloperToggle && losloperFormDiv) {
+    losloperToggle.addEventListener('click', function() {
+      losloperFormDiv.hidden = !losloperFormDiv.hidden;
+      if (!losloperFormDiv.hidden) losloperVoornaam.focus();
+    });
+    losloperAnnuleer.addEventListener('click', function() {
+      losloperFormDiv.hidden = true;
+      losloperVoornaam.value = '';
+      losloperAchternaam.value = '';
+    });
+    losloperForm.addEventListener('submit', function(e) {
+      var vn = losloperVoornaam.value.trim();
+      var an = losloperAchternaam.value.trim();
+      if (!vn && !an) { e.preventDefault(); losloperVoornaam.focus(); return; }
+      losloperNaam.value = (vn + ' ' + an).trim();
+    });
+  }
 })();
 </script>
 
