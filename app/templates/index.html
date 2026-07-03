@@ -34,6 +34,8 @@
   </div>
 {% elif request.query_params.get('te_laat') %}
   <div class="alert alert-info">Je hebt je ingeschreven na de inschrijftermijn. De wedstrijdleider neemt contact met je op of je nog mee kunt doen.</div>
+{% elif request.query_params.get('training_niet_toegestaan') %}
+  <div class="alert alert-error">Je kunt je niet aanmelden voor dit evenement. Neem contact op met de wedstrijdleider als je denkt dat dit niet klopt.</div>
 {% elif request.query_params.get('voorkeuren_opgeslagen') %}
   <div class="alert alert-success">Agendaweergave opgeslagen.</div>
 {% endif %}
@@ -261,9 +263,17 @@
 
       <div class="event-actions">
         {% if current_user %}
-          <a href="/aanmelden/{{ evening.id }}" class="btn btn-primary btn-sm">
-            {% if reg %}Wijzigen{% else %}Aanmelden{% endif %}
-          </a>
+          {% if not reg and evening.deelnemers_type == 'individueel' %}
+            <form method="post" action="/aanmelden/{{ evening.id }}" style="display:inline;">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+              <input type="hidden" name="action" value="aanmelden">
+              <button type="submit" class="btn btn-primary btn-sm">Aanmelden</button>
+            </form>
+          {% else %}
+            <a href="/aanmelden/{{ evening.id }}" class="btn btn-primary btn-sm">
+              {% if reg %}Wijzigen{% else %}Aanmelden{% endif %}
+            </a>
+          {% endif %}
           <a href="/beheer/aanmeldingen/{{ evening.id }}" class="btn btn-secondary btn-sm">Bekijk aanmeldingen</a>
         {% endif %}
         {% if evening_club %}

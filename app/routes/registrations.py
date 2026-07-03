@@ -128,7 +128,7 @@ async def registration_submit(
         return RedirectResponse(url="/", status_code=302)
 
     if _is_training(evening) and not current_user.training_eligible:
-        raise HTTPException(status_code=403, detail="Geen toegang tot trainingsavonden")
+        return RedirectResponse(url="/?training_niet_toegestaan=1", status_code=302)
 
     form = await request.form()
     action = form.get("action", "aanmelden")
