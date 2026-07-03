@@ -59,55 +59,99 @@
 </section>
 {% endif %}
 
-<section class="card">
-  <h2>Aanmeldingsgeschiedenis <span class="badge">{{ registrations | length }}</span></h2>
-  {% if registrations %}
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
-        <thead>
-          <tr style="border-bottom:2px solid var(--border,#e0e0e0);text-align:left;">
-            <th style="padding:.5rem .75rem;">Datum</th>
-            <th style="padding:.5rem .75rem;">Avond</th>
-            <th style="padding:.5rem .75rem;">Status</th>
-            <th style="padding:.5rem .75rem;">Partner</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for reg in registrations %}
-            <tr style="border-bottom:1px solid var(--border,#e0e0e0);">
-              <td style="padding:.5rem .75rem;white-space:nowrap;">{{ reg.evening.datum.strftime('%d-%m-%Y') }}</td>
-              <td style="padding:.5rem .75rem;">{{ reg.evening.naam or reg.evening.type }}</td>
-              <td style="padding:.5rem .75rem;">
-                {% if reg.status == 'aangemeld' %}
-                  <span style="color:var(--color-success,green);">Aangemeld</span>
-                {% elif reg.status == 'afgemeld' %}
-                  <span style="color:var(--color-muted);">Afgemeld</span>
-                {% elif reg.status == 'beschikbaar_solo' %}
-                  <span style="color:var(--color-warning,orange);">Solo</span>
-                {% else %}
-                  {{ reg.status }}
-                {% endif %}
-              </td>
-              <td style="padding:.5rem .75rem;">
-                {% if reg.partner_naam %}
-                  {{ reg.partner_naam }}
-                {% elif reg.person1_id == current_user.id and reg.person2 %}
-                  {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
-                {% elif reg.person2_id == current_user.id and reg.person1 %}
-                  {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
-                {% else %}
-                  —
-                {% endif %}
-              </td>
+<div class="profiel-tweekolom">
+
+  <section class="card profiel-tweekolom-kaart">
+    <h2>Mijn agenda <span class="badge">{{ agenda | length }}</span></h2>
+    {% if agenda %}
+      <div style="overflow-x:auto;">
+        <table class="profiel-tabel">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Avond</th>
+              <th>Partner</th>
             </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  {% else %}
-    <p class="empty-state">Nog geen aanmeldingen gevonden.</p>
-  {% endif %}
-</section>
+          </thead>
+          <tbody>
+            {% for reg in agenda %}
+              <tr>
+                <td style="white-space:nowrap;">{{ reg.evening.datum.strftime('%d-%m-%Y') }}</td>
+                <td>{{ reg.evening.naam or reg.evening.type }}</td>
+                <td>
+                  {% if reg.partner_naam %}
+                    {{ reg.partner_naam }}
+                  {% elif reg.person1_id == current_user.id and reg.person2 %}
+                    {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+                  {% elif reg.person2_id == current_user.id and reg.person1 %}
+                    {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+                  {% elif reg.status == 'beschikbaar_solo' %}
+                    <span style="color:var(--color-warning,orange);">Solo</span>
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty-state">Geen aankomende evenementen.</p>
+    {% endif %}
+  </section>
+
+  <section class="card profiel-tweekolom-kaart">
+    <h2>Aanmeldingsgeschiedenis <span class="badge">{{ registrations | length }}</span></h2>
+    {% if registrations %}
+      <div style="overflow-x:auto;">
+        <table class="profiel-tabel">
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Avond</th>
+              <th>Status</th>
+              <th>Partner</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for reg in registrations %}
+              <tr>
+                <td style="white-space:nowrap;">{{ reg.evening.datum.strftime('%d-%m-%Y') }}</td>
+                <td>{{ reg.evening.naam or reg.evening.type }}</td>
+                <td>
+                  {% if reg.status == 'aangemeld' %}
+                    <span style="color:var(--color-success,green);">Aangemeld</span>
+                  {% elif reg.status == 'afgemeld' %}
+                    <span style="color:var(--color-muted);">Afgemeld</span>
+                  {% elif reg.status == 'beschikbaar_solo' %}
+                    <span style="color:var(--color-warning,orange);">Solo</span>
+                  {% else %}
+                    {{ reg.status }}
+                  {% endif %}
+                </td>
+                <td>
+                  {% if reg.partner_naam %}
+                    {{ reg.partner_naam }}
+                  {% elif reg.person1_id == current_user.id and reg.person2 %}
+                    {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+                  {% elif reg.person2_id == current_user.id and reg.person1 %}
+                    {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="empty-state">Nog geen aanmeldingen gevonden.</p>
+    {% endif %}
+  </section>
+
+</div>
 
 <section class="card">
   <h2>Mijn gegevens (AVG)</h2>
@@ -133,6 +177,36 @@
 .profiel-rij { display: flex; gap: 1rem; align-items: baseline; }
 .profiel-rij dt { font-weight: 600; min-width: 9rem; color: var(--color-muted); font-size: .9rem; }
 .profiel-rij dd { margin: 0; }
+
+.profiel-tweekolom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.profiel-tweekolom-kaart {
+  align-self: stretch;
+}
+.profiel-tabel {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+}
+.profiel-tabel thead tr {
+  border-bottom: 2px solid var(--border, #e0e0e0);
+  text-align: left;
+}
+.profiel-tabel th,
+.profiel-tabel td {
+  padding: .5rem .75rem;
+}
+.profiel-tabel tbody tr {
+  border-bottom: 1px solid var(--border, #e0e0e0);
+}
+
+@media (max-width: 700px) {
+  .profiel-tweekolom { grid-template-columns: 1fr; }
+}
 </style>
 
 {% endblock %}

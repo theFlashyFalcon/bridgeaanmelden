@@ -751,6 +751,23 @@ async def mijn_profiel(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_auth),
 ):
+    today = date.today()
+
+    agenda = (
+        db.query(Registration)
+        .filter(
+            or_(
+                Registration.person1_id == current_user.id,
+                Registration.person2_id == current_user.id,
+            ),
+            Registration.status != RegistrationStatus.afgemeld,
+        )
+        .join(ClubEvening)
+        .filter(ClubEvening.datum >= today)
+        .order_by(ClubEvening.datum.asc())
+        .all()
+    )
+
     registrations = (
         db.query(Registration)
         .filter(
@@ -760,6 +777,7 @@ async def mijn_profiel(
             )
         )
         .join(ClubEvening)
+        .filter(ClubEvening.datum < today)
         .order_by(ClubEvening.datum.desc())
         .limit(50)
         .all()
@@ -780,6 +798,7 @@ async def mijn_profiel(
         "profiel.html",
         {
             "current_user": current_user,
+            "agenda": agenda,
             "registrations": registrations,
             "herhalingen": herhalingen,
             "welkom": False,
