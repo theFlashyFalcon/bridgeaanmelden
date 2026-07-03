@@ -72,7 +72,7 @@
   </section>
 {% endif %}
 
-{# ── Filters ───────────────────────────────────────────────────────────────── #}
+{# ── Filters & acties ──────────────────────────────────────────────────────── #}
 {% set type_plural = {
   'clubavond': 'clubavonden',
   'avondeten': 'maaltijden',
@@ -80,139 +80,149 @@
   'speciaal': 'speciale evenementen',
 } %}
 
-{# 1. Clubs (alleen bij meerdere clubs) #}
-{% if current_user and user_clubs | length > 1 %}
-{% set type_qs = ('&type=' ~ active_filter) if active_filter else '' %}
-<div class="filter-tabs-wrapper" style="margin-bottom:.25rem;">
-  <div class="filter-tabs">
-    <a href="/{{ type_qs }}"
-       class="filter-tab {% if not active_club_filter %}filter-tab--active{% endif %}">
-      Alle clubs
-    </a>
-    {% for club in user_clubs %}
-    <a href="/?club={{ club.id }}{{ type_qs }}"
-       class="filter-tab filter-tab--club-{{ loop.index }} {% if active_club_filter == club.id %}filter-tab--active{% endif %}">
-      {{ club.naam }}
-    </a>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
-
-{# 2. Gebeurtenissen + Filteren #}
-<div class="filter-tabs-wrapper">
-  <div class="filter-tabs">
-    {% set club_qs = ('&club=' ~ active_club_filter) if active_club_filter else '' %}
-    <a href="/{{ ('?club=' ~ active_club_filter) if active_club_filter else '' }}"
-       class="filter-tab {% if not active_filter %}filter-tab--active{% endif %}">Alle</a>
-    <a href="/?type=clubavond{{ club_qs }}" class="filter-tab filter-tab--clubavond {% if active_filter == 'clubavond' %}filter-tab--active{% endif %}">Clubavond</a>
-    <a href="/?type=avondeten{{ club_qs }}" class="filter-tab filter-tab--avondeten {% if active_filter == 'avondeten' %}filter-tab--active{% endif %}">Avondeten</a>
-    <a href="/?type=training{{ club_qs }}"  class="filter-tab filter-tab--training  {% if active_filter == 'training'  %}filter-tab--active{% endif %}">Training</a>
-    <a href="/?type=speciaal{{ club_qs }}"  class="filter-tab filter-tab--speciaal  {% if active_filter == 'speciaal'  %}filter-tab--active{% endif %}">Speciaal</a>
-    {% if current_user %}
-      <button type="button" class="filter-tab filter-tab--weergave" id="weergave-toggle" aria-expanded="false">
-        &#9881; Filteren
-      </button>
-    {% endif %}
-  </div>
-</div>
-
 {% if current_user %}
-  <div id="weergave-panel" class="card weergave-instellingen" hidden>
-    <form method="post" action="/instellingen/verborgen-types">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-      <p class="weergave-instellingen-hint">Vink aan welke soorten evenementen je in de agenda wilt zien.</p>
-      <div class="toggle-list">
-        <label class="toggle-item">
-          <input type="checkbox" name="toon_clubavond" value="1" {% if 'clubavond' not in hidden_types %}checked{% endif %}>
-          Clubavonden
-        </label>
-        <label class="toggle-item">
-          <input type="checkbox" name="toon_avondeten" value="1" {% if 'avondeten' not in hidden_types %}checked{% endif %}>
-          Avondeten
-        </label>
-        <label class="toggle-item">
-          <input type="checkbox" name="toon_training" value="1" {% if 'training' not in hidden_types %}checked{% endif %}>
-          Trainingen
-        </label>
-        <label class="toggle-item">
-          <input type="checkbox" name="toon_speciaal" value="1" {% if 'speciaal' not in hidden_types %}checked{% endif %}>
-          Speciale evenementen
-        </label>
-      </div>
+{# Eén rij: Filteren | Met partner | Voor alles afmelden | Voor alles aanmelden #}
+<div class="acties-rij">
+
+  {# Filteren dropdown #}
+  <div class="filter-dropdown-wrapper">
+    <button type="button" id="filter-dropdown-toggle"
+            class="btn btn-secondary{% if active_filter or active_club_filter %} btn-filter-actief{% endif %}"
+            aria-expanded="false">
+      &#9881; Filteren{% if active_filter %}: {{ active_filter | capitalize }}{% elif active_club_filter %}: club{% endif %}
+    </button>
+    <div id="filter-dropdown-panel" class="filter-dropdown-panel" hidden>
+
+      {# Clubs (alleen bij meerdere clubs) #}
       {% if user_clubs | length > 1 %}
-      <p class="weergave-instellingen-hint" style="margin-top:.75rem;">Vink aan welke clubs je wilt zien.</p>
-      <div class="toggle-list">
-        {% for club in user_clubs %}
-        <label class="toggle-item">
-          <input type="checkbox" class="club-zichtbaar-cb" data-club-id="{{ club.id }}" checked>
-          {{ club.naam }}
-        </label>
-        {% endfor %}
+      <div class="fdd-sectie">
+        <span class="fdd-label">Club</span>
+        <div class="fdd-opties">
+          <a href="{{ ('/?type=' ~ active_filter) if active_filter else '/' }}"
+             class="filter-tab filter-tab--sm{% if not active_club_filter %} filter-tab--active{% endif %}">Alle clubs</a>
+          {% for club in user_clubs %}
+          <a href="/?club={{ club.id }}{% if active_filter %}&type={{ active_filter }}{% endif %}"
+             class="filter-tab filter-tab--sm{% if active_club_filter == club.id %} filter-tab--active{% endif %}">{{ club.naam }}</a>
+          {% endfor %}
+        </div>
       </div>
       {% endif %}
-      <div class="action-buttons" style="margin-top:.75rem;">
-        <button type="submit" class="btn btn-primary btn-sm">Opslaan</button>
+
+      {# Soort evenement #}
+      <div class="fdd-sectie">
+        <span class="fdd-label">Soort evenement</span>
+        <div class="fdd-opties">
+          <a href="{{ ('/?club=' ~ active_club_filter) if active_club_filter else '/' }}"
+             class="filter-tab filter-tab--sm{% if not active_filter %} filter-tab--active{% endif %}">Alle</a>
+          <a href="/?type=clubavond{% if active_club_filter %}&club={{ active_club_filter }}{% endif %}"
+             class="filter-tab filter-tab--sm{% if active_filter == 'clubavond' %} filter-tab--active{% endif %}">Clubavond</a>
+          <a href="/?type=avondeten{% if active_club_filter %}&club={{ active_club_filter }}{% endif %}"
+             class="filter-tab filter-tab--sm{% if active_filter == 'avondeten' %} filter-tab--active{% endif %}">Avondeten</a>
+          <a href="/?type=training{% if active_club_filter %}&club={{ active_club_filter }}{% endif %}"
+             class="filter-tab filter-tab--sm{% if active_filter == 'training' %} filter-tab--active{% endif %}">Training</a>
+          <a href="/?type=speciaal{% if active_club_filter %}&club={{ active_club_filter }}{% endif %}"
+             class="filter-tab filter-tab--sm{% if active_filter == 'speciaal' %} filter-tab--active{% endif %}">Speciaal</a>
+        </div>
       </div>
-    </form>
-  </div>
 
-  {# 3. Wel / niet aangemeld #}
-  <div class="reg-filter-rij">
-    <button type="button" class="reg-filter-btn reg-filter-btn--actief" data-reg="alle">Alle</button>
-    <button type="button" class="reg-filter-btn" data-reg="aangemeld">Aangemelde evenementen</button>
-    <button type="button" class="reg-filter-btn" data-reg="niet-aangemeld">Niet aangemelde evenementen</button>
-  </div>
-
-  {# 4. Met partner + bulk acties #}
-  <div class="bulk-acties-wrapper">
-    <div class="bulk-acties">
-      <label class="toggle-item bulk-partner-label">
-        <input type="checkbox" id="bulk-met-partner" autocomplete="off">
-        Met partner
-      </label>
-      <form method="post" action="/voor-alles-afmelden"
-            id="bulk-afmelden-form"
-            data-bevestig="Wil je je afmelden voor alle komende evenementen waarvoor je bent aangemeld?">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-        <button type="submit" class="btn btn-secondary">Voor alles afmelden</button>
-      </form>
-      <form method="post" action="/voor-alles-aanmelden"
-            id="bulk-aanmelden-form"
-            data-bevestig="Wil je je aanmelden voor alle komende evenementen?">
-        <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-        <button type="submit" class="btn btn-primary">Voor alles aanmelden</button>
-      </form>
-    </div>
-    <div id="bulk-partner-velden" class="bulk-partner-velden" hidden>
-      <input type="text" id="bulk-partner-voornaam" placeholder="Voornaam partner" autocomplete="off">
-      <input type="text" id="bulk-partner-achternaam" placeholder="Achternaam" autocomplete="off">
-    </div>
-  </div>
-
-  {# Definitief aanmelden (bij type-filter) #}
-  {% if active_filter and active_filter in type_plural %}
-  <div class="card definitief-card">
-    <form method="post" action="/definitief-aanmelden/{{ active_filter }}"
-          data-bevestig="Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.">
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-      <label class="toggle-item bulk-partner-label">
-        <input type="checkbox" id="definitief-met-partner" name="met_partner" value="1" autocomplete="off">
-        Met partner aanmelden
-      </label>
-      <div id="definitief-partner-velden" class="bulk-partner-velden" hidden>
-        <input type="text" name="partner_voornaam" placeholder="Voornaam partner" autocomplete="off">
-        <input type="text" name="partner_achternaam" placeholder="Achternaam" autocomplete="off">
+      {# Aanmeld-status #}
+      <div class="fdd-sectie">
+        <span class="fdd-label">Aanmelding</span>
+        <div class="fdd-opties">
+          <button type="button" class="reg-filter-btn reg-filter-btn--actief" data-reg="alle">Alle</button>
+          <button type="button" class="reg-filter-btn" data-reg="aangemeld">Aangemeld</button>
+          <button type="button" class="reg-filter-btn" data-reg="niet-aangemeld">Niet aangemeld</button>
+        </div>
       </div>
-      <button type="submit" class="btn btn-primary" style="margin-top:.5rem;">
-        Meld mij definitief aan voor alle {{ type_plural[active_filter] }}
-      </button>
-      <p class="definitief-hint">
-        Je wordt aangemeld voor alle toekomstige {{ type_plural[active_filter] }}, ook nieuw geplande.
-      </p>
-    </form>
+
+      {# Zichtbare soorten (opslaan) #}
+      <div class="fdd-sectie">
+        <form method="post" action="/instellingen/verborgen-types">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+          <span class="fdd-label">Toon soorten</span>
+          <div class="toggle-list" style="margin-bottom:.5rem;">
+            <label class="toggle-item">
+              <input type="checkbox" name="toon_clubavond" value="1" {% if 'clubavond' not in hidden_types %}checked{% endif %}>
+              Clubavonden
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" name="toon_avondeten" value="1" {% if 'avondeten' not in hidden_types %}checked{% endif %}>
+              Avondeten
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" name="toon_training" value="1" {% if 'training' not in hidden_types %}checked{% endif %}>
+              Trainingen
+            </label>
+            <label class="toggle-item">
+              <input type="checkbox" name="toon_speciaal" value="1" {% if 'speciaal' not in hidden_types %}checked{% endif %}>
+              Speciale evenementen
+            </label>
+          </div>
+          {% if user_clubs | length > 1 %}
+          <span class="fdd-label" style="margin-top:.5rem;">Toon clubs</span>
+          <div class="toggle-list" style="margin-bottom:.5rem;">
+            {% for club in user_clubs %}
+            <label class="toggle-item">
+              <input type="checkbox" class="club-zichtbaar-cb" data-club-id="{{ club.id }}" checked>
+              {{ club.naam }}
+            </label>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <button type="submit" class="btn btn-primary btn-sm">Opslaan</button>
+        </form>
+      </div>
+
+    </div>
   </div>
-  {% endif %}
+
+  {# Bulk acties #}
+  <label class="toggle-item bulk-partner-label">
+    <input type="checkbox" id="bulk-met-partner" autocomplete="off">
+    Met partner
+  </label>
+  <form method="post" action="/voor-alles-afmelden"
+        id="bulk-afmelden-form"
+        data-bevestig="Wil je je afmelden voor alle komende evenementen waarvoor je bent aangemeld?">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+    <button type="submit" class="btn btn-secondary">Voor alles afmelden</button>
+  </form>
+  <form method="post" action="/voor-alles-aanmelden"
+        id="bulk-aanmelden-form"
+        data-bevestig="Wil je je aanmelden voor alle komende evenementen?">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+    <button type="submit" class="btn btn-primary">Voor alles aanmelden</button>
+  </form>
+</div>
+
+<div id="bulk-partner-velden" class="bulk-partner-velden" hidden>
+  <input type="text" id="bulk-partner-voornaam" placeholder="Voornaam partner" autocomplete="off">
+  <input type="text" id="bulk-partner-achternaam" placeholder="Achternaam" autocomplete="off">
+</div>
+
+{# Definitief aanmelden (bij type-filter) #}
+{% if active_filter and active_filter in type_plural %}
+<div class="card definitief-card">
+  <form method="post" action="/definitief-aanmelden/{{ active_filter }}"
+        data-bevestig="Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+    <label class="toggle-item bulk-partner-label">
+      <input type="checkbox" id="definitief-met-partner" name="met_partner" value="1" autocomplete="off">
+      Met partner aanmelden
+    </label>
+    <div id="definitief-partner-velden" class="bulk-partner-velden" hidden>
+      <input type="text" name="partner_voornaam" placeholder="Voornaam partner" autocomplete="off">
+      <input type="text" name="partner_achternaam" placeholder="Achternaam" autocomplete="off">
+    </div>
+    <button type="submit" class="btn btn-primary" style="margin-top:.5rem;">
+      Meld mij definitief aan voor alle {{ type_plural[active_filter] }}
+    </button>
+    <p class="definitief-hint">
+      Je wordt aangemeld voor alle toekomstige {{ type_plural[active_filter] }}, ook nieuw geplande.
+    </p>
+  </form>
+</div>
+{% endif %}
 
 {% endif %}{# /current_user #}
 
@@ -305,19 +315,27 @@
 {% block extra_scripts %}
 <script>
 (function() {
-  var toggle = document.getElementById('weergave-toggle');
-  var panel  = document.getElementById('weergave-panel');
+  var toggle = document.getElementById('filter-dropdown-toggle');
+  var panel  = document.getElementById('filter-dropdown-panel');
   if (!toggle || !panel) return;
-  toggle.addEventListener('click', function() {
-    var hidden = panel.hasAttribute('hidden');
-    if (hidden) {
-      panel.removeAttribute('hidden');
-      toggle.setAttribute('aria-expanded', 'true');
-      toggle.classList.add('filter-tab--active');
-    } else {
-      panel.setAttribute('hidden', '');
-      toggle.setAttribute('aria-expanded', 'false');
-      toggle.classList.remove('filter-tab--active');
+
+  function sluit() {
+    panel.setAttribute('hidden', '');
+    toggle.setAttribute('aria-expanded', 'false');
+  }
+  function open() {
+    panel.removeAttribute('hidden');
+    toggle.setAttribute('aria-expanded', 'true');
+  }
+
+  toggle.addEventListener('click', function(e) {
+    e.stopPropagation();
+    panel.hasAttribute('hidden') ? open() : sluit();
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!panel.hasAttribute('hidden') && !panel.contains(e.target)) {
+      sluit();
     }
   });
 })();
@@ -410,22 +428,61 @@
 })();
 </script>
 <style>
-/* ── Filter rijen ── */
-.filter-tabs-wrapper {
-  margin-bottom: .5rem;
-}
-.filter-tab--weergave { background: none; border: none; cursor: pointer; font: inherit; }
-
-/* ── Registratie-filter rij ── */
-.reg-filter-rij {
+/* ── Acties-rij (Filteren + bulk) ── */
+.acties-rij {
   display: flex;
   flex-wrap: wrap;
-  gap: .35rem;
-  margin-bottom: .5rem;
+  gap: .5rem;
+  align-items: center;
+  margin-bottom: 1rem;
 }
 
-/* ── Bulk acties rij ── */
-.bulk-acties-wrapper { margin-bottom: .75rem; }
+/* ── Filteren dropdown ── */
+.filter-dropdown-wrapper { position: relative; }
+
+.btn-filter-actief {
+  background: var(--color-primary, #1e3a5f);
+  color: #fff;
+  border-color: var(--color-primary, #1e3a5f);
+}
+
+.filter-dropdown-panel {
+  position: absolute;
+  top: calc(100% + .4rem);
+  left: 0;
+  z-index: 200;
+  background: #fff;
+  border: 1px solid var(--color-border, #d1d5db);
+  border-radius: var(--radius, 8px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.13);
+  padding: 1rem;
+  min-width: 300px;
+  max-width: min(400px, 92vw);
+}
+
+.fdd-sectie { margin-bottom: .85rem; }
+.fdd-sectie:last-child { margin-bottom: 0; }
+
+.fdd-label {
+  display: block;
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--color-muted);
+  margin-bottom: .35rem;
+}
+
+.fdd-opties {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .3rem;
+}
+
+.filter-tab--sm {
+  padding: .2rem .6rem;
+  font-size: .78rem;
+}
 
 /* Club-badge op event-kaarten */
 .club-badge {
@@ -456,13 +513,7 @@
 }
 .reg-filter-btn--actief { background: var(--color-secondary, #2563a8); color: #fff; }
 
-/* Bulk acties */
-.bulk-acties {
-  display: flex;
-  gap: .5rem;
-  flex-wrap: wrap;
-  align-items: center;
-}
+/* Bulk partner label */
 .bulk-partner-label {
   display: flex;
   align-items: center;
@@ -487,7 +538,8 @@
   font-size: .875rem;
 }
 @media (max-width: 640px) {
-  .bulk-acties { flex-direction: column; align-items: stretch; }
+  .acties-rij { flex-direction: column; align-items: stretch; }
+  .filter-dropdown-panel { min-width: 0; width: 100%; }
 }
 </style>
 {% endblock %}
