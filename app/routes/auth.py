@@ -67,17 +67,13 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
         )
 
     form = await request.form()
-    login_method = form.get("login_method", "email")
+    login_method = form.get("login_method", "nbb")
     password = form.get("password", "")
 
     member = None
     email = ""
 
-    if login_method == "nbb":
-        nbb = form.get("nbb_nummer", "").strip()
-        member = db.query(Member).filter(Member.lidnummer == nbb).first()
-        email = member.email or "" if member else ""
-    elif login_method == "naam":
+    if login_method == "naam":
         voornaam = form.get("voornaam", "").strip()
         achternaam = form.get("achternaam", "").strip()
         matches = (
@@ -99,8 +95,9 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
             member = matches[0]
             email = member.email or ""
     else:
-        email = form.get("email", "").strip().lower()
-        member = db.query(Member).filter(Member.email.ilike(email)).first()
+        nbb = form.get("nbb_nummer", "").strip()
+        member = db.query(Member).filter(Member.lidnummer == nbb).first()
+        email = member.email or "" if member else ""
 
     if member and member.verwijderd_op is not None:
         return templates.TemplateResponse(
@@ -142,7 +139,7 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request,
         "login.html",
-        {"error": "Onbekende naam/e-mailadres of onjuist wachtwoord."},
+        {"error": "Onbekend NBB-nummer/naam of onjuist wachtwoord."},
         status_code=401,
     )
 
