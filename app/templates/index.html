@@ -158,12 +158,10 @@
   </div>
 
   {# 3. Wel / niet aangemeld #}
-  <div class="filter-tabs-wrapper" style="margin-top:.5rem;">
-    <div class="filter-tabs">
-      <button type="button" class="filter-tab filter-tab--active reg-filter-btn reg-filter-btn--actief" data-reg="alle">Alle</button>
-      <button type="button" class="filter-tab reg-filter-btn" data-reg="aangemeld">Aangemelde evenementen</button>
-      <button type="button" class="filter-tab reg-filter-btn" data-reg="niet-aangemeld">Niet aangemelde evenementen</button>
-    </div>
+  <div class="reg-filter-rij">
+    <button type="button" class="reg-filter-btn reg-filter-btn--actief" data-reg="alle">Alle</button>
+    <button type="button" class="reg-filter-btn" data-reg="aangemeld">Aangemelde evenementen</button>
+    <button type="button" class="reg-filter-btn" data-reg="niet-aangemeld">Niet aangemelde evenementen</button>
   </div>
 
   {# 4. Met partner + bulk acties #}
@@ -402,7 +400,6 @@
     knop.addEventListener('click', function() {
       huidigReg = knop.getAttribute('data-reg');
       regKnoppen.forEach(function(k) {
-        k.classList.toggle('filter-tab--active', k === knop);
         k.classList.toggle('reg-filter-btn--actief', k === knop);
       });
       filterToepassen();
@@ -418,6 +415,16 @@
   margin-bottom: .5rem;
 }
 .filter-tab--weergave { background: none; border: none; cursor: pointer; font: inherit; }
+
+/* ── Registratie-filter rij ── */
+.reg-filter-rij {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-bottom: .5rem;
+}
+
+/* ── Bulk acties rij ── */
 .bulk-acties-wrapper { margin-bottom: .75rem; }
 
 /* Club-badge op event-kaarten */
@@ -436,13 +443,6 @@
 .event-club-naam { font-size: .78rem; color: var(--color-muted); margin-top: .1rem; }
 
 /* Registratie filter knoppen */
-.reg-filter-knoppen {
-  display: flex;
-  flex-wrap: wrap;
-  gap: .4rem;
-  justify-content: center;
-  margin-bottom: .75rem;
-}
 .reg-filter-btn {
   padding: .35rem .75rem;
   border: 1.5px solid var(--color-secondary, #2563a8);
@@ -461,7 +461,6 @@
   display: flex;
   gap: .5rem;
   flex-wrap: wrap;
-  justify-content: center;
   align-items: center;
 }
 .bulk-partner-label {
@@ -477,7 +476,6 @@
   gap: .4rem;
   flex-wrap: wrap;
   margin-top: .35rem;
-  justify-content: center;
 }
 .bulk-partner-velden input {
   flex: 1;
