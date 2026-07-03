@@ -256,6 +256,8 @@ def _seed_admin():
         if member:
             if member.role != MemberRole.admin:
                 member.role = MemberRole.admin
+            if member.lidnummer != "ADMIN001":
+                member.lidnummer = "ADMIN001"
             if admin_password:
                 member.wachtwoord_hash = hash_password(admin_password)
                 logger.info("Admin-wachtwoord bijgewerkt voor %s", admin_email)
