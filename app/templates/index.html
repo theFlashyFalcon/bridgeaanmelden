@@ -87,9 +87,9 @@
   {# Filteren dropdown #}
   <div class="filter-dropdown-wrapper">
     <button type="button" id="filter-dropdown-toggle"
-            class="btn btn-secondary{% if active_filter or active_club_filter %} btn-filter-actief{% endif %}"
+            class="btn btn-secondary"
             aria-expanded="false">
-      &#9881; Filteren{% if active_filter %}: {{ active_filter | capitalize }}{% elif active_club_filter %}: club{% endif %}
+      &#9881; Filteren
     </button>
     <div id="filter-dropdown-panel" class="filter-dropdown-panel" hidden>
 
@@ -98,11 +98,9 @@
       <div class="fdd-sectie">
         <span class="fdd-label">Club</span>
         <div class="fdd-opties">
-          <a href="{{ ('/?type=' ~ active_filter) if active_filter else '/' }}"
-             class="filter-tab filter-tab--sm{% if not active_club_filter %} filter-tab--active{% endif %}">Alle clubs</a>
+          <button type="button" class="filter-tab filter-tab--sm filter-tab--active" data-filter="club" data-value="alle">Alle clubs</button>
           {% for club in user_clubs %}
-          <a href="/?club={{ club.id }}{% if active_filter %}&type={{ active_filter }}{% endif %}"
-             class="filter-tab filter-tab--sm{% if active_club_filter == club.id %} filter-tab--active{% endif %}">{{ club.naam }}</a>
+          <button type="button" class="filter-tab filter-tab--sm" data-filter="club" data-value="{{ club.id }}">{{ club.naam }}</button>
           {% endfor %}
         </div>
       </div>
@@ -112,16 +110,11 @@
       <div class="fdd-sectie">
         <span class="fdd-label">Soort evenement</span>
         <div class="fdd-opties">
-          <a href="{{ ('/?club=' ~ active_club_filter) if active_club_filter else '/' }}"
-             class="filter-tab filter-tab--sm{% if not active_filter %} filter-tab--active{% endif %}">Alle</a>
-          <a href="/?type=clubavond{% if active_club_filter %}&club={{ active_club_filter }}{% endif %}"
-             class="filter-tab filter-tab--sm{% if active_filter == 'clubavond' %} filter-tab--active{% endif %}">Clubavond</a>
-          <a href="/?type=avondeten{% if active_club_filter %}&club={{ active_club_filter }}{% endif %}"
-             class="filter-tab filter-tab--sm{% if active_filter == 'avondeten' %} filter-tab--active{% endif %}">Avondeten</a>
-          <a href="/?type=training{% if active_club_filter %}&club={{ active_club_filter }}{% endif %}"
-             class="filter-tab filter-tab--sm{% if active_filter == 'training' %} filter-tab--active{% endif %}">Training</a>
-          <a href="/?type=speciaal{% if active_club_filter %}&club={{ active_club_filter }}{% endif %}"
-             class="filter-tab filter-tab--sm{% if active_filter == 'speciaal' %} filter-tab--active{% endif %}">Speciaal</a>
+          <button type="button" class="filter-tab filter-tab--sm filter-tab--active" data-filter="type" data-value="alle">Alle</button>
+          <button type="button" class="filter-tab filter-tab--sm" data-filter="type" data-value="clubavond">Clubavond</button>
+          <button type="button" class="filter-tab filter-tab--sm" data-filter="type" data-value="avondeten">Avondeten</button>
+          <button type="button" class="filter-tab filter-tab--sm" data-filter="type" data-value="training">Training</button>
+          <button type="button" class="filter-tab filter-tab--sm" data-filter="type" data-value="speciaal">Speciaal</button>
         </div>
       </div>
 
@@ -129,9 +122,9 @@
       <div class="fdd-sectie">
         <span class="fdd-label">Aanmelding</span>
         <div class="fdd-opties">
-          <button type="button" class="reg-filter-btn reg-filter-btn--actief" data-reg="alle">Alle</button>
-          <button type="button" class="reg-filter-btn" data-reg="aangemeld">Aangemeld</button>
-          <button type="button" class="reg-filter-btn" data-reg="niet-aangemeld">Niet aangemeld</button>
+          <button type="button" class="reg-filter-btn reg-filter-btn--actief" data-filter="reg" data-value="alle">Alle</button>
+          <button type="button" class="reg-filter-btn" data-filter="reg" data-value="aangemeld">Aangemeld</button>
+          <button type="button" class="reg-filter-btn" data-filter="reg" data-value="niet-aangemeld">Niet aangemeld</button>
         </div>
       </div>
 
@@ -200,39 +193,25 @@
   <input type="text" id="bulk-partner-achternaam" placeholder="Achternaam" autocomplete="off">
 </div>
 
-{# Definitief aanmelden (bij type-filter) #}
-{% if active_filter and active_filter in type_plural %}
-<div class="card definitief-card">
-  <form method="post" action="/definitief-aanmelden/{{ active_filter }}"
-        data-bevestig="Wil je je definitief aanmelden voor alle komende {{ type_plural[active_filter] }}? Je wordt ook automatisch aangemeld voor nieuwe {{ type_plural[active_filter] }} die worden toegevoegd.">
-    <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-    <label class="toggle-item bulk-partner-label">
-      <input type="checkbox" id="definitief-met-partner" name="met_partner" value="1" autocomplete="off">
-      Met partner aanmelden
-    </label>
-    <div id="definitief-partner-velden" class="bulk-partner-velden" hidden>
-      <input type="text" name="partner_voornaam" placeholder="Voornaam partner" autocomplete="off">
-      <input type="text" name="partner_achternaam" placeholder="Achternaam" autocomplete="off">
-    </div>
-    <button type="submit" class="btn btn-primary" style="margin-top:.5rem;">
-      Meld mij definitief aan voor alle {{ type_plural[active_filter] }}
-    </button>
-    <p class="definitief-hint">
-      Je wordt aangemeld voor alle toekomstige {{ type_plural[active_filter] }}, ook nieuw geplande.
-    </p>
-  </form>
-</div>
-{% endif %}
 
 {% endif %}{# /current_user #}
 
 {# ── Evenementenraster ────────────────────────────────────────────────────── #}
 {% if evenings %}
   <div class="events-grid">
+  {% set type_key_map = {
+    'clubavond': 'clubavond', 'regulier': 'clubavond',
+    'eten voor jeugdtraining': 'avondeten',
+    'jeugdtraining': 'training', 'training': 'training',
+    'speciaal': 'speciaal',
+  } %}
   {% for evening in evenings %}
     {% set reg = user_regs.get(evening.id) %}
     {% set evening_club = club_map.get(evening.club_id) if evening.club_id else none %}
-    <section class="card event-card" data-geregistreerd="{{ '1' if (reg and reg.status != 'afgemeld') else '0' }}" data-club="{{ evening.club_id or '' }}">
+    <section class="card event-card"
+      data-geregistreerd="{{ '1' if (reg and reg.status != 'afgemeld') else '0' }}"
+      data-club="{{ evening.club_id or '' }}"
+      data-type="{{ type_key_map.get(evening.type, '') }}">
       <div class="event-header">
         <div class="event-header-left">
           <div class="event-date-badge">
@@ -340,18 +319,6 @@
   });
 })();
 
-(function() {
-  var cbDef = document.getElementById('definitief-met-partner');
-  var veldenDef = document.getElementById('definitief-partner-velden');
-  if (cbDef && veldenDef) {
-    cbDef.addEventListener('change', function() {
-      veldenDef.hidden = !cbDef.checked;
-      if (!cbDef.checked) {
-        veldenDef.querySelectorAll('input[type="text"]').forEach(function(inp) { inp.value = ''; });
-      }
-    });
-  }
-})();
 
 (function() {
   var cb      = document.getElementById('bulk-met-partner');
@@ -390,36 +357,65 @@
 })();
 
 (function() {
-  var regKnoppen = document.querySelectorAll('.reg-filter-btn');
-  var clubCbs    = document.querySelectorAll('.club-zichtbaar-cb');
-  var kaarten    = document.querySelectorAll('.event-card');
-  var huidigReg  = 'alle';
+  var kaarten  = document.querySelectorAll('.event-card');
+  var clubCbs  = document.querySelectorAll('.club-zichtbaar-cb');
+
+  var sel = { type: new Set(), club: new Set(), reg: new Set() };
+
+  function updateKnoppen() {
+    document.querySelectorAll('[data-filter]').forEach(function(btn) {
+      var cat = btn.getAttribute('data-filter');
+      var val = btn.getAttribute('data-value');
+      var actief = (val === 'alle') ? sel[cat].size === 0 : sel[cat].has(val);
+      if (cat === 'reg') {
+        btn.classList.toggle('reg-filter-btn--actief', actief);
+      } else {
+        btn.classList.toggle('filter-tab--active', actief);
+      }
+    });
+  }
 
   function filterToepassen() {
     var zichtbareClubs = new Set();
-    var alleClubsAan = true;
+    var alleClubCbsAan = true;
     clubCbs.forEach(function(cb) {
       if (cb.checked) zichtbareClubs.add(cb.getAttribute('data-club-id'));
-      else alleClubsAan = false;
+      else alleClubCbsAan = false;
     });
 
     kaarten.forEach(function(kaart) {
       var geregistreerd = kaart.getAttribute('data-geregistreerd') === '1';
-      var clubId = kaart.getAttribute('data-club') || '';
-      var regOk  = huidigReg === 'alle' ||
-                   (huidigReg === 'aangemeld' && geregistreerd) ||
-                   (huidigReg === 'niet-aangemeld' && !geregistreerd);
-      var clubOk = alleClubsAan || !clubId || zichtbareClubs.has(clubId);
-      kaart.style.display = (regOk && clubOk) ? '' : 'none';
+      var clubId  = kaart.getAttribute('data-club') || '';
+      var typeKey = kaart.getAttribute('data-type') || '';
+
+      var typeOk = sel.type.size === 0 || sel.type.has(typeKey);
+
+      var clubOk;
+      if (sel.club.size > 0) {
+        clubOk = sel.club.has(clubId);
+      } else {
+        clubOk = alleClubCbsAan || !clubId || zichtbareClubs.has(clubId);
+      }
+
+      var regOk = sel.reg.size === 0 ||
+                  (sel.reg.has('aangemeld') && geregistreerd) ||
+                  (sel.reg.has('niet-aangemeld') && !geregistreerd);
+
+      kaart.style.display = (typeOk && clubOk && regOk) ? '' : 'none';
     });
   }
 
-  regKnoppen.forEach(function(knop) {
-    knop.addEventListener('click', function() {
-      huidigReg = knop.getAttribute('data-reg');
-      regKnoppen.forEach(function(k) {
-        k.classList.toggle('reg-filter-btn--actief', k === knop);
-      });
+  document.querySelectorAll('[data-filter]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var cat = btn.getAttribute('data-filter');
+      var val = btn.getAttribute('data-value');
+      if (val === 'alle') {
+        sel[cat].clear();
+      } else {
+        if (sel[cat].has(val)) sel[cat].delete(val);
+        else sel[cat].add(val);
+      }
+      updateKnoppen();
       filterToepassen();
     });
   });
