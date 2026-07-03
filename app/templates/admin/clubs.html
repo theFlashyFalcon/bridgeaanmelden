@@ -1,5 +1,50 @@
 {% extends "base.html" %}
 {% block title %}Clubs beheren — {{ club_naam }}{% endblock %}
+
+{% block extra_scripts %}
+<style>
+.kleur-kiezer { display:flex; flex-wrap:wrap; gap:.4rem; align-items:center; margin-top:.4rem; }
+.kleur-staal {
+  width:1.6rem; height:1.6rem; border-radius:50%; border:2px solid transparent;
+  cursor:pointer; transition:transform .1s, border-color .1s;
+}
+.kleur-staal:hover { transform:scale(1.15); }
+.kleur-staal.gekozen { border-color:#1e3a5f; transform:scale(1.15); }
+.kleur-eigen { width:6rem; height:1.6rem; border:1px solid var(--color-border,#ccc); border-radius:4px; padding:0 .3rem; font:inherit; font-size:.85rem; }
+</style>
+<script>
+function initKleurKiezer(prefix) {
+  var stalen   = document.querySelectorAll('[data-kleur-prefix="' + prefix + '"] .kleur-staal');
+  var eigenInp = document.getElementById(prefix + '-eigen');
+  var hiddenInp = document.getElementById(prefix + '-kleur');
+
+  function selecteer(kleur) {
+    stalen.forEach(function(s) { s.classList.toggle('gekozen', s.dataset.kleur === kleur); });
+    hiddenInp.value = kleur;
+    eigenInp.value  = kleur;
+  }
+
+  stalen.forEach(function(s) {
+    s.addEventListener('click', function() { selecteer(s.dataset.kleur); });
+  });
+  eigenInp.addEventListener('input', function() {
+    var v = eigenInp.value.trim();
+    stalen.forEach(function(s) { s.classList.remove('gekozen'); });
+    hiddenInp.value = v;
+  });
+
+  // Zet initiële kleur uit hidden input
+  var huidig = hiddenInp.value;
+  if (huidig) selecteer(huidig);
+}
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('[data-kleur-prefix]').forEach(function(el) {
+    initKleurKiezer(el.dataset.kleurPrefix);
+  });
+});
+</script>
+{% endblock %}
+
 {% block content %}
 <section class="card">
   <h1>Clubs <span class="badge">{{ clubs | length }}</span></h1>
@@ -23,6 +68,7 @@
   <h2 style="margin-top:0;">Nieuwe club toevoegen</h2>
   <form method="post" action="/beheer/clubs" class="form-stack" style="margin-bottom:2rem;">
     <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="kleur" id="nieuw-kleur">
     <div class="form-row">
       <div class="form-group">
         <label for="naam">Naam</label>
@@ -31,6 +77,20 @@
       <div class="form-group">
         <label for="stad">Stad <span class="form-hint">(optioneel)</span></label>
         <input type="text" id="stad" name="stad" autocomplete="off" placeholder="bijv. Amsterdam">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Badgekleur <span class="form-hint">(optioneel)</span></label>
+      <div class="kleur-kiezer" data-kleur-prefix="nieuw">
+        {% for kleur in [
+          ('#fca5a5','Rood'), ('#fdba74','Oranje'), ('#fde68a','Geel'), ('#86efac','Groen'),
+          ('#5eead4','Teal'), ('#93c5fd','Blauw'), ('#818cf8','Indigo'), ('#c4b5fd','Paars'),
+          ('#f9a8d4','Roze'), ('#d1d5db','Grijs')
+        ] %}
+          <span class="kleur-staal" data-kleur="{{ kleur[0] }}"
+                style="background:{{ kleur[0] }};" title="{{ kleur[1] }}"></span>
+        {% endfor %}
+        <input type="text" id="nieuw-eigen" class="kleur-eigen" placeholder="#aabbcc" maxlength="20" autocomplete="off">
       </div>
     </div>
     <button type="submit" class="btn btn-primary">Club toevoegen</button>
@@ -42,7 +102,12 @@
     <div class="card" style="margin-bottom:1.5rem;border:1px solid var(--color-border);padding:1.25rem;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:.75rem;">
         <div>
-          <h2 style="margin:0 0 .25rem;">{{ club.naam }}</h2>
+          <h2 style="margin:0 0 .25rem;display:flex;align-items:center;gap:.5rem;">
+            {{ club.naam }}
+            {% if club.kleur %}
+              <span style="display:inline-block;width:1rem;height:1rem;border-radius:50%;background:{{ club.kleur }};border:1px solid rgba(0,0,0,.15);vertical-align:middle;"></span>
+            {% endif %}
+          </h2>
           {% if club.stad %}<p style="color:var(--color-muted);margin:0 0 .5rem;font-size:.9rem;">{{ club.stad }}</p>{% endif %}
           <p style="margin:0;font-size:.85rem;color:var(--color-muted);">
             <strong>{{ lid_counts.get(club.id, 0) }}</strong> leden &mdash;
@@ -59,9 +124,10 @@
 
       <!-- Bewerken -->
       <details style="margin-top:1rem;">
-        <summary style="cursor:pointer;font-weight:500;font-size:.9rem;color:var(--color-primary);">Naam / stad wijzigen</summary>
+        <summary style="cursor:pointer;font-weight:500;font-size:.9rem;color:var(--color-primary);">Naam / stad / kleur wijzigen</summary>
         <form method="post" action="/beheer/clubs/{{ club.id }}/update" class="form-stack" style="margin-top:.75rem;">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+          <input type="hidden" name="kleur" id="edit-{{ club.id }}-kleur" value="{{ club.kleur or '' }}">
           <div class="form-row">
             <div class="form-group">
               <label>Naam</label>
@@ -70,6 +136,21 @@
             <div class="form-group">
               <label>Stad</label>
               <input type="text" name="stad" value="{{ club.stad or '' }}" autocomplete="off">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Badgekleur</label>
+            <div class="kleur-kiezer" data-kleur-prefix="edit-{{ club.id }}">
+              {% for kleur in [
+                ('#fca5a5','Rood'), ('#fdba74','Oranje'), ('#fde68a','Geel'), ('#86efac','Groen'),
+                ('#5eead4','Teal'), ('#93c5fd','Blauw'), ('#818cf8','Indigo'), ('#c4b5fd','Paars'),
+                ('#f9a8d4','Roze'), ('#d1d5db','Grijs')
+              ] %}
+                <span class="kleur-staal" data-kleur="{{ kleur[0] }}"
+                      style="background:{{ kleur[0] }};" title="{{ kleur[1] }}"></span>
+              {% endfor %}
+              <input type="text" id="edit-{{ club.id }}-eigen" class="kleur-eigen"
+                     value="{{ club.kleur or '' }}" placeholder="#aabbcc" maxlength="20" autocomplete="off">
             </div>
           </div>
           <button type="submit" class="btn btn-primary" style="padding:.35rem .9rem;font-size:.9rem;">Opslaan</button>

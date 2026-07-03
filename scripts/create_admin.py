@@ -4,6 +4,7 @@ Usage:
     python scripts/create_admin.py
 """
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -30,6 +31,8 @@ try:
     member = db.query(Member).filter(Member.email == EMAIL).first()
     if member:
         member.wachtwoord_hash = hash_password(PASSWORD)
+        if member.toestemming_op is None:
+            member.toestemming_op = datetime.now(timezone.utc)
         print(f"Wachtwoord bijgewerkt voor {EMAIL}")
     else:
         db.add(Member(
@@ -39,6 +42,7 @@ try:
             email=EMAIL,
             wachtwoord_hash=hash_password(PASSWORD),
             role=MemberRole.admin,
+            toestemming_op=datetime.now(timezone.utc),
         ))
         print(f"Admin account aangemaakt voor {EMAIL}")
 

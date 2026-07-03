@@ -128,6 +128,7 @@ def _migrate():
         "ALTER TABLE berichten ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
         "ALTER TABLE account_requests ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
         "ALTER TABLE invitations ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
+        "ALTER TABLE clubs ADD COLUMN kleur VARCHAR",
     ]
     with engine.connect() as conn:
         for sql in migrations:
@@ -255,6 +256,9 @@ def _seed_admin():
         if member:
             if member.role != MemberRole.admin:
                 member.role = MemberRole.admin
+            if admin_password:
+                member.wachtwoord_hash = hash_password(admin_password)
+                logger.info("Admin-wachtwoord bijgewerkt voor %s", admin_email)
         elif admin_password:
             db.add(Member(
                 voornaam="Admin",

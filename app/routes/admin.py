@@ -1534,8 +1534,9 @@ async def club_toevoegen(
     form = await request.form()
     naam = form.get("naam", "").strip()
     stad = form.get("stad", "").strip() or None
+    kleur = form.get("kleur", "").strip() or None
     if naam:
-        db.add(Club(naam=naam, stad=stad))
+        db.add(Club(naam=naam, stad=stad, kleur=kleur))
         db.commit()
     return RedirectResponse(url="/beheer/clubs?aangemaakt=1", status_code=302)
 
@@ -1550,10 +1551,12 @@ async def club_update(
     form = await request.form()
     naam = form.get("naam", "").strip()
     stad = form.get("stad", "").strip() or None
+    kleur = form.get("kleur", "").strip() or None
     club = db.query(Club).filter(Club.id == club_id).first()
     if club and naam:
         club.naam = naam
         club.stad = stad
+        club.kleur = kleur
         db.commit()
     return RedirectResponse(url="/beheer/clubs?opgeslagen=1", status_code=302)
 

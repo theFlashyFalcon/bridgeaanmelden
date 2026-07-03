@@ -64,6 +64,7 @@ class Club(Base):
     id = Column(Integer, primary_key=True, index=True)
     naam = Column(String, nullable=False)
     stad = Column(String, nullable=True)
+    kleur = Column(String, nullable=True)
 
     seasons = relationship("Season", back_populates="club")
     evenings = relationship("ClubEvening", back_populates="club")

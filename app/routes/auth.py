@@ -234,11 +234,23 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         except Exception:
             logger.exception("Admin-notificatie mislukt voor nieuwe aanvraag")
 
-    # ── Zoek in Crash-ledenlijst ──────────────────────────────────────────────
-    crash_lid = db.query(Lid).filter(Lid.nbb_nummer == nbb_nummer).first()
+    # ── Zoek in ledenlijsten van alle aangesloten clubs ───────────────────────
+    # Primair: zoek op NBB-nummer
+    leden_op_nbb = db.query(Lid).filter(Lid.nbb_nummer == nbb_nummer).all()
 
-    if crash_lid is None:
-        # Niet gevonden in Crash-database → aanvraag aanmaken, admin beslist
+    # Fallback: handmatig toegevoegde leden hebben geen NBB-nummer; zoek op naam
+    leden_op_naam = []
+    if not leden_op_nbb:
+        leden_op_naam = db.query(Lid).filter(
+            Lid.voornaam.ilike(voornaam),
+            Lid.achternaam.ilike(achternaam),
+            Lid.nbb_nummer.is_(None),
+        ).all()
+
+    alle_gevonden_leden = leden_op_nbb or leden_op_naam
+
+    if not alle_gevonden_leden:
+        # Niet gevonden in enige ledenlijst → aanvraag aanmaken, admin beslist
         db.add(AccountRequest(
             voornaam=voornaam,
             achternaam=achternaam,
@@ -256,15 +268,15 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         _stuur_admin_mail("Aanvrager staat niet in de ledenlijst.")
         return _render({"melding": "geen_lid_crash"}, status=200)
 
-    # ── Controleer naamovereenkomst ───────────────────────────────────────────
-    voornaam_klopt = crash_lid.voornaam.strip().lower() == voornaam.lower()
-    achternaam_klopt = crash_lid.achternaam.strip().lower() == achternaam.lower()
+    # ── Controleer naamovereenkomst (alleen bij NBB-treffer) ──────────────────
+    if leden_op_nbb:
+        eerste_lid = leden_op_nbb[0]
+        voornaam_klopt = eerste_lid.voornaam.strip().lower() == voornaam.lower()
+        achternaam_klopt = eerste_lid.achternaam.strip().lower() == achternaam.lower()
+        if not (voornaam_klopt and achternaam_klopt):
+            return _render({"melding": "naam_mismatch"})
 
-    if not (voornaam_klopt and achternaam_klopt):
-        # NBB-nummer gevonden maar naam klopt niet → geen aanvraag aanmaken
-        return _render({"melding": "naam_mismatch"})
-
-    # ── Crash-lid: controleer of naam al in gebruik is ────────────────────────
+    # ── Controleer of naam al in gebruik is ───────────────────────────────────
     naam_al_in_gebruik = (
         db.query(Member)
         .filter(
@@ -299,8 +311,6 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
     assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == email).first()
     role = assignment.role if assignment else MemberRole.lid
 
-    lid_club_id = getattr(club_lid, "club_id", None) if (club_lid := db.query(Lid).filter(Lid.nbb_nummer == nbb_nummer).first()) else None
-
     member = Member(
         voornaam=voornaam,
         achternaam=achternaam,
@@ -312,7 +322,15 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
     )
     db.add(member)
     db.flush()
-    _koppel_aan_club(member, db, club_id=lid_club_id)
+
+    # Koppel aan alle clubs waar het lid voorkomt in de ledenlijst
+    club_ids = {lid.club_id for lid in alle_gevonden_leden if lid.club_id}
+    if club_ids:
+        for club_id in club_ids:
+            _koppel_aan_club(member, db, club_id=club_id)
+    else:
+        _koppel_aan_club(member, db)  # fallback: eerste club in de database
+
     try:
         db.commit()
         db.refresh(member)
@@ -422,7 +440,21 @@ async def register_submit(token: str, request: Request, db: Session = Depends(ge
     db.add(member)
     db.flush()
 
+    # Koppel aan de uitgenodigde club
     _koppel_aan_club(member, db, club_id=invitation.club_id)
+
+    # Zoek ook in alle andere clubs op NBB-nummer of naam
+    if lidnummer and not lidnummer.startswith("lid_"):
+        extra_leden = db.query(Lid).filter(Lid.nbb_nummer == lidnummer).all()
+    else:
+        extra_leden = db.query(Lid).filter(
+            Lid.voornaam.ilike(voornaam),
+            Lid.achternaam.ilike(achternaam),
+            Lid.nbb_nummer.is_(None),
+        ).all()
+    for lid in extra_leden:
+        if lid.club_id and lid.club_id != invitation.club_id:
+            _koppel_aan_club(member, db, club_id=lid.club_id)
 
     invitation.gebruikt_op = datetime.now(timezone.utc)
     invitation.member_id = member.id

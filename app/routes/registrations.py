@@ -16,6 +16,7 @@ from app.email import (
     smtp_geconfigureerd,
 )
 from app.models import (
+    Bericht,
     Club,
     ClubEvening,
     EveningType,
@@ -861,6 +862,7 @@ async def voor_alles_aanmelden(
     future_events = q.order_by(ClubEvening.datum).all()
 
     count = 0
+    nieuw_aangemeld = []
     for evt in future_events:
         existing = (
             db.query(Registration)
@@ -889,9 +891,26 @@ async def voor_alles_aanmelden(
                 type=RegistrationType.los,
                 status=reg_status,
             ))
+            nieuw_aangemeld.append(evt)
             count += 1
 
     db.commit()
+
+    if nieuw_aangemeld:
+        regels = "\n".join(
+            f"- {e.naam or e.type} ({e.datum.strftime('%d-%m-%Y')})"
+            for e in nieuw_aangemeld
+        )
+        n = len(nieuw_aangemeld)
+        db.add(Bericht(
+            afzender_id=current_user.id,
+            ontvanger_id=current_user.id,
+            onderwerp=f"Aangemeld voor {n} evenement{'en' if n != 1 else ''}",
+            tekst=f"Je bent aangemeld voor de volgende {n} evenement{'en' if n != 1 else ''}:\n\n{regels}",
+            is_systeem=True,
+        ))
+        db.commit()
+
     return RedirectResponse(url=f"/?bulk_ok={count}", status_code=302)
 
 
@@ -934,6 +953,21 @@ async def voor_alles_afmelden(
         reg.partner3_naam = None
 
     db.commit()
+
+    if upcoming_regs:
+        regels = "\n".join(
+            f"- {reg.evening.naam or reg.evening.type} ({reg.evening.datum.strftime('%d-%m-%Y')})"
+            for reg in upcoming_regs
+        )
+        db.add(Bericht(
+            afzender_id=current_user.id,
+            ontvanger_id=current_user.id,
+            onderwerp=f"Afgemeld voor {count} evenement{'en' if count != 1 else ''}",
+            tekst=f"Je bent afgemeld voor de volgende {count} evenement{'en' if count != 1 else ''}:\n\n{regels}",
+            is_systeem=True,
+        ))
+        db.commit()
+
     if smtp_geconfigureerd() and upcoming_regs:
         lid_naam = f"{current_user.voornaam} {current_user.achternaam}"
         events = [(reg.evening.naam or reg.evening.type, reg.evening.datum) for reg in upcoming_regs]
