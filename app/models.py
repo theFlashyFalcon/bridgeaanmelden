@@ -78,7 +78,7 @@ class Member(Base):
     voornaam = Column(String, nullable=False)
     achternaam = Column(String, nullable=False)
     lidnummer = Column(String, unique=True, nullable=False, index=True)
-    training_eligible = Column(Boolean, default=False, nullable=False)
+    training_eligible = Column(Boolean, default=True, nullable=False)
     role = Column(String, default=MemberRole.lid, nullable=False)
     oauth_sub = Column(String, unique=True, nullable=True, index=True)
     email = Column(String, nullable=True, index=True)

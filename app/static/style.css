@@ -141,6 +141,10 @@ a:hover { text-decoration: underline; }
 .btn-secondary:hover { background: #f3f4f6; }
 .btn-danger   { background: var(--color-error); color: #fff; border-color: var(--color-error); }
 .btn-danger:hover { background: #b91c1c; border-color: #b91c1c; }
+.btn-warning  { background: #d97706; color: #fff; border-color: #d97706; }
+.btn-warning:hover { background: #b45309; border-color: #b45309; }
+.btn-success  { background: #16a34a; color: #fff; border-color: #16a34a; }
+.btn-success:hover { background: #15803d; border-color: #15803d; }
 
 .action-buttons { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
 

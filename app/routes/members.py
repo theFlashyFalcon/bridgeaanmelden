@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.auth import require_admin
+from app.auth import require_admin, require_wedstrijdleider
 from app.database import get_db
 from app.models import Club, ClubEvening, Lid, Member, MemberClub, Registration
 
@@ -69,7 +69,7 @@ async def member_detail(
     member_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Member = Depends(require_admin),
+    current_user: Member = Depends(require_wedstrijdleider),
 ):
     member = db.query(Member).filter(Member.id == member_id).first()
     if not member:
@@ -130,3 +130,18 @@ async def member_verwijder(
         member.verwijderd_op = datetime.now(timezone.utc)
         db.commit()
     return RedirectResponse(url="/leden?verwijderd=1", status_code=302)
+
+
+@router.post("/{member_id}/training-toggle")
+async def member_training_toggle(
+    member_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    member = db.query(Member).filter(Member.id == member_id).first()
+    if not member:
+        raise HTTPException(status_code=404)
+    member.training_eligible = not member.training_eligible
+    db.commit()
+    return RedirectResponse(url=f"/leden/{member_id}", status_code=302)

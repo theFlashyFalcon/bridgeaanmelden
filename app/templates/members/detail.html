@@ -21,10 +21,22 @@
       </div>
     </div>
     {% if member.id != current_user.id and not member.verwijderd_op %}
-    <form method="post" action="/leden/{{ member.id }}/verwijder" data-bevestig="Weet je zeker dat je dit account wilt verwijderen?">
-  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-      <button type="submit" class="btn btn-danger">Account verwijderen</button>
-    </form>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+      <form method="post" action="/leden/{{ member.id }}/training-toggle" data-bevestig="{% if member.training_eligible %}Weet je zeker dat je dit lid van trainingen wilt verwijderen?{% else %}Weet je zeker dat je dit lid weer wilt toestaan bij trainingen?{% endif %}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+        {% if member.training_eligible %}
+          <button type="submit" class="btn btn-warning">Verwijderen van trainingen</button>
+        {% else %}
+          <button type="submit" class="btn btn-success">Toestaan bij trainingen</button>
+        {% endif %}
+      </form>
+      {% if current_user.role == 'admin' %}
+      <form method="post" action="/leden/{{ member.id }}/verwijder" data-bevestig="Weet je zeker dat je dit account wilt verwijderen?">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+        <button type="submit" class="btn btn-danger">Account verwijderen</button>
+      </form>
+      {% endif %}
+    </div>
     {% endif %}
   </div>
 </section>
@@ -43,7 +55,13 @@
     <dt>Rol</dt>
     <dd>{{ member.role }}</dd>
     <dt>Training toegestaan</dt>
-    <dd>{{ 'Ja' if member.training_eligible else 'Nee' }}</dd>
+    <dd>
+      {% if member.training_eligible %}
+        <span class="badge badge-success">Ja</span>
+      {% else %}
+        <span class="badge badge-danger">Nee</span>
+      {% endif %}
+    </dd>
     <dt>{{ club_naam }}-lid (NBB-lijst)</dt>
     <dd>
       {% if lid_match %}
