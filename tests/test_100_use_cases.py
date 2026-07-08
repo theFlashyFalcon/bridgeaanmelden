@@ -400,10 +400,10 @@ async def test_uc123_registreren_lid_in_ledenlijst(client, db_session):
     ).first() is not None
 
 
-async def test_uc124_registreren_naam_mismatch_geen_clubkoppeling(client, db_session):
-    """Andermans NBB-nummer: account wordt aangemaakt, maar zonder clubtoegang."""
+async def test_uc124_registreren_naam_mismatch_wordt_geweigerd(client, db_session):
+    """Andermans NBB-nummer met een andere naam: account wordt niet aangemaakt."""
     from app.main import app
-    from app.models import Member, MemberClub
+    from app.models import Member
     _no_csrf(app)
     club = make_club(db_session)
     make_lid_entry(db_session, "Echte", "Naam", nbb_nummer="NB124", club_id=club.id)
@@ -412,11 +412,8 @@ async def test_uc124_registreren_naam_mismatch_geen_clubkoppeling(client, db_ses
         "lidnummer": "NB124", "password": WACHTWOORD, "password2": WACHTWOORD,
         "toestemming": "on",
     })
-    assert response.status_code == 302
-    member = db_session.query(Member).filter(Member.lidnummer == "NB124").first()
-    assert member is not None
-    assert db_session.query(MemberClub).filter(
-        MemberClub.member_id == member.id).count() == 0
+    assert response.status_code == 422
+    assert db_session.query(Member).filter(Member.lidnummer == "NB124").count() == 0
 
 
 async def test_uc125_registreren_onbekend_clubloos_account(client, db_session):

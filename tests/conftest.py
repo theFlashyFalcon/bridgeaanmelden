@@ -22,6 +22,12 @@ test_engine = create_engine(
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
+@pytest.fixture(autouse=True)
+def _no_real_email(monkeypatch):
+    """Voorkomt dat tests echte mail versturen als een lokale .env echte SMTP-credentials bevat."""
+    monkeypatch.setattr("app.email._send", lambda *a, **k: None)
+
+
 @pytest.fixture
 def db_session():
     """Provide an isolated in-memory SQLite session for each test."""
