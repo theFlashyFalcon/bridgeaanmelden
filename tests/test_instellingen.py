@@ -45,9 +45,9 @@ def _set_auth(app, member=None, admin=None, wl=None):
         app.dependency_overrides[require_auth] = lambda: member
 
 
-def _wl_met_club(db_session, evenement_types=None, ranking_weergaves=None):
+def _wl_met_club(db_session, evenement_types=None, ranking_weergaves=None, labels=None):
     club = make_club(db_session, evenement_types=evenement_types,
-                     ranking_weergaves=ranking_weergaves)
+                     ranking_weergaves=ranking_weergaves, labels=labels)
     wl = make_member(db_session, voornaam="Wies", achternaam="Leider",
                      lidnummer="WL001", role="wedstrijdleider")
     make_member_club(db_session, wl.id, club.id, role="wedstrijdleider")
@@ -363,3 +363,113 @@ async def test_homepage_badge_volgt_labelinstelling(client, db_session):
     assert ">Paren</span>" in response.text
     # 'individuele_drive' staat niet in de clublabels → geen badge
     assert "Individuele drive" not in response.text
+
+
+# ── Handmatig gekozen label ────────────────────────────────────────────────────
+
+def test_evening_label_handmatige_keuze_krijgt_voorrang():
+    """Een expliciet gekozen label wint van de automatische afleiding."""
+    from app.club_settings import evening_label
+    from app.models import Club, ClubEvening
+
+    club = Club(naam="X")  # geen instelling → alle labels aan
+    ev = ClubEvening(type="clubavond", deelnemers_type="paren", label="training")
+    ev.club = club
+    lbl = evening_label(ev)
+    assert lbl["key"] == "training"
+    assert lbl["naam"] == "Training"
+
+
+def test_evening_label_handmatige_keuze_respecteert_clubinstelling():
+    """Een handmatig label dat de club niet (meer) gebruikt, wordt verborgen."""
+    from app.club_settings import evening_label
+    from app.models import Club, ClubEvening
+
+    club = Club(naam="X", labels="paren")
+    ev = ClubEvening(type="clubavond", deelnemers_type="paren", label="training")
+    ev.club = club
+    assert evening_label(ev) is None
+
+
+def test_evening_label_ongeldige_handmatige_waarde_valt_terug_op_afleiding():
+    """Onbekende/oude waarde in ClubEvening.label → gedraagt zich als 'automatisch'."""
+    from app.club_settings import evening_label
+    from app.models import Club, ClubEvening
+
+    club = Club(naam="X")
+    ev = ClubEvening(type="clubavond", deelnemers_type="paren", label="onzin")
+    ev.club = club
+    lbl = evening_label(ev)
+    assert lbl["key"] == "paren"
+
+
+async def test_avonden_formulier_toont_labelkeuze(client, db_session):
+    """Aanmaakformulier bevat een labelkeuze met de ingestelde labels van de club."""
+    from app.main import app
+
+    club, wl = _wl_met_club(db_session, evenement_types="clubavond", labels="training,paren")
+    _set_auth(app, wl=wl)
+    response = await client.get("/beheer/avonden")
+    assert response.status_code == 200
+    assert 'name="label"' in response.text
+    assert '<option value="">Automatisch' in response.text
+    assert '<option value="training">Training</option>' in response.text
+    assert '<option value="paren">Paren</option>' in response.text
+    assert '<option value="viertallen">Viertallen</option>' not in response.text
+
+
+async def test_avonden_aanmaken_met_handmatig_label(client, db_session):
+    """POST met een gekozen label slaat dat label op het evenement op."""
+    from app.main import app
+    from app.models import ClubEvening
+    from datetime import date, timedelta
+
+    from app.models import Season
+
+    club, wl = _wl_met_club(db_session, labels="training,paren")
+    season = Season(naam="S", start_datum=date(2020, 1, 1), eind_datum=date(2030, 12, 31),
+                    actief=True, club_id=club.id)
+    db_session.add(season)
+    db_session.commit()
+
+    _set_auth(app, wl=wl)
+    datum = (date.today() + timedelta(days=10)).isoformat()
+    response = await client.post("/beheer/avonden", data={
+        "naam": "Speciale clubavond",
+        "datum": datum,
+        "type": "clubavond",
+        "deelnemers_type": "paren",
+        "label": "training",
+    })
+    assert response.status_code == 302
+
+    evt = db_session.query(ClubEvening).filter(ClubEvening.naam == "Speciale clubavond").first()
+    assert evt is not None
+    assert evt.label == "training"
+
+
+async def test_avonden_aanmaken_zonder_labelkeuze_blijft_automatisch(client, db_session):
+    """Leeg gelaten labelveld (Automatisch) slaat geen label op."""
+    from app.main import app
+    from app.models import ClubEvening, Season
+    from datetime import date, timedelta
+
+    club, wl = _wl_met_club(db_session)
+    season = Season(naam="S", start_datum=date(2020, 1, 1), eind_datum=date(2030, 12, 31),
+                    actief=True, club_id=club.id)
+    db_session.add(season)
+    db_session.commit()
+
+    _set_auth(app, wl=wl)
+    datum = (date.today() + timedelta(days=11)).isoformat()
+    response = await client.post("/beheer/avonden", data={
+        "naam": "Gewone clubavond",
+        "datum": datum,
+        "type": "clubavond",
+        "deelnemers_type": "paren",
+    })
+    assert response.status_code == 302
+
+    evt = db_session.query(ClubEvening).filter(ClubEvening.naam == "Gewone clubavond").first()
+    assert evt is not None
+    assert evt.label is None

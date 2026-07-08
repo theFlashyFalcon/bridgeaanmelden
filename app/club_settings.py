@@ -82,8 +82,13 @@ def evening_label(evening) -> dict | None:
     """
     Label voor een evenementkaart: {key, naam, css}, of None wanneer de club
     dit label niet gebruikt (zie /beheer/instellingen). Gebruikt als Jinja-global.
+
+    De wedstrijdleider kan het label bij het aanmaken van een evenement handmatig
+    kiezen (ClubEvening.label); zonder keuze wordt het afgeleid uit type +
+    deelnemersvorm.
     """
-    key = evening_label_key(evening.type, evening.deelnemers_type)
+    handmatig = getattr(evening, "label", None)
+    key = handmatig if handmatig in LABEL_KEYS else evening_label_key(evening.type, evening.deelnemers_type)
     if key not in enabled_labels(evening.club):
         return None
     return {"key": key, "naam": LABEL_NAMEN[key], "css": key.replace("_", "-")}

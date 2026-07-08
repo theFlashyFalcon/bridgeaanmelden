@@ -113,6 +113,20 @@
       </div>
 
       <div class="form-group">
+        <label for="e-label">Label</label>
+        <select id="e-label" name="label" class="form-select">
+          <option value="">Automatisch (op basis van type/vorm)</option>
+          {% for key, naam in beschikbare_labels %}
+          <option value="{{ key }}">{{ naam }}</option>
+          {% endfor %}
+        </select>
+        <span class="form-hint">
+          Standaard bepaalt het soort evenement en de deelnemersvorm het label op de kaart.
+          Kies hier een ander label als dat voor dit evenement beter past.
+        </span>
+      </div>
+
+      <div class="form-group">
         <label for="e-termijn-waarde">Inschrijftermijn</label>
         <div style="display:flex;align-items:center;gap:.5rem;">
           <input type="number" id="e-termijn-waarde" name="inschrijftermijn_waarde"

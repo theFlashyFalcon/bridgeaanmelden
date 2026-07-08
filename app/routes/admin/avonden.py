@@ -166,7 +166,7 @@ async def avonden_list(
         .limit(PER_PAGINA)
         .all()
     ) if club else []
-    from app.club_settings import enabled_event_types
+    from app.club_settings import LABEL_NAMEN, enabled_event_types, enabled_labels
 
     return templates.TemplateResponse(
         request,
@@ -179,6 +179,7 @@ async def avonden_list(
             "totaal_paginas": totaal_paginas,
             "totaal": totaal,
             "beschikbare_types": enabled_event_types(club),
+            "beschikbare_labels": [(k, LABEL_NAMEN[k]) for k in enabled_labels(club)],
         },
     )
 
@@ -228,10 +229,14 @@ async def avonden_add(
 ):
     club = get_admin_club(current_user, db, request)
     form = await request.form()
+    from app.club_settings import LABEL_KEYS
+
     naam = form.get("naam", "").strip()
     datum_str = form.get("datum", "")
     type_ = form.get("type", "clubavond")
     deelnemers_type = form.get("deelnemers_type", "paren")
+    label_raw = form.get("label", "").strip()
+    label = label_raw if label_raw in LABEL_KEYS else None
 
     errors = []
     if not naam:
@@ -269,7 +274,7 @@ async def avonden_add(
             .order_by(ClubEvening.datum)
             .all()
         ) if club else []
-        from app.club_settings import enabled_event_types
+        from app.club_settings import LABEL_NAMEN, enabled_event_types, enabled_labels
 
         return templates.TemplateResponse(
             request,
@@ -281,6 +286,7 @@ async def avonden_add(
                 "errors": errors,
                 "open_type": type_,
                 "beschikbare_types": enabled_event_types(club),
+                "beschikbare_labels": [(k, LABEL_NAMEN[k]) for k in enabled_labels(club)],
             },
             status_code=422,
         )
@@ -303,7 +309,7 @@ async def avonden_add(
     new_events = []
     first_event = ClubEvening(naam=naam, datum=datum, type=type_, deelnemers_type=deelnemers_type,
                                inschrijftermijn_uren=inschrijftermijn_uren, season_id=season.id,
-                               club_id=club_id)
+                               club_id=club_id, label=label)
     db.add(first_event)
     db.flush()
     new_events.append(first_event)
@@ -329,7 +335,7 @@ async def avonden_add(
                 if next_season:
                     evt = ClubEvening(naam=naam, datum=next_datum, type=type_, deelnemers_type=deelnemers_type,
                                       inschrijftermijn_uren=inschrijftermijn_uren, season_id=next_season.id,
-                                      club_id=club_id)
+                                      club_id=club_id, label=label)
                     db.add(evt)
                     db.flush()
                     new_events.append(evt)

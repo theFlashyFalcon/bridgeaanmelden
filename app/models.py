@@ -193,6 +193,8 @@ class ClubEvening(Base):
     type = Column(String, nullable=False, default=EveningType.clubavond)
     deelnemers_type = Column(String, nullable=False, default=DeelnemersType.paren)
     inschrijftermijn_uren = Column(Integer, nullable=True)
+    # Handmatig gekozen label (overschrijft de automatische afleiding); NULL = automatisch
+    label = Column(String, nullable=True)
     season_id = Column(Integer, ForeignKey("seasons.id"), nullable=False)
     club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
 
