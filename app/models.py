@@ -65,6 +65,12 @@ class Club(Base):
     naam = Column(String, nullable=False)
     stad = Column(String, nullable=True)
     kleur = Column(String, nullable=True)
+    # De algemene club: iedereen is er automatisch lid van (zie app.auth)
+    is_algemeen = Column(Boolean, default=False, nullable=False, server_default="0")
+    # Komma-gescheiden lijsten; NULL = alles beschikbaar (standaard)
+    evenement_types = Column(String, nullable=True)
+    ranking_weergaves = Column(String, nullable=True)
+    labels = Column(String, nullable=True)
 
     seasons = relationship("Season", back_populates="club")
     evenings = relationship("ClubEvening", back_populates="club")

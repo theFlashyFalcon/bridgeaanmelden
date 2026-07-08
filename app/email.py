@@ -26,11 +26,17 @@ def _send(to_email: str, subject: str, html_body: str, text_body: str) -> None:
     msg["To"] = to_email
     msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
-    with smtplib.SMTP(host, port) as server:
-        server.ehlo()
-        server.starttls()
-        server.login(user, password)
-        server.sendmail(from_addr, to_email, msg.as_string())
+    if port == 465:
+        # Poort 465 gebruikt impliciete TLS; starttls() zou daar mislukken
+        with smtplib.SMTP_SSL(host, port) as server:
+            server.login(user, password)
+            server.sendmail(from_addr, to_email, msg.as_string())
+    else:
+        with smtplib.SMTP(host, port) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(from_addr, to_email, msg.as_string())
 
 
 def send_invitation_email(to_email: str, invite_url: str) -> None:

@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
+from app.club_settings import evening_label
 from app.csrf import csrf_input, get_csrf_token
 from app.config import ANDERE_CLUBS, CLUB_NAAM, CLUB_STAD
 
@@ -11,6 +12,7 @@ templates.env.globals["csrf_input"] = csrf_input
 templates.env.globals["club_naam"] = CLUB_NAAM
 templates.env.globals["club_stad"] = CLUB_STAD
 templates.env.globals["andere_clubs"] = ANDERE_CLUBS
+templates.env.globals["event_label"] = evening_label
 
 
 def _get_beheer_clubs(request):

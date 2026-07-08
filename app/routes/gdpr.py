@@ -10,11 +10,17 @@ from app.auth import require_auth
 from app.database import get_db
 from app.models import (
     Bericht,
+    Invitation,
     Member,
+    MemberClub,
     PartnerRequest,
+    PasswordResetToken,
+    Ranking,
     RecurringRegistration,
     Registration,
+    Uitslag,
 )
+from sqlalchemy import or_
 
 router = APIRouter(prefix="/gdpr")
 logger = logging.getLogger(__name__)
@@ -30,7 +36,12 @@ async def download_mijn_gegevens(
 ):
     registrations = (
         db.query(Registration)
-        .filter(Registration.person1_id == current_user.id)
+        .filter(
+            or_(
+                Registration.person1_id == current_user.id,
+                Registration.person2_id == current_user.id,
+            )
+        )
         .all()
     )
     berichten_verzonden = (
@@ -144,13 +155,37 @@ async def verwijder_eigen_account(
         Registration.person1_id == member_id
     ).delete(synchronize_session=False)
 
-    # Ontkoppel aanmeldingen waarbij dit lid partner was
+    # Ontkoppel aanmeldingen waarbij dit lid partner of beschikbare speler was
     db.query(Registration).filter(
         Registration.person2_id == member_id
     ).update(
         {Registration.person2_id: None},
         synchronize_session=False,
     )
+    db.query(Registration).filter(
+        Registration.available_person_id == member_id
+    ).update(
+        {Registration.available_person_id: None},
+        synchronize_session=False,
+    )
+
+    # Overige verwijzingen opruimen zodat de foreign keys niet blijven hangen
+    # (op PostgreSQL zou de delete anders falen)
+    db.query(MemberClub).filter(
+        MemberClub.member_id == member_id
+    ).delete(synchronize_session=False)
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.member_id == member_id
+    ).delete(synchronize_session=False)
+    db.query(Invitation).filter(
+        Invitation.member_id == member_id
+    ).update({Invitation.member_id: None}, synchronize_session=False)
+    db.query(Uitslag).filter(
+        Uitslag.aangemaakt_door_id == member_id
+    ).update({Uitslag.aangemaakt_door_id: None}, synchronize_session=False)
+    db.query(Ranking).filter(
+        Ranking.aangemaakt_door_id == member_id
+    ).update({Ranking.aangemaakt_door_id: None}, synchronize_session=False)
 
     # Verwijder het account zelf (hard delete)
     db.delete(current_user)

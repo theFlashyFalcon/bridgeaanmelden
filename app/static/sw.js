@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bridgeclub-v2';
+const CACHE_NAME = 'bridgeclub-v3';
 const APP_SHELL = ['/', '/static/style.css', '/offline'];
 
 self.addEventListener('install', (event) => {
@@ -23,14 +23,8 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     fetch(event.request)
-      .then((response) => {
-        // Cache successful navigation responses
-        if (response.ok && event.request.mode === 'navigate') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      })
+      // Ingelogde pagina's bevatten persoonlijke gegevens en worden bewust
+      // niet gecachet; offline valt de app terug op de app-shell/offline-pagina.
       .catch(() =>
         caches.match(event.request).then(
           (cached) => cached || caches.match('/offline')

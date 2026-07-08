@@ -5,7 +5,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, get_member_club_ids, require_auth
+from app.auth import get_current_user, get_member_club_ids, is_member_of_club, require_auth
+from app.club_settings import merged_event_types
 from app.database import get_db
 from app.models import (
     Club,
@@ -55,7 +56,9 @@ async def index(
         .filter(Season.actief == True, ClubEvening.datum >= today)  # noqa: E712
     )
 
-    if current_user and user_club_ids:
+    if current_user:
+        # Ook zonder clubkoppelingen alleen open avonden (club_id None) tonen;
+        # avonden van clubs waar dit lid geen toegang toe heeft blijven verborgen
         query = query.filter(
             (ClubEvening.club_id.in_(user_club_ids)) | (ClubEvening.club_id.is_(None))
         )
@@ -102,6 +105,9 @@ async def index(
             deadline = datetime.combine(e.datum, datetime.min.time()) - timedelta(hours=e.inschrijftermijn_uren)
             termijn_deadlines[e.id] = deadline
 
+    # Alleen de evenementtypes die de club(s) van dit lid gebruiken (clubinstellingen)
+    beschikbare_types = merged_event_types(user_clubs)
+
     welkom = request.session.pop("welkom", False)
     return templates.TemplateResponse(
         request,
@@ -115,6 +121,7 @@ async def index(
             "termijn_deadlines": termijn_deadlines,
             "user_clubs": user_clubs,
             "club_map": club_map,
+            "beschikbare_types": beschikbare_types,
         },
     )
 
@@ -134,6 +141,8 @@ async def deelnemers(
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    if not is_member_of_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen lid van deze club")
 
     registrations = (
         db.query(Registration)

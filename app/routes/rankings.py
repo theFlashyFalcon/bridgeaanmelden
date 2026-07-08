@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, get_member_club_ids
+from app.club_settings import RANKING_KEYS, enabled_rankings, merged_rankings
 from app.database import get_db
-from app.models import ClubEvening, Season, Uitslag
+from app.models import Club, ClubEvening, Season, Uitslag
 from app.templates_env import templates
 from app.utils.nbb_xml import PaarSpelers, SpelerResultaat, parse_nbb_xml
 
@@ -242,6 +243,25 @@ def _get_display_role(request: Request, current_user) -> str:
     return current_user.role
 
 
+def _beschikbare_weergaves(
+    db: Session,
+    geselecteerd: Season | None,
+    user_club_ids: list[int],
+) -> list[str]:
+    """Rankingweergaves die de club heeft ingesteld (zie /beheer/instellingen).
+
+    De club van het gekozen seizoen is leidend; seizoenen zonder club (legacy)
+    vallen terug op de vereniging van de clubs van het lid.
+    """
+    if geselecteerd and geselecteerd.club_id:
+        club = db.query(Club).filter(Club.id == geselecteerd.club_id).first()
+        return enabled_rankings(club)
+    if user_club_ids:
+        clubs = db.query(Club).filter(Club.id.in_(user_club_ids)).all()
+        return merged_rankings(clubs)
+    return list(RANKING_KEYS)
+
+
 @router.get("")
 async def ranking_pagina(request: Request, db: Session = Depends(get_db)):
     current_user = get_current_user(request, db)
@@ -266,9 +286,12 @@ async def ranking_pagina(request: Request, db: Session = Depends(get_db)):
 
     geselecteerd = next((s for s in seizoenen if s.id == seizoen_id), None)
 
+    # Alleen de weergaves die de club heeft ingesteld (clubinstellingen)
+    beschikbare_weergaves = _beschikbare_weergaves(db, geselecteerd, user_club_ids)
+
     weergave = request.query_params.get("weergave", "spanning")
-    if weergave not in WEERGAVES:
-        weergave = "spanning"
+    if weergave not in WEERGAVES or weergave not in beschikbare_weergaves:
+        weergave = beschikbare_weergaves[0]
 
     try:
         n_avonden = max(1, int(request.query_params.get("n_avonden", "5")))
@@ -338,6 +361,7 @@ async def ranking_pagina(request: Request, db: Session = Depends(get_db)):
             "geselecteerd": geselecteerd,
             "seizoen_id": seizoen_id,
             "weergave": weergave,
+            "beschikbare_weergaves": beschikbare_weergaves,
             "n_uitslagen": n_uitslagen,
             "n_avonden": n_avonden,
             "drempel": drempel,
@@ -382,6 +406,9 @@ async def mijn_overzicht(request: Request, db: Session = Depends(get_db)):
         seizoen_id = int(request.query_params.get("seizoen_id", ""))
     except (ValueError, TypeError):
         seizoen_id = actief.id if actief else (seizoenen[0].id if seizoenen else None)
+
+    geselecteerd = next((s for s in seizoenen if s.id == seizoen_id), None)
+    beschikbare_weergaves = _beschikbare_weergaves(db, geselecteerd, user_club_ids)
 
     avonden, _ = _laad_avonden(db, seizoen_id, user_club_ids) if seizoen_id else ([], [])
     n_uitslagen = len(avonden)
@@ -488,6 +515,9 @@ async def mijn_overzicht(request: Request, db: Session = Depends(get_db)):
                 "stat_label": "Gem. rang",
                 "stat": f"{mijn_vorm['gem_rang']:.2f}",
             })
+
+    # Alleen de weergaves tonen die de club heeft ingesteld (clubinstellingen)
+    mijn_rankings = [r for r in mijn_rankings if r["weergave"] in beschikbare_weergaves]
 
     return templates.TemplateResponse(
         request,

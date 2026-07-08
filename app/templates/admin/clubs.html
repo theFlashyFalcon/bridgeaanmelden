@@ -62,6 +62,8 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   {% elif request.query_params.get('import_fout') %}
     <div class="alert alert-error" style="margin-bottom:1rem;">Upload mislukt. Kies een geldig CSV-bestand.</div>
+  {% elif request.query_params.get('fout') == 'algemeen' %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">De algemene club kan niet worden verwijderd.</div>
   {% endif %}
 
   <!-- Nieuwe club toevoegen -->
@@ -107,7 +109,15 @@ document.addEventListener('DOMContentLoaded', function() {
             {% if club.kleur %}
               <span style="display:inline-block;width:1rem;height:1rem;border-radius:50%;background:{{ club.kleur }};border:1px solid rgba(0,0,0,.15);vertical-align:middle;"></span>
             {% endif %}
+            {% if club.is_algemeen %}
+              <span class="badge">alle gebruikers</span>
+            {% endif %}
           </h2>
+          {% if club.is_algemeen %}
+            <p style="color:var(--color-muted);margin:0 0 .5rem;font-size:.9rem;">
+              Iedereen is automatisch lid van deze club. Evenementen die je hier aanmaakt zijn zichtbaar voor alle gebruikers.
+            </p>
+          {% endif %}
           {% if club.stad %}<p style="color:var(--color-muted);margin:0 0 .5rem;font-size:.9rem;">{{ club.stad }}</p>{% endif %}
           <p style="margin:0;font-size:.85rem;color:var(--color-muted);">
             <strong>{{ lid_counts.get(club.id, 0) }}</strong> leden &mdash;
@@ -115,11 +125,13 @@ document.addEventListener('DOMContentLoaded', function() {
           </p>
           <a href="/beheer/clubs/{{ club.id }}/leden" class="btn btn-secondary" style="margin-top:.5rem;padding:.3rem .7rem;font-size:.85rem;">Leden &amp; rollen beheren</a>
         </div>
+        {% if not club.is_algemeen %}
         <form method="post" action="/beheer/clubs/{{ club.id }}/verwijder"
               data-bevestig="Club '{{ club.naam }}' verwijderen? Dit verwijdert ook alle gekoppelde data.">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
           <button type="submit" class="btn btn-danger" style="padding:.3rem .7rem;font-size:.85rem;">Verwijderen</button>
         </form>
+        {% endif %}
       </div>
 
       <!-- Bewerken -->

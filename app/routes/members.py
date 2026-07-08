@@ -7,12 +7,28 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.auth import require_admin, require_wedstrijdleider
+from app.auth import get_wedstrijdleider_clubs, require_admin, require_wedstrijdleider
 from app.database import get_db
-from app.models import Club, ClubEvening, Lid, Member, MemberClub, Registration
+from app.models import Club, ClubEvening, Lid, Member, MemberClub, MemberRole, Registration
 
 router = APIRouter(prefix="/leden")
 from app.templates_env import templates
+
+
+def _kan_lid_beheren(current_user: Member, member: Member, db: Session) -> bool:
+    """WL's mogen alleen leden beheren waarmee ze een club delen; admins alles."""
+    if current_user.role == MemberRole.admin.value:
+        return True
+    member_club_ids = {
+        mc.club_id
+        for mc in db.query(MemberClub).filter(MemberClub.member_id == member.id).all()
+    }
+    if not member_club_ids:
+        return True  # legacy lid zonder clubkoppeling
+    beheer_ids = {c.id for c in get_wedstrijdleider_clubs(current_user, db)}
+    if not beheer_ids and current_user.role == MemberRole.wedstrijdleider.value:
+        return True  # legacy globale WL zonder clubkoppelingen
+    return bool(member_club_ids & beheer_ids)
 
 _SORT_MAP = {
     "naam": (Member.achternaam, Member.voornaam),
@@ -74,6 +90,8 @@ async def member_detail(
     member = db.query(Member).filter(Member.id == member_id).first()
     if not member:
         raise HTTPException(status_code=404)
+    if not _kan_lid_beheren(current_user, member, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot dit lid")
 
     registrations = (
         db.query(Registration)
@@ -142,6 +160,8 @@ async def member_training_toggle(
     member = db.query(Member).filter(Member.id == member_id).first()
     if not member:
         raise HTTPException(status_code=404)
+    if not _kan_lid_beheren(current_user, member, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot dit lid")
     member.training_eligible = not member.training_eligible
     db.commit()
     return RedirectResponse(url=f"/leden/{member_id}", status_code=302)

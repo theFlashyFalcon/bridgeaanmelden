@@ -26,28 +26,46 @@
     </div>
   </form>
 
-  {# ── Tabs rij 1: Standaard weergaven ── #}
+  {# ── Tabs: alleen de weergaves die de club heeft ingesteld (zie Instellingen) ── #}
   {% set base = "/ranking?seizoen_id=" ~ (seizoen_id or '') %}
+  {% set ranglijst_tabs = [
+    ('spanning', 'Algemene ranking'),
+    ('lijn_a', 'Lijn A'),
+    ('lijn_b', 'Lijn B'),
+    ('iedereen', 'Iedereen'),
+  ] %}
+  {% set statistiek_tabs = [
+    ('imp_totaal', 'IMP totaal'),
+    ('consistentie', 'Consistentie'),
+    ('vaste_partners', 'Vaste partners'),
+    ('vorm', 'Vorm'),
+  ] %}
+
+  {# ── Tabs rij 1: Standaard weergaven ── #}
+  {% set zichtbare_ranglijsten = ranglijst_tabs | selectattr(0, 'in', beschikbare_weergaves) | list %}
+  {% if zichtbare_ranglijsten %}
   <div style="margin-bottom:.4rem;">
     <span style="font-size:.78rem;font-weight:600;color:var(--color-muted,#888);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:.35rem;">Ranglijsten</span>
     <div class="filter-tabs">
-      <a href="{{ base }}&weergave=spanning"  class="filter-tab {% if weergave=='spanning'  %}filter-tab--active{% endif %}">Algemene ranking</a>
-      <a href="{{ base }}&weergave=lijn_a"    class="filter-tab {% if weergave=='lijn_a'    %}filter-tab--active{% endif %}">Lijn A</a>
-      <a href="{{ base }}&weergave=lijn_b"    class="filter-tab {% if weergave=='lijn_b'    %}filter-tab--active{% endif %}">Lijn B</a>
-      <a href="{{ base }}&weergave=iedereen"  class="filter-tab {% if weergave=='iedereen'  %}filter-tab--active{% endif %}">Iedereen</a>
+      {% for key, label in zichtbare_ranglijsten %}
+      <a href="{{ base }}&weergave={{ key }}" class="filter-tab {% if weergave==key %}filter-tab--active{% endif %}">{{ label }}</a>
+      {% endfor %}
     </div>
   </div>
+  {% endif %}
 
   {# ── Tabs rij 2: Extra statistieken ── #}
+  {% set zichtbare_statistieken = statistiek_tabs | selectattr(0, 'in', beschikbare_weergaves) | list %}
+  {% if zichtbare_statistieken %}
   <div style="margin-bottom:1.25rem;">
     <span style="font-size:.78rem;font-weight:600;color:var(--color-muted,#888);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:.35rem;">Statistieken</span>
     <div class="filter-tabs">
-      <a href="{{ base }}&weergave=imp_totaal"      class="filter-tab {% if weergave=='imp_totaal'      %}filter-tab--active{% endif %}">IMP totaal</a>
-      <a href="{{ base }}&weergave=consistentie"    class="filter-tab {% if weergave=='consistentie'    %}filter-tab--active{% endif %}">Consistentie</a>
-      <a href="{{ base }}&weergave=vaste_partners"  class="filter-tab {% if weergave=='vaste_partners'  %}filter-tab--active{% endif %}">Vaste partners</a>
-      <a href="{{ base }}&weergave=vorm"            class="filter-tab {% if weergave=='vorm'            %}filter-tab--active{% endif %}">Vorm</a>
+      {% for key, label in zichtbare_statistieken %}
+      <a href="{{ base }}&weergave={{ key }}" class="filter-tab {% if weergave==key %}filter-tab--active{% endif %}">{{ label }}</a>
+      {% endfor %}
     </div>
   </div>
+  {% endif %}
 </div>
 
 {# ── Waarschuwingen ── #}

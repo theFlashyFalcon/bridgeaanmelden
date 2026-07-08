@@ -65,10 +65,22 @@
     <div class="account-option">
       <div>
         <strong>Nieuw account aanmaken</strong>
-        <p>Vul je gegevens in. Een beheerder keurt je aanvraag goed.</p>
+        <p>Vul je gegevens in. Sta je in de ledenlijst van je club, dan kun je direct aan de slag.</p>
       </div>
       <a href="/registreren" class="btn btn-secondary">Account aanmaken</a>
     </div>
+  </section>
+{% endif %}
+
+{% if current_user and not user_clubs %}
+  <section class="card">
+    <h2>Nog geen toegang tot een club</h2>
+    <p>
+      Je account is aangemaakt, maar je bent nog niet gekoppeld aan een club.
+      Sta je in de ledenlijst van je club, controleer dan of je NBB-nummer klopt
+      op je <a href="/profiel">profiel</a>. Anders kan de wedstrijdleider van je
+      club je toegang geven — vraag het hem of haar even.
+    </p>
   </section>
 {% endif %}
 
@@ -106,17 +118,24 @@
       </div>
       {% endif %}
 
-      {# Soort evenement #}
+      {# Soort evenement — alleen de types die de club gebruikt (clubinstellingen) #}
+      {% set type_label = {
+        'clubavond': 'Clubavond',
+        'avondeten': 'Avondeten',
+        'training': 'Training',
+        'speciaal': 'Speciaal',
+      } %}
+      {% if beschikbare_types | length > 1 %}
       <div class="fdd-sectie">
         <span class="fdd-label">Soort evenement</span>
         <div class="fdd-opties">
           <button type="button" class="filter-tab filter-tab--sm filter-tab--active" data-filter="type" data-value="alle">Alle</button>
-          <button type="button" class="filter-tab filter-tab--sm" data-filter="type" data-value="clubavond">Clubavond</button>
-          <button type="button" class="filter-tab filter-tab--sm" data-filter="type" data-value="avondeten">Avondeten</button>
-          <button type="button" class="filter-tab filter-tab--sm" data-filter="type" data-value="training">Training</button>
-          <button type="button" class="filter-tab filter-tab--sm" data-filter="type" data-value="speciaal">Speciaal</button>
+          {% for t in beschikbare_types %}
+          <button type="button" class="filter-tab filter-tab--sm" data-filter="type" data-value="{{ t }}">{{ type_label[t] }}</button>
+          {% endfor %}
         </div>
       </div>
+      {% endif %}
 
       {# Aanmeld-status #}
       <div class="fdd-sectie">
@@ -133,23 +152,19 @@
         <form method="post" action="/instellingen/verborgen-types">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
           <span class="fdd-label">Toon soorten</span>
+          {% set type_label_meervoud = {
+            'clubavond': 'Clubavonden',
+            'avondeten': 'Avondeten',
+            'training': 'Trainingen',
+            'speciaal': 'Speciale evenementen',
+          } %}
           <div class="toggle-list" style="margin-bottom:.5rem;">
+            {% for t in beschikbare_types %}
             <label class="toggle-item">
-              <input type="checkbox" name="toon_clubavond" value="1" {% if 'clubavond' not in hidden_types %}checked{% endif %}>
-              Clubavonden
+              <input type="checkbox" name="toon_{{ t }}" value="1" {% if t not in hidden_types %}checked{% endif %}>
+              {{ type_label_meervoud[t] }}
             </label>
-            <label class="toggle-item">
-              <input type="checkbox" name="toon_avondeten" value="1" {% if 'avondeten' not in hidden_types %}checked{% endif %}>
-              Avondeten
-            </label>
-            <label class="toggle-item">
-              <input type="checkbox" name="toon_training" value="1" {% if 'training' not in hidden_types %}checked{% endif %}>
-              Trainingen
-            </label>
-            <label class="toggle-item">
-              <input type="checkbox" name="toon_speciaal" value="1" {% if 'speciaal' not in hidden_types %}checked{% endif %}>
-              Speciale evenementen
-            </label>
+            {% endfor %}
           </div>
           {% if user_clubs | length > 1 %}
           <span class="fdd-label" style="margin-top:.5rem;">Toon clubs</span>
@@ -229,7 +244,8 @@
             {% endif %}
           </div>
         </div>
-        <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
+        {% set lbl = event_label(evening) %}
+        {% if lbl %}<span class="event-label label-{{ lbl.css }}">{{ lbl.naam }}</span>{% endif %}
       </div>
 
       {% if current_user %}

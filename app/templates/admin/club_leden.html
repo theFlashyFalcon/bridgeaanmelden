@@ -7,7 +7,9 @@
       <h1 style="margin:0 0 .2rem;">{{ club.naam }} — Leden</h1>
       {% if club.stad %}<p style="margin:0;color:var(--color-muted);font-size:.9rem;">{{ club.stad }}</p>{% endif %}
     </div>
+    {% if current_user.role == 'admin' %}
     <a href="/beheer/clubs" class="btn btn-secondary" style="padding:.35rem .9rem;font-size:.9rem;">← Terug naar clubs</a>
+    {% endif %}
   </div>
 
   {% if request.query_params.get('toegevoegd') %}
@@ -42,6 +44,10 @@
         <td>{{ m.lidnummer or '—' }}</td>
         <td>{{ m.email or '—' }}</td>
         <td>
+          {% if mc.role not in roles %}
+            {# Rij van een club-admin: alleen admins mogen deze rol aanpassen #}
+            <span class="badge">{{ mc.role }}</span>
+          {% else %}
           <form method="post" action="/beheer/clubs/{{ club.id }}/leden/{{ m.id }}/rol"
                 style="display:flex;gap:.4rem;align-items:center;">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
@@ -55,9 +61,10 @@
           <p style="font-size:.75rem;color:var(--color-muted);margin:.25rem 0 0;">
             Alleen admins kunnen de admin-rol toewijzen.
           </p>
+          {% endif %}
         </td>
         <td style="text-align:right;">
-          {% if m.id != current_user.id %}
+          {% if m.id != current_user.id and mc.role in roles %}
           <form method="post" action="/beheer/clubs/{{ club.id }}/leden/{{ m.id }}/verwijder"
                 data-bevestig="Lid {{ m.voornaam }} {{ m.achternaam }} uit club verwijderen?">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">

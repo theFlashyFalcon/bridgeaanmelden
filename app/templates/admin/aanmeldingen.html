@@ -13,7 +13,8 @@
               <span style="font-weight:600;">{{ e.datum.strftime('%d %B %Y') }}</span>
               &nbsp;—&nbsp;{{ e.naam or e.type }}
             </span>
-            <span class="event-label label-{{ e.type | replace(' ', '-') }}">{{ e.type }}</span>
+            {% set lbl = event_label(e) %}
+            {% if lbl %}<span class="event-label label-{{ lbl.css }}">{{ lbl.naam }}</span>{% endif %}
           </a>
         </li>
       {% endfor %}

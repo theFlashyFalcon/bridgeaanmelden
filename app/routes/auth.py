@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 from app import ratelimit
-from app.auth import get_current_user, hash_password, verify_password
+from app.auth import get_current_user, hash_password, needs_rehash, verify_password
 from app.database import get_db
 from app.models import (
     AccountRequest,
@@ -47,18 +47,30 @@ def _koppel_aan_club(member: Member, db: Session, club_id: int | None = None) ->
 
 # ── Login ──────────────────────────────────────────────────────────────────────
 
+def _veilige_next_url(raw: str) -> str:
+    """Alleen relatieve paden toestaan (geen open redirect)."""
+    if raw and raw.startswith("/") and not raw.startswith("//"):
+        return raw
+    return "/"
+
+
+def _escape_like(waarde: str) -> str:
+    """Escape LIKE/ILIKE-wildcards in gebruikersinvoer."""
+    return waarde.replace("\\", "\\\\").replace("%", r"\%").replace("_", r"\_")
+
+
 @router.get("/login")
 async def login_form(request: Request, db: Session = Depends(get_db)):
     current_user = get_current_user(request, db)
     if current_user:
         return RedirectResponse(url="/", status_code=302)
-    return templates.TemplateResponse(request, "login.html", {})
+    next_url = request.query_params.get("next", "")
+    return templates.TemplateResponse(request, "login.html", {"next": next_url})
 
 
 @router.post("/login")
 async def login_submit(request: Request, db: Session = Depends(get_db)):
-    client_ip = request.client.host if request.client else "onbekend"
-    rate_key = f"login:{client_ip}"
+    rate_key = f"login:{ratelimit.client_key(request)}"
     if ratelimit.is_limited(rate_key):
         return templates.TemplateResponse(
             request, "login.html",
@@ -69,6 +81,7 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
     login_method = form.get("login_method", "nbb")
     password = form.get("password", "")
+    next_url = _veilige_next_url(form.get("next", "").strip())
 
     member = None
     email = ""
@@ -79,8 +92,8 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
         matches = (
             db.query(Member)
             .filter(
-                Member.voornaam.ilike(voornaam),
-                Member.achternaam.ilike(achternaam),
+                Member.voornaam.ilike(_escape_like(voornaam), escape="\\"),
+                Member.achternaam.ilike(_escape_like(achternaam), escape="\\"),
             )
             .all()
         )
@@ -106,9 +119,17 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
 
     if member and member.wachtwoord_hash and verify_password(password, member.wachtwoord_hash):
         ratelimit.reset(rate_key)
+        # Legacy-hashes transparant upgraden naar het huidige formaat/iteraties
+        if needs_rehash(member.wachtwoord_hash):
+            member.wachtwoord_hash = hash_password(password)
+            db.commit()
         request.session["user_id"] = member.id
         request.session["welkom"] = True
-        return RedirectResponse(url="/", status_code=302)
+        return RedirectResponse(url=next_url, status_code=302)
+
+    # Elke mislukte poging telt mee voor de rate limit — ook de status-antwoorden
+    # hieronder, anders zijn die onbeperkt te gebruiken om accounts te enumereren.
+    ratelimit.record_failure(rate_key)
 
     account_request = (
         db.query(AccountRequest)
@@ -135,7 +156,6 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
             request, "login.html", {"login_status": "afgewezen"}, status_code=401
         )
 
-    ratelimit.record_failure(rate_key)
     return templates.TemplateResponse(
         request,
         "login.html",
@@ -153,8 +173,6 @@ async def registreren_form(request: Request):
 
 @router.post("/registreren")
 async def registreren_submit(request: Request, db: Session = Depends(get_db)):
-    from app.email import send_admin_new_request_email
-
     form = await request.form()
     voornaam = form.get("voornaam", "").strip()
     achternaam = form.get("achternaam", "").strip()
@@ -204,110 +222,30 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
     if bestaand_op_email or bestaand_op_nbb:
         return _render({"melding": "al_account"})
 
-    # ── Controleer: lopende aanvraag ──────────────────────────────────────────
-    if (
-        db.query(AccountRequest)
-        .filter(
-            AccountRequest.email == email,
-            AccountRequest.status != AccountRequestStatus.afgewezen,
-        )
-        .first()
-    ):
-        errors.append("Er loopt al een aanvraag voor dit e-mailadres.")
-        return _render({"errors": errors})
-
-    # ── Sla op voor admin-notificatie ─────────────────────────────────────────
-    def _stuur_admin_mail(reden: str) -> None:
-        admin_email = os.getenv("ADMIN_EMAIL", "")
-        if not admin_email:
-            return
-        base_url = str(request.base_url).rstrip("/")
-        try:
-            send_admin_new_request_email(
-                to_email=admin_email,
-                aanvrager_voornaam=voornaam,
-                aanvrager_achternaam=achternaam,
-                aanvrager_email=email,
-                reden=reden,
-                base_url=base_url,
-            )
-        except Exception:
-            logger.exception("Admin-notificatie mislukt voor nieuwe aanvraag")
-
     # ── Zoek in ledenlijsten van alle aangesloten clubs ───────────────────────
     # Primair: zoek op NBB-nummer
     leden_op_nbb = db.query(Lid).filter(Lid.nbb_nummer == nbb_nummer).all()
 
-    # Fallback: handmatig toegevoegde leden hebben geen NBB-nummer; zoek op naam
-    leden_op_naam = []
-    if not leden_op_nbb:
-        leden_op_naam = db.query(Lid).filter(
-            Lid.voornaam.ilike(voornaam),
-            Lid.achternaam.ilike(achternaam),
-            Lid.nbb_nummer.is_(None),
-        ).all()
-
-    alle_gevonden_leden = leden_op_nbb or leden_op_naam
-
-    if not alle_gevonden_leden:
-        # Niet gevonden in enige ledenlijst → aanvraag aanmaken, admin beslist
-        db.add(AccountRequest(
-            voornaam=voornaam,
-            achternaam=achternaam,
-            email=email,
-            lidnummer=nbb_nummer,
-            wachtwoord_hash=hash_password(password),
-            toestemming_op=datetime.now(timezone.utc),
-        ))
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            logger.exception("DB-fout bij aanvraag aanmaken")
-            return _render({"errors": ["Er is een technische fout opgetreden. Probeer het later opnieuw."]})
-        _stuur_admin_mail("Aanvrager staat niet in de ledenlijst.")
-        return _render({"melding": "geen_lid_crash"}, status=200)
-
-    # ── Controleer naamovereenkomst (alleen bij NBB-treffer) ──────────────────
     if leden_op_nbb:
+        # Dit lidnummer staat in een ledenlijst — de naam moet dan wel kloppen,
+        # anders kan iemand met andermans lidnummer een account claimen.
+        # Geen account aanmaken in dat geval; de aanvrager moet de gegevens
+        # corrigeren of contact opnemen met de wedstrijdleider.
         eerste_lid = leden_op_nbb[0]
         voornaam_klopt = eerste_lid.voornaam.strip().lower() == voornaam.lower()
         achternaam_klopt = eerste_lid.achternaam.strip().lower() == achternaam.lower()
         if not (voornaam_klopt and achternaam_klopt):
             return _render({"melding": "naam_mismatch"})
+        gekoppelde_leden = leden_op_nbb
+    else:
+        # Fallback: handmatig toegevoegde leden hebben geen NBB-nummer; zoek op naam
+        gekoppelde_leden = db.query(Lid).filter(
+            Lid.voornaam.ilike(voornaam),
+            Lid.achternaam.ilike(achternaam),
+            Lid.nbb_nummer.is_(None),
+        ).all()
 
-    # ── Controleer of naam al in gebruik is ───────────────────────────────────
-    naam_al_in_gebruik = (
-        db.query(Member)
-        .filter(
-            Member.voornaam.ilike(voornaam),
-            Member.achternaam.ilike(achternaam),
-        )
-        .first()
-    )
-
-    if naam_al_in_gebruik:
-        # Mogelijke dubbelganger → admin beslist
-        db.add(AccountRequest(
-            voornaam=voornaam,
-            achternaam=achternaam,
-            email=email,
-            lidnummer=nbb_nummer,
-            wachtwoord_hash=hash_password(password),
-            toestemming_op=datetime.now(timezone.utc),
-        ))
-        try:
-            db.commit()
-        except Exception:
-            db.rollback()
-            logger.exception("DB-fout bij aanvraag aanmaken")
-            return _render({"errors": ["Er is een technische fout opgetreden. Probeer het later opnieuw."]})
-        _stuur_admin_mail(
-            "Lid in de ledenlijst, maar er bestaat al een account met dezelfde voor- en achternaam."
-        )
-        return _render({"melding": "aanvraag_ontvangen"}, status=200)
-
-    # ── Lid geverifieerd: account direct aanmaken ─────────────────────────────
+    # ── Account aanmaken; clubtoegang volgt uit de ledenlijst ─────────────────
     assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == email).first()
     role = assignment.role if assignment else MemberRole.lid
 
@@ -323,13 +261,11 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
     db.add(member)
     db.flush()
 
-    # Koppel aan alle clubs waar het lid voorkomt in de ledenlijst
-    club_ids = {lid.club_id for lid in alle_gevonden_leden if lid.club_id}
-    if club_ids:
-        for club_id in club_ids:
-            _koppel_aan_club(member, db, club_id=club_id)
-    else:
-        _koppel_aan_club(member, db)  # fallback: eerste club in de database
+    # Koppel aan alle clubs waar het lid voorkomt in de ledenlijst; zonder
+    # treffer blijft het account clubloos tot een wedstrijdleider het toevoegt
+    club_ids = {lid.club_id for lid in gekoppelde_leden if lid.club_id}
+    for club_id in club_ids:
+        _koppel_aan_club(member, db, club_id=club_id)
 
     try:
         db.commit()
@@ -477,6 +413,14 @@ async def wachtwoord_vergeten_form(request: Request):
 async def wachtwoord_vergeten_submit(request: Request, db: Session = Depends(get_db)):
     from app.email import send_password_reset_email
 
+    # Begrens het aantal reset-mails per IP
+    rate_key = f"reset:{ratelimit.client_key(request)}"
+    if ratelimit.is_limited(rate_key):
+        return templates.TemplateResponse(
+            request, "wachtwoord_vergeten.html", {"verzonden": True}
+        )
+    ratelimit.record_failure(rate_key)
+
     form = await request.form()
     email = form.get("email", "").strip().lower()
 
@@ -581,6 +525,13 @@ def _get_valid_reset_token(token: str, db: Session):
 @router.post("/admin-bericht")
 async def admin_bericht_submit(request: Request, db: Session = Depends(get_db)):
     from app.models import AdminBericht
+
+    # Publiek formulier: begrens het aantal berichten per IP tegen spam
+    rate_key = f"admin_bericht:{ratelimit.client_key(request)}"
+    if ratelimit.is_limited(rate_key):
+        return RedirectResponse(url="/login?bericht_fout=1", status_code=302)
+    ratelimit.record_failure(rate_key)
+
     form = await request.form()
     naam = form.get("naam", "").strip() or None
     email_val = form.get("email", "").strip() or None

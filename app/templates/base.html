@@ -60,6 +60,13 @@
           <div class="nav-dropdown-menu">
             <a href="/beheer/avonden">Beheren</a>
             <a href="/beheer/af-aanmeldingen">Af en aanmeldingen</a>
+            <a href="/beheer/instellingen">Instellingen</a>
+            {% if display_role != 'admin' %}
+            {% set wl_clubs = get_beheer_clubs(request) %}
+            {% for c in wl_clubs %}
+            <a href="/beheer/clubs/{{ c.id }}/leden">Clubleden{% if wl_clubs | length > 1 %} — {{ c.naam }}{% endif %}</a>
+            {% endfor %}
+            {% endif %}
             {% if display_role == 'admin' %}
             <a href="/">Eigen agenda</a>
             {% endif %}

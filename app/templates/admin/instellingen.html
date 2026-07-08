@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Instellingen — Bridge Club{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Clubinstellingen{% if club %} — {{ club.naam }}{% endif %}</h1>
+  <p style="color: var(--color-muted); margin-bottom: 1rem; font-size: .9rem;">
+    Stel in welke soorten evenementen jouw club gebruikt, welke rankings voor de leden
+    beschikbaar zijn en welke labels op de evenementkaarten verschijnen. Leden zien in de
+    agenda en op de rankingpagina alleen de gekozen opties.
+  </p>
+
+  {% if request.query_params.get('opgeslagen') %}
+    <div class="alert alert-success">Instellingen opgeslagen.</div>
+  {% elif request.query_params.get('fout') == 'geen_types' %}
+    <div class="alert alert-error">Kies minimaal één soort evenement.</div>
+  {% elif request.query_params.get('fout') == 'geen_rankings' %}
+    <div class="alert alert-error">Kies minimaal één ranking.</div>
+  {% elif request.query_params.get('fout') == 'geen_labels' %}
+    <div class="alert alert-error">Kies minimaal één label.</div>
+  {% elif request.query_params.get('fout') == 'geen_club' %}
+    <div class="alert alert-error">Geen club gevonden om instellingen voor op te slaan.</div>
+  {% endif %}
+
+  <form method="post" action="/beheer/instellingen">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+
+    <h2 style="font-size:1.05rem;margin:1rem 0 .25rem;">Soorten evenementen</h2>
+    <p style="color: var(--color-muted); margin-bottom: .5rem; font-size: .85rem;">
+      Deze soorten verschijnen als filter in de agenda (het hoofdscherm) en als keuze bij het
+      aanmaken van evenementen.
+    </p>
+    <div class="toggle-list" style="margin-bottom:1.25rem;">
+      {% for key, label in event_type_keuzes %}
+      <label class="toggle-item">
+        <input type="checkbox" name="type_{{ key }}" value="1"
+               {% if key in actieve_types %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <h2 style="font-size:1.05rem;margin:1rem 0 .25rem;">Beschikbare rankings</h2>
+    <p style="color: var(--color-muted); margin-bottom: .5rem; font-size: .85rem;">
+      Alleen de aangevinkte weergaven zijn zichtbaar op de rankingpagina en in "Mijn overzicht".
+    </p>
+    <div class="toggle-list" style="margin-bottom:1.25rem;">
+      {% for key, label in ranking_keuzes %}
+      <label class="toggle-item">
+        <input type="checkbox" name="ranking_{{ key }}" value="1"
+               {% if key in actieve_rankings %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <h2 style="font-size:1.05rem;margin:1rem 0 .25rem;">Labels</h2>
+    <p style="color: var(--color-muted); margin-bottom: .5rem; font-size: .85rem;">
+      Labels verschijnen als gekleurd kenmerk op de evenementkaarten in de agenda.
+      Ze worden automatisch bepaald: Training en Avondeten op basis van het soort evenement,
+      Viertallen, Paren en Individuele drive op basis van de deelnemersvorm.
+      Alleen de aangevinkte labels worden getoond.
+    </p>
+    <div class="toggle-list" style="margin-bottom:1.25rem;">
+      {% for key, label in label_keuzes %}
+      <label class="toggle-item">
+        <input type="checkbox" name="label_{{ key }}" value="1"
+               {% if key in actieve_labels %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <button type="submit" class="btn btn-primary">Opslaan</button>
+  </form>
+</section>
+{% endblock %}

@@ -83,6 +83,8 @@ async def club_login(request: Request, token: str, db: Session = Depends(get_db)
             status_code=403,
         )
 
+    # Oude sessie (incl. CSRF-token en beheer-club) wissen vóór de nieuwe login
+    request.session.clear()
     request.session["user_id"] = member.id
     logger.info("Club-wissel inlog: %s (id=%d)", email, member.id)
     return RedirectResponse(url="/?welkom=1", status_code=302)

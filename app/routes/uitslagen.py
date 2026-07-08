@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from pathlib import Path
 
@@ -5,7 +6,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, get_member_club_ids, require_auth, require_wedstrijdleider
+from app.auth import (
+    can_manage_club,
+    get_current_user,
+    get_member_club_ids,
+    is_member_of_club,
+    require_auth,
+    require_wedstrijdleider,
+)
 from app.database import get_db
 from app.models import ClubEvening, Member, Uitslag
 from app.utils.nbb_xml import parse_nbb_xml
@@ -145,6 +153,8 @@ async def uitslag_upload_algemeen(
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    if not can_manage_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
 
     if not bestand or not bestand.filename:
         return RedirectResponse(
@@ -184,6 +194,8 @@ async def uitslag_weergave(
         raise HTTPException(status_code=404, detail="Uitslag niet gevonden")
 
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+    if evening and not is_member_of_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen lid van deze club")
 
     if not _is_xml(uitslag.inhoud):
         return RedirectResponse(url=f"/uitslagen/{event_id}/bestand")
@@ -241,9 +253,15 @@ async def uitslag_bestand(
     if not uitslag:
         raise HTTPException(status_code=404, detail="Uitslag niet gevonden")
 
+    evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+    if evening and not is_member_of_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen lid van deze club")
+
     is_xml = _is_xml(uitslag.inhoud)
     media_type = "application/xml" if is_xml else "application/pdf"
     filename = uitslag.bestandsnaam or ("uitslag.xml" if is_xml else "uitslag.pdf")
+    # Bestandsnaam saneren: aanhalingstekens/CR/LF zouden de header breken (header-injectie)
+    filename = re.sub(r'[^\w. \-()]', "_", filename) or "uitslag"
     return Response(
         content=uitslag.inhoud,
         media_type=media_type,
@@ -261,6 +279,8 @@ async def uitslag_verwijderen(
     uitslag = db.query(Uitslag).filter(Uitslag.evening_id == event_id).first()
     if not uitslag:
         raise HTTPException(status_code=404, detail="Uitslag niet gevonden")
+    if uitslag.evening and not can_manage_club(current_user, uitslag.evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
     db.delete(uitslag)
     db.commit()
     return RedirectResponse(url="/uitslagen?verwijderd=1", status_code=302)
@@ -276,6 +296,8 @@ async def uitslag_upload_form(
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    if not can_manage_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
 
     bestaande_uitslag = db.query(Uitslag).filter(Uitslag.evening_id == event_id).first()
 
@@ -301,6 +323,8 @@ async def uitslag_upload(
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    if not can_manage_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
 
     form = await request.form()
     bestand = form.get("bestand")

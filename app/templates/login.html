@@ -357,6 +357,7 @@
 
     <form method="post" action="/login" class="form-stack">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
 
       <!-- Tabs -->
       <div class="lp-tabs">

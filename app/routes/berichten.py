@@ -5,9 +5,9 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_admin_club, get_current_user, get_member_club_ids
 from app.database import get_db
-from app.models import Bericht, Member, MemberRole
+from app.models import Bericht, Member, MemberClub, MemberRole
 
 router = APIRouter(prefix="/berichten")
 from app.templates_env import templates
@@ -83,15 +83,40 @@ def _get_conversations(db: Session, user_id: int):
     return result
 
 
-def _get_nieuws(db: Session, limit: int = 30):
-    """Haal de meest recente nieuwsberichten op."""
-    return (
-        db.query(Bericht)
-        .filter(Bericht.is_nieuws == True)  # noqa: E712
-        .order_by(Bericht.aangemaakt_op.desc())
-        .limit(limit)
-        .all()
+def _get_nieuws(db: Session, user_club_ids: list[int], limit: int = 30):
+    """Meest recente nieuwsberichten van de eigen club(s); club_id None = legacy, voor iedereen."""
+    q = db.query(Bericht).filter(Bericht.is_nieuws == True)  # noqa: E712
+    if user_club_ids:
+        q = q.filter(
+            (Bericht.club_id.in_(user_club_ids)) | (Bericht.club_id.is_(None))
+        )
+    return q.order_by(Bericht.aangemaakt_op.desc()).limit(limit).all()
+
+
+def _zichtbare_leden(db: Session, current_user: Member):
+    """Leden die als ontvanger gekozen kunnen worden: alleen clubgenoten."""
+    q = db.query(Member).filter(
+        Member.verwijderd_op == None,  # noqa: E711
+        Member.id != current_user.id,
     )
+    club_ids = get_member_club_ids(current_user, db)
+    if club_ids:
+        clubgenoot_ids = db.query(MemberClub.member_id).filter(
+            MemberClub.club_id.in_(club_ids)
+        )
+        q = q.filter(Member.id.in_(clubgenoot_ids))
+    return q.order_by(Member.voornaam, Member.achternaam).all()
+
+
+def _is_clubgenoot(db: Session, current_user: Member, ontvanger: Member) -> bool:
+    """True als beide leden een club delen; leden zonder clubkoppeling gelden als legacy."""
+    mijn = set(get_member_club_ids(current_user, db))
+    if not mijn:
+        return True
+    zijn = set(get_member_club_ids(ontvanger, db))
+    if not zijn:
+        return True
+    return bool(mijn & zijn)
 
 
 # ── Ongelezen telling (voor badge in nav) — vóór /{bericht_id} ───────────────
@@ -115,13 +140,8 @@ async def berichten_telling(request: Request, db: Session = Depends(get_db)):
 async def berichten_inbox(request: Request, db: Session = Depends(get_db)):
     current_user = _require_login(request, db)
     conversations = _get_conversations(db, current_user.id)
-    nieuws_berichten = _get_nieuws(db)
-    members = (
-        db.query(Member)
-        .filter(Member.verwijderd_op == None, Member.id != current_user.id)  # noqa: E711
-        .order_by(Member.voornaam, Member.achternaam)
-        .all()
-    )
+    nieuws_berichten = _get_nieuws(db, get_member_club_ids(current_user, db))
+    members = _zichtbare_leden(db, current_user)
     return templates.TemplateResponse(
         request,
         "berichten.html",
@@ -155,18 +175,32 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
         base = terug if terug else "/berichten"
         return RedirectResponse(url=f"{base}?fout={code}", status_code=302)
 
-    # ── Nieuwsbericht (admin / wedstrijdleider) ───────────────────────────
+    # ── Nieuwsbericht (admin / wedstrijdleider, ook per-club WL-rol) ──────
     if is_nieuws:
-        if current_user.role not in (MemberRole.admin, MemberRole.wedstrijdleider):
+        is_beheerder = current_user.role in (MemberRole.admin, MemberRole.wedstrijdleider)
+        if not is_beheerder:
+            is_beheerder = (
+                db.query(MemberClub)
+                .filter(
+                    MemberClub.member_id == current_user.id,
+                    MemberClub.role.in_([MemberRole.admin.value, MemberRole.wedstrijdleider.value]),
+                )
+                .first()
+                is not None
+            )
+        if not is_beheerder:
             raise HTTPException(status_code=403)
         if not onderwerp:
             return _redirect_fout("leeg")
+        # Nieuws hoort bij de actieve beheer-club, zodat andere clubs het niet zien
+        club = get_admin_club(current_user, db, request)
         db.add(Bericht(
             afzender_id=current_user.id,
             ontvanger_id=None,
             onderwerp=onderwerp,
             tekst=tekst,
             is_nieuws=True,
+            club_id=club.id if club else None,
         ))
         db.commit()
         return RedirectResponse(url=terug or "/berichten", status_code=302)
@@ -182,7 +216,7 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
         if not tekst:  # Bug 4 fix: require non-empty message body
             return _redirect_fout("leeg")
         ontvanger = db.query(Member).filter(Member.id == ontvanger_id).first()
-        if not ontvanger:
+        if not ontvanger or not _is_clubgenoot(db, current_user, ontvanger):
             return _redirect_fout("ontvanger")
         bericht = Bericht(
             afzender_id=current_user.id,
@@ -212,7 +246,7 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
         )
         .first()
     )
-    if not ontvanger:
+    if not ontvanger or not _is_clubgenoot(db, current_user, ontvanger):
         return _redirect_fout("ontvanger")
 
     bericht = Bericht(
@@ -274,12 +308,7 @@ async def bericht_detail(
             b.gelezen = True
     db.commit()
 
-    members = (
-        db.query(Member)
-        .filter(Member.verwijderd_op == None, Member.id != current_user.id)  # noqa: E711
-        .order_by(Member.voornaam, Member.achternaam)
-        .all()
-    )
+    members = _zichtbare_leden(db, current_user)
     return templates.TemplateResponse(
         request,
         "berichten_detail.html",

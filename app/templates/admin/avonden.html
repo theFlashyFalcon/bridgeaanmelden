@@ -34,10 +34,19 @@
       </button>
       <div class="aanmaken-menu" id="aanmaken-menu" hidden>
         <button type="button" onclick="openForm('seizoen')">Seizoen</button>
+        {# Alleen de evenementtypes die de club gebruikt (zie Instellingen) #}
+        {% if 'clubavond' in beschikbare_types %}
         <button type="button" onclick="openForm('clubavond')">Clubavond</button>
+        {% endif %}
+        {% if 'avondeten' in beschikbare_types %}
         <button type="button" onclick="openForm('eten')">Eten voor jeugdtraining</button>
+        {% endif %}
+        {% if 'training' in beschikbare_types %}
         <button type="button" onclick="openForm('jeugdtraining')">Training</button>
+        {% endif %}
+        {% if 'speciaal' in beschikbare_types %}
         <button type="button" onclick="openForm('speciaal')">Speciaal</button>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -167,7 +176,8 @@
         <tr>
           <td style="white-space:nowrap;">{{ e.datum.strftime('%d %b %Y') }}</td>
           <td>{{ e.naam or '—' }}</td>
-          <td><span class="event-label label-{{ e.type | replace(' ', '-') }}">{{ e.type }}</span></td>
+          {% set lbl = event_label(e) %}
+          <td>{% if lbl %}<span class="event-label label-{{ lbl.css }}">{{ lbl.naam }}</span>{% else %}—{% endif %}</td>
           <td style="font-size:.85rem;color:var(--color-muted);">{{ e.season.naam }}</td>
           <td>
             {% if current_user.role == 'admin' %}

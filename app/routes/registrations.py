@@ -2,13 +2,14 @@ import logging
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, require_auth
+from app.auth import get_current_user, get_member_club_ids, is_member_of_club, require_auth
 from app.database import get_db
 from app.email import (
     send_afmelding_wedstrijdleider_email,
@@ -43,6 +44,21 @@ from app.templates_env import templates
 _TRAINING_TYPES = {EveningType.jeugdtraining, EveningType.jeugdtraining.value,
                    EveningType.training, EveningType.training.value}
 
+# De inschrijftermijn wordt gerekend in Nederlandse tijd, ongeacht de servertijdzone
+_TIJDZONE = ZoneInfo("Europe/Amsterdam")
+
+# Legacy-synoniemen: oude en nieuwe naam voor hetzelfde type evenement
+_TYPE_SYNONIEMEN: dict[str, list[str]] = {
+    "clubavond": ["clubavond", "regulier"],
+    "regulier": ["clubavond", "regulier"],
+    "jeugdtraining": ["jeugdtraining", "training"],
+    "training": ["jeugdtraining", "training"],
+}
+
+
+def _synoniemen(event_type: str) -> list[str]:
+    return _TYPE_SYNONIEMEN.get(event_type, [event_type])
+
 
 def _is_training(evening: ClubEvening) -> bool:
     return evening.type in _TRAINING_TYPES
@@ -51,8 +67,36 @@ def _is_training(evening: ClubEvening) -> bool:
 def _is_na_inschrijftermijn(evening: ClubEvening) -> bool:
     if not evening.inschrijftermijn_uren:
         return False
-    deadline = datetime.combine(evening.datum, datetime.min.time()) - timedelta(hours=evening.inschrijftermijn_uren)
-    return datetime.now() > deadline
+    middernacht = datetime.combine(evening.datum, datetime.min.time(), tzinfo=_TIJDZONE)
+    deadline = middernacht - timedelta(hours=evening.inschrijftermijn_uren)
+    return datetime.now(_TIJDZONE) > deadline
+
+
+def _club_wedstrijdleiders(db: Session, club_id: Optional[int]) -> list[Member]:
+    """Wedstrijdleiders die notificaties horen te krijgen voor een avond van deze club."""
+    basis = db.query(Member).filter(
+        Member.email.isnot(None),
+        Member.verwijderd_op.is_(None),
+    )
+    if club_id:
+        wl_ids = [
+            mc.member_id
+            for mc in db.query(MemberClub).filter(
+                MemberClub.club_id == club_id,
+                MemberClub.role.in_([MemberRole.wedstrijdleider.value, MemberRole.admin.value]),
+            ).all()
+        ]
+        if wl_ids:
+            return basis.filter(Member.id.in_(wl_ids)).all()
+    # Legacy (avond zonder club, of club zonder per-club-WL's): globale WL-rol
+    return basis.filter(Member.role == MemberRole.wedstrijdleider.value).all()
+
+
+# Let op: deze route moet vóór /aanmelden/{event_id} staan, anders matcht
+# "wijzigen" als event_id en geeft dat een 422.
+@router.get("/aanmelden/wijzigen")
+async def wijzigen_redirect(request: Request):
+    return RedirectResponse(url="/", status_code=302)
 
 
 @router.get("/aanmelden/{event_id}")
@@ -65,6 +109,8 @@ async def registration_form(
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    if not is_member_of_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen lid van deze club")
 
     if evening.datum < date.today():
         return RedirectResponse(url="/", status_code=302)
@@ -124,6 +170,8 @@ async def registration_submit(
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    if not is_member_of_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen lid van deze club")
 
     if evening.datum < date.today():
         return RedirectResponse(url="/", status_code=302)
@@ -162,18 +210,11 @@ async def registration_submit(
             PartnerRequest.status == "wachtend",
         ).delete()
         db.commit()
-        if smtp_geconfigureerd():
+        # Alleen mailen als er echt een aanmelding was om af te melden
+        if existing and smtp_geconfigureerd():
             lid_naam = f"{current_user.voornaam} {current_user.achternaam}"
             event_naam = evening.naam or evening.type
-            wedstrijdleiders = (
-                db.query(Member)
-                .filter(
-                    Member.role == MemberRole.wedstrijdleider,
-                    Member.email.isnot(None),
-                    Member.verwijderd_op.is_(None),
-                )
-                .all()
-            )
+            wedstrijdleiders = _club_wedstrijdleiders(db, evening.club_id)
             for wl in wedstrijdleiders:
                 try:
                     send_afmelding_wedstrijdleider_email(
@@ -198,6 +239,8 @@ async def registration_submit(
             existing.partner3_naam = None
             if te_laat:
                 existing.te_laat = True
+                # Nieuwe te-late wijziging: eerdere goedkeuring vervalt
+                existing.te_laat_goedgekeurd = None
         else:
             db.add(Registration(
                 evening_id=event_id,
@@ -242,6 +285,8 @@ async def registration_submit(
             existing.reserve2_naam = r2
             if te_laat:
                 existing.te_laat = True
+                # Nieuwe te-late wijziging: eerdere goedkeuring vervalt
+                existing.te_laat_goedgekeurd = None
         else:
             db.add(Registration(
                 evening_id=event_id,
@@ -284,6 +329,8 @@ async def registration_submit(
                 existing.partner3_naam = None
                 if te_laat:
                     existing.te_laat = True
+                    # Nieuwe te-late wijziging: eerdere goedkeuring vervalt
+                    existing.te_laat_goedgekeurd = None
             else:
                 db.add(Registration(
                     evening_id=event_id,
@@ -321,6 +368,8 @@ async def registration_submit(
             existing.partner3_naam = None
             if te_laat:
                 existing.te_laat = True
+                # Nieuwe te-late wijziging: eerdere goedkeuring vervalt
+                existing.te_laat_goedgekeurd = None
         else:
             db.add(Registration(
                 evening_id=event_id,
@@ -426,6 +475,10 @@ async def instellingen_submit(
     club_id_raw = form.get("club_id", "").strip()
     club_id = int(club_id_raw) if club_id_raw.isdigit() else None
 
+    user_club_ids = get_member_club_ids(current_user, db)
+    if club_id and user_club_ids and club_id not in user_club_ids:
+        raise HTTPException(status_code=403, detail="Geen lid van deze club")
+
     partner_naam = None
     if partner_voornaam and partner_achternaam:
         lid = (
@@ -451,6 +504,11 @@ async def instellingen_submit(
     )
     if club_id:
         q = q.filter(ClubEvening.club_id == club_id)
+    elif user_club_ids:
+        # Alleen avonden van eigen clubs (of legacy-avonden zonder club)
+        q = q.filter(
+            (ClubEvening.club_id.in_(user_club_ids)) | (ClubEvening.club_id.is_(None))
+        )
     upcoming_clubavonden = q.all()
 
     count = 0
@@ -517,6 +575,23 @@ async def registration_herhaal(
             partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
     today = date.today()
+    user_club_ids = get_member_club_ids(current_user, db)
+
+    def _events_query():
+        query = (
+            db.query(ClubEvening)
+            .join(Season)
+            .filter(
+                ClubEvening.type.in_(_synoniemen(evening.type)),
+                ClubEvening.datum >= today,
+                Season.actief == True,  # noqa: E712
+            )
+        )
+        if user_club_ids:
+            query = query.filter(
+                (ClubEvening.club_id.in_(user_club_ids)) | (ClubEvening.club_id.is_(None))
+            )
+        return query
 
     def _register_for_events(events):
         count = 0
@@ -543,17 +618,12 @@ async def registration_herhaal(
         return count
 
     if alles:
-        alles_tot = date.fromisoformat(alles_tot_str) if alles_tot_str else None
+        try:
+            alles_tot = date.fromisoformat(alles_tot_str) if alles_tot_str else None
+        except ValueError:
+            return RedirectResponse(url=f"/aanmelden/{event_id}?fout=datum", status_code=302)
 
-        query = (
-            db.query(ClubEvening)
-            .join(Season)
-            .filter(
-                ClubEvening.type == evening.type,
-                ClubEvening.datum >= today,
-                Season.actief == True,  # noqa: E712
-            )
-        )
+        query = _events_query()
         if alles_tot:
             query = query.filter(ClubEvening.datum <= alles_tot)
 
@@ -585,17 +655,12 @@ async def registration_herhaal(
         except ValueError:
             elke = 1
 
-        herhaal_tot = date.fromisoformat(herhaal_tot_str) if herhaal_tot_str else None
+        try:
+            herhaal_tot = date.fromisoformat(herhaal_tot_str) if herhaal_tot_str else None
+        except ValueError:
+            return RedirectResponse(url=f"/aanmelden/{event_id}?fout=datum", status_code=302)
 
-        query = (
-            db.query(ClubEvening)
-            .join(Season)
-            .filter(
-                ClubEvening.type == evening.type,
-                ClubEvening.datum >= today,
-                Season.actief == True,  # noqa: E712
-            )
-        )
+        query = _events_query()
         if herhaal_tot:
             query = query.filter(ClubEvening.datum <= herhaal_tot)
 
@@ -654,6 +719,10 @@ async def definitief_aanmelden(
     club_id_raw = form.get("club_id", "").strip()
     club_id = int(club_id_raw) if club_id_raw.isdigit() else None
 
+    user_club_ids = get_member_club_ids(current_user, db)
+    if club_id and user_club_ids and club_id not in user_club_ids:
+        raise HTTPException(status_code=403, detail="Geen lid van deze club")
+
     db_types = _TYPE_MAP[event_type]
     today = date.today()
 
@@ -668,6 +737,10 @@ async def definitief_aanmelden(
     )
     if club_id:
         q = q.filter(ClubEvening.club_id == club_id)
+    elif user_club_ids:
+        q = q.filter(
+            (ClubEvening.club_id.in_(user_club_ids)) | (ClubEvening.club_id.is_(None))
+        )
     future_events = q.order_by(ClubEvening.datum).all()
 
     count = 0
@@ -729,19 +802,18 @@ async def verborgen_types_submit(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_auth),
 ):
+    from app.club_settings import merged_event_types
+
     form = await request.form()
-    all_keys = ["clubavond", "avondeten", "training", "speciaal"]
-    hidden = [k for k in all_keys if not form.get(f"toon_{k}")]
+    # Alleen de types die de club(s) van dit lid gebruiken; types die de club
+    # niet gebruikt worden nooit als verborgen opgeslagen (clubinstellingen).
+    club_ids = get_member_club_ids(current_user, db)
+    user_clubs = db.query(Club).filter(Club.id.in_(club_ids)).all() if club_ids else []
+    beschikbaar = merged_event_types(user_clubs)
+    hidden = [k for k in beschikbaar if not form.get(f"toon_{k}")]
     current_user.verborgen_types = ",".join(hidden)
     db.commit()
     return RedirectResponse(url="/?voorkeuren_opgeslagen=1", status_code=302)
-
-
-# ── Wijzigen (redirect) ───────────────────────────────────────────────────────
-
-@router.get("/aanmelden/wijzigen")
-async def wijzigen_redirect(request: Request):
-    return RedirectResponse(url="/", status_code=302)
 
 
 # ── Profielpagina ─────────────────────────────────────────────────────────────
@@ -843,6 +915,10 @@ async def voor_alles_aanmelden(
     club_id_raw = form.get("club_id", "").strip()
     club_id = int(club_id_raw) if club_id_raw.isdigit() else None
 
+    user_club_ids = get_member_club_ids(current_user, db)
+    if club_id and user_club_ids and club_id not in user_club_ids:
+        raise HTTPException(status_code=403, detail="Geen lid van deze club")
+
     today = date.today()
     all_db_types = ["clubavond", "regulier", "eten voor jeugdtraining", "speciaal"]
     if current_user.training_eligible:
@@ -859,6 +935,10 @@ async def voor_alles_aanmelden(
     )
     if club_id:
         q = q.filter(ClubEvening.club_id == club_id)
+    elif user_club_ids:
+        q = q.filter(
+            (ClubEvening.club_id.in_(user_club_ids)) | (ClubEvening.club_id.is_(None))
+        )
     future_events = q.order_by(ClubEvening.datum).all()
 
     count = 0
@@ -952,6 +1032,22 @@ async def voor_alles_afmelden(
         reg.partner2_naam = None
         reg.partner3_naam = None
 
+    # Annuleer ook openstaande partnerverzoeken (net als bij per-avond afmelden)
+    pr_q = db.query(PartnerRequest).filter(
+        PartnerRequest.requester_id == current_user.id,
+        PartnerRequest.status == "wachtend",
+        PartnerRequest.evening_id.in_(
+            db.query(ClubEvening.id).filter(ClubEvening.datum >= today)
+        ),
+    )
+    if partner_naam:
+        vn, an = form.get("partner_voornaam", "").strip(), form.get("partner_achternaam", "").strip()
+        pr_q = pr_q.filter(
+            func.lower(PartnerRequest.partner_voornaam) == vn.lower(),
+            func.lower(PartnerRequest.partner_achternaam) == an.lower(),
+        )
+    pr_q.delete(synchronize_session=False)
+
     db.commit()
 
     if upcoming_regs:
@@ -970,24 +1066,22 @@ async def voor_alles_afmelden(
 
     if smtp_geconfigureerd() and upcoming_regs:
         lid_naam = f"{current_user.voornaam} {current_user.achternaam}"
-        events = [(reg.evening.naam or reg.evening.type, reg.evening.datum) for reg in upcoming_regs]
-        wedstrijdleiders = (
-            db.query(Member)
-            .filter(
-                Member.role == MemberRole.wedstrijdleider,
-                Member.email.isnot(None),
-                Member.verwijderd_op.is_(None),
+        # Per club de eigen wedstrijdleiders mailen, alleen over avonden van die club
+        per_club: dict = {}
+        for reg in upcoming_regs:
+            club_key = reg.evening.club_id if reg.evening else None
+            per_club.setdefault(club_key, []).append(
+                (reg.evening.naam or reg.evening.type, reg.evening.datum)
             )
-            .all()
-        )
-        for wl in wedstrijdleiders:
-            try:
-                send_bulk_afmelding_wedstrijdleider_email(
-                    wl.email,
-                    wl.voornaam,
-                    lid_naam,
-                    events,
-                )
-            except Exception:
-                logger.exception("E-mail bulk afmelding versturen mislukt naar wedstrijdleider %s", wl.email)
+        for club_key, events in per_club.items():
+            for wl in _club_wedstrijdleiders(db, club_key):
+                try:
+                    send_bulk_afmelding_wedstrijdleider_email(
+                        wl.email,
+                        wl.voornaam,
+                        lid_naam,
+                        events,
+                    )
+                except Exception:
+                    logger.exception("E-mail bulk afmelding versturen mislukt naar wedstrijdleider %s", wl.email)
     return RedirectResponse(url=f"/?afgemeld_alles={count}", status_code=302)

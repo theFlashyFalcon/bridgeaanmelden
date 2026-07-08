@@ -5,8 +5,8 @@
 <section class="page-header">
   <h1>{{ evening.naam or evening.type }}</h1>
   <p class="subtitle">
-    {{ evening.datum.strftime('%A %d %B %Y') }} &middot;
-    <span class="event-label label-{{ evening.type | replace(' ', '-') }}">{{ evening.type }}</span>
+    {{ evening.datum.strftime('%A %d %B %Y') }}{% set lbl = event_label(evening) %}{% if lbl %} &middot;
+    <span class="event-label label-{{ lbl.css }}">{{ lbl.naam }}</span>{% endif %}
   </p>
 </section>
 

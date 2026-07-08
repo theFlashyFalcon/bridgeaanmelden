@@ -19,27 +19,58 @@ _logger = logging.getLogger(__name__)
 _DEFAULT_SECRET = "dev-secret-key-change-in-production"
 SECRET_KEY = os.getenv("SECRET_KEY", _DEFAULT_SECRET)
 if SECRET_KEY == _DEFAULT_SECRET:
+    if os.getenv("HTTPS_ONLY", "false").lower() == "true":
+        # Met de bekende dev-sleutel kan iedereen sessies vervalsen — weiger te starten.
+        raise RuntimeError(
+            "SECRET_KEY is niet ingesteld terwijl HTTPS_ONLY=true (productie). "
+            "Genereer een sleutel met: python -c \"import secrets; print(secrets.token_hex(32))\" "
+            "en zet die in .env of de omgeving."
+        )
     _logger.warning(
         "SECRET_KEY is niet ingesteld — de standaard dev-sleutel wordt gebruikt. "
         "Stel SECRET_KEY in via .env vóór productiegebruik."
     )
 
-_ITERATIONS = 260_000
+# OWASP-aanbeveling voor PBKDF2-HMAC-SHA256 (2023). Oude hashes (formaat
+# "salt$hash", 260k iteraties) blijven geldig en worden bij inloggen
+# transparant geüpgraded — zie needs_rehash() en de login-route.
+_ITERATIONS = 600_000
+_LEGACY_ITERATIONS = 260_000
+_HASH_PREFIX = "pbkdf2_sha256$"
 
 
 def hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
     dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), _ITERATIONS)
-    return f"{salt}${dk.hex()}"
+    return f"{_HASH_PREFIX}{_ITERATIONS}${salt}${dk.hex()}"
 
 
 def verify_password(password: str, stored_hash: str) -> bool:
-    try:
-        salt, dk_hex = stored_hash.split("$", 1)
-    except ValueError:
-        return False
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), _ITERATIONS)
+    if stored_hash.startswith(_HASH_PREFIX):
+        try:
+            _, iter_str, salt, dk_hex = stored_hash.split("$", 3)
+            iterations = int(iter_str)
+        except ValueError:
+            return False
+    else:  # legacy-formaat: "salt$hash"
+        try:
+            salt, dk_hex = stored_hash.split("$", 1)
+        except ValueError:
+            return False
+        iterations = _LEGACY_ITERATIONS
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations)
     return secrets.compare_digest(dk.hex(), dk_hex)
+
+
+def needs_rehash(stored_hash: str) -> bool:
+    """True als de hash in het legacy-formaat staat of met te weinig iteraties is gemaakt."""
+    if not stored_hash.startswith(_HASH_PREFIX):
+        return True
+    try:
+        iter_str = stored_hash.split("$", 2)[1]
+        return int(iter_str) < _ITERATIONS
+    except (ValueError, IndexError):
+        return True
 
 
 def get_current_user(
@@ -94,6 +125,49 @@ def require_admin(current_user: Member = Depends(require_auth)) -> Member:
     return current_user
 
 
+def get_algemene_club_id(db: Session) -> Optional[int]:
+    """Id van de algemene club (iedereen is er automatisch lid van), of None."""
+    row = db.query(Club.id).filter(Club.is_algemeen == True).first()  # noqa: E712
+    return row[0] if row else None
+
+
+def is_member_of_club(member: Member, club_id: Optional[int], db: Session) -> bool:
+    """
+    True als het lid bij deze club hoort. club_id None (legacy data) is altijd
+    toegankelijk; van de algemene club is iedereen automatisch lid.
+    """
+    if club_id is None:
+        return True
+    exists = (
+        db.query(MemberClub)
+        .filter(MemberClub.member_id == member.id, MemberClub.club_id == club_id)
+        .first()
+        is not None
+    )
+    if exists:
+        return True
+    return club_id == get_algemene_club_id(db)
+
+
+def can_manage_club(member: Member, club_id: Optional[int], db: Session) -> bool:
+    """
+    True als dit lid beheerrechten heeft voor deze club:
+    - globale admins altijd;
+    - club_id None (legacy data zonder club) is voor elke WL toegankelijk;
+    - anders is een WL/admin-rol bij die club vereist (globale WL's zonder
+      enige clubkoppeling gelden als legacy en mogen ook).
+    """
+    if member.role == MemberRole.admin.value:
+        return True
+    if club_id is None:
+        return True
+    rows = db.query(MemberClub).filter(MemberClub.member_id == member.id).all()
+    if not rows and member.role == MemberRole.wedstrijdleider.value:
+        return True
+    beheer_rollen = (MemberRole.admin.value, MemberRole.wedstrijdleider.value)
+    return any(mc.club_id == club_id and mc.role in beheer_rollen for mc in rows)
+
+
 def get_club_role(member: Member, club_id: int, db: Session) -> Optional[str]:
     """Geeft de rol van een lid bij een specifieke club, of None als geen lid."""
     mc = db.query(MemberClub).filter(
@@ -104,9 +178,13 @@ def get_club_role(member: Member, club_id: int, db: Session) -> Optional[str]:
 
 
 def get_member_club_ids(member: Member, db: Session) -> list[int]:
-    """Geeft alle club-id's waarvan dit lid lid is."""
+    """Geeft alle club-id's waarvan dit lid lid is, inclusief de algemene club."""
     rows = db.query(MemberClub.club_id).filter(MemberClub.member_id == member.id).all()
-    return [r[0] for r in rows]
+    ids = [r[0] for r in rows]
+    algemeen_id = get_algemene_club_id(db)
+    if algemeen_id is not None and algemeen_id not in ids:
+        ids.append(algemeen_id)
+    return ids
 
 
 def get_wedstrijdleider_clubs(member: Member, db: Session) -> list[Club]:

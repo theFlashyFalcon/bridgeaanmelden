@@ -1,13 +1,9 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Request
-from fastapi.responses import RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from starlette.middleware.sessions import SessionMiddleware
 
 load_dotenv()
 
@@ -17,11 +13,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from fastapi import Depends, FastAPI, Request  # noqa: E402
+from fastapi.responses import RedirectResponse  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+from starlette.middleware.base import BaseHTTPMiddleware  # noqa: E402
+from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
+
 from app.auth import SECRET_KEY  # noqa: E402 — must be after load_dotenv
 from app.csrf import require_csrf  # noqa: E402
-from app.database import Base, engine  # noqa: E402
 from app.routes import admin, auth, berichten, clubs, evenings, gdpr, members, registrations, rankings, uitslagen  # noqa: E402
+from app.startup import run_startup_tasks  # noqa: E402
 from app.templates_env import templates as _templates  # noqa: E402
+
+_https_only = os.getenv("HTTPS_ONLY", "false").lower() == "true"
 
 
 def _get_user_for_request(request: Request):
@@ -39,362 +43,13 @@ def _get_user_for_request(request: Request):
     except Exception:
         return None
 
-# Create all tables (no-op if they already exist; Alembic handles migrations)
-Base.metadata.create_all(bind=engine)
 
-
-def _migrate():
-    from sqlalchemy import text
-    from app.database import engine
-
-    migrations = [
-        "ALTER TABLE registrations ADD COLUMN partner_naam TEXT",
-        "ALTER TABLE club_evenings ADD COLUMN naam VARCHAR",
-        "ALTER TABLE account_requests ADD COLUMN wachtwoord_hash VARCHAR",
-        "ALTER TABLE members ADD COLUMN wachtwoord_hash VARCHAR",
-        "ALTER TABLE members ADD COLUMN training_eligible BOOLEAN NOT NULL DEFAULT 0",
-        "ALTER TABLE members ADD COLUMN verwijderd_op TIMESTAMP",
-        "ALTER TABLE members ADD COLUMN verborgen_types VARCHAR",
-        "ALTER TABLE club_evenings ADD COLUMN deelnemers_type VARCHAR NOT NULL DEFAULT 'paren'",
-        "ALTER TABLE club_evenings ADD COLUMN inschrijftermijn_uren INTEGER",
-        "ALTER TABLE registrations ADD COLUMN partner2_naam VARCHAR",
-        "ALTER TABLE registrations ADD COLUMN partner3_naam VARCHAR",
-        "ALTER TABLE registrations ADD COLUMN substitute_name TEXT",
-        "ALTER TABLE registrations ADD COLUMN available_person_id INTEGER REFERENCES members(id)",
-        "ALTER TABLE registrations ADD COLUMN combo_partner_reg_id INTEGER REFERENCES registrations(id)",
-        "ALTER TABLE registrations ADD COLUMN te_laat BOOLEAN NOT NULL DEFAULT 0",
-        "ALTER TABLE registrations ADD COLUMN te_laat_goedgekeurd BOOLEAN",
-        (
-            "CREATE TABLE IF NOT EXISTS berichten ("
-            "id INTEGER PRIMARY KEY, "
-            "afzender_id INTEGER NOT NULL REFERENCES members(id), "
-            "ontvanger_id INTEGER NOT NULL REFERENCES members(id), "
-            "onderwerp VARCHAR, "
-            "tekst TEXT NOT NULL, "
-            "aangemaakt_op TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
-            "gelezen BOOLEAN NOT NULL DEFAULT 0, "
-            "parent_id INTEGER REFERENCES berichten(id))"
-        ),
-        (
-            "CREATE TABLE IF NOT EXISTS rankings ("
-            "id INTEGER PRIMARY KEY, "
-            "inhoud TEXT NOT NULL, "
-            "bestandsnaam VARCHAR, "
-            "aangemaakt_op TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
-            "aangemaakt_door_id INTEGER REFERENCES members(id))"
-        ),
-        (
-            "CREATE TABLE IF NOT EXISTS uitslagen ("
-            "id INTEGER PRIMARY KEY, "
-            "evening_id INTEGER NOT NULL UNIQUE REFERENCES club_evenings(id), "
-            "bestandsnaam VARCHAR, "
-            "inhoud BLOB NOT NULL, "
-            "aangemaakt_op TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL, "
-            "aangemaakt_door_id INTEGER REFERENCES members(id))"
-        ),
-        "ALTER TABLE berichten ADD COLUMN is_nieuws BOOLEAN NOT NULL DEFAULT 0",
-        "ALTER TABLE berichten ALTER COLUMN ontvanger_id DROP NOT NULL",
-        "ALTER TABLE berichten ALTER COLUMN tekst DROP NOT NULL",
-        "ALTER TABLE rankings ADD COLUMN aangemaakt_door_id INTEGER REFERENCES members(id)",
-        "ALTER TABLE uitslagen ADD COLUMN aangemaakt_door_id INTEGER REFERENCES members(id)",
-        "ALTER TABLE registrations ADD COLUMN team_naam VARCHAR",
-        "ALTER TABLE manual_pairs ADD COLUMN naam_3 VARCHAR",
-        "ALTER TABLE manual_pairs ADD COLUMN naam_4 VARCHAR",
-        "ALTER TABLE manual_pairs ADD COLUMN team_naam VARCHAR",
-        "ALTER TABLE registrations ADD COLUMN reserve1_naam VARCHAR",
-        "ALTER TABLE registrations ADD COLUMN reserve2_naam VARCHAR",
-        "ALTER TABLE manual_pairs ADD COLUMN naam_5 VARCHAR",
-        "ALTER TABLE manual_pairs ADD COLUMN naam_6 VARCHAR",
-        "ALTER TABLE members ADD COLUMN toestemming_op TIMESTAMP",
-        "ALTER TABLE account_requests ADD COLUMN toestemming_op TIMESTAMP",
-        # ── Multi-club uitbreiding ────────────────────────────────────────────
-        (
-            "CREATE TABLE IF NOT EXISTS clubs ("
-            "id INTEGER PRIMARY KEY, "
-            "naam VARCHAR NOT NULL, "
-            "stad VARCHAR)"
-        ),
-        (
-            "CREATE TABLE IF NOT EXISTS member_clubs ("
-            "id INTEGER PRIMARY KEY, "
-            "member_id INTEGER NOT NULL REFERENCES members(id), "
-            "club_id INTEGER NOT NULL REFERENCES clubs(id), "
-            "role VARCHAR NOT NULL DEFAULT 'lid')"
-        ),
-        "ALTER TABLE seasons ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
-        "ALTER TABLE club_evenings ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
-        "ALTER TABLE leden ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
-        "ALTER TABLE rankings ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
-        "ALTER TABLE berichten ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
-        "ALTER TABLE account_requests ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
-        "ALTER TABLE invitations ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
-        "ALTER TABLE clubs ADD COLUMN kleur VARCHAR",
-    ]
-    with engine.connect() as conn:
-        for sql in migrations:
-            try:
-                conn.execute(text(sql))
-                conn.commit()
-            except Exception as migration_exc:
-                exc_msg = str(migration_exc).lower()
-                # Ignore "already exists" / "duplicate column" errors — those are expected on re-runs
-                benign = any(k in exc_msg for k in ("already exists", "duplicate column", "duplicate", "already exists"))
-                if not benign:
-                    logger.warning("Migratie overgeslagen (%s): %.120s", type(migration_exc).__name__, str(migration_exc))
-                try:
-                    conn.rollback()
-                except Exception as rollback_exc:
-                    logger.warning("Rollback mislukt na migratiefout: %s", rollback_exc)
-
-
-_migrate()
-
-
-def _fix_nullable_columns():
-    """Maak berichten.ontvanger_id en berichten.tekst nullable via Alembic batch (SQLite-compatibel)."""
-    import sqlalchemy as sa
-    from sqlalchemy import inspect as sa_inspect
-
-    try:
-        insp = sa_inspect(engine)
-        if "berichten" not in insp.get_table_names():
-            return
-        cols = {c["name"]: c for c in insp.get_columns("berichten")}
-        fix_ontvanger = not cols.get("ontvanger_id", {}).get("nullable", True)
-        fix_tekst = not cols.get("tekst", {}).get("nullable", True)
-        if not fix_ontvanger and not fix_tekst:
-            return
-
-        from alembic.operations import Operations
-        from alembic.runtime.migration import MigrationContext
-
-        with engine.begin() as conn:
-            ctx = MigrationContext.configure(conn)
-            op = Operations(ctx)
-            with op.batch_alter_table("berichten", recreate="auto") as batch_op:
-                if fix_ontvanger:
-                    batch_op.alter_column("ontvanger_id", existing_type=sa.Integer(), nullable=True)
-                if fix_tekst:
-                    batch_op.alter_column("tekst", existing_type=sa.Text(), nullable=True)
-        logger.info("berichten: ontvanger_id/tekst nullable gemaakt via batch migratie")
-    except Exception as e:
-        logger.warning("Fix nullable kolommen mislukt: %s", e)
-
-
-_fix_nullable_columns()
-
-
-def _fix_missing_columns():
-    """Voeg ontbrekende kolommen toe aan tabellen via Alembic batch (SQLite-compatibel)."""
-    import sqlalchemy as sa
-    from sqlalchemy import inspect as sa_inspect
-    from alembic.operations import Operations
-    from alembic.runtime.migration import MigrationContext
-
-    # (tabel, kolom, Column-definitie) — geen ForeignKey in batch_op.add_column voor SQLite-compatibiliteit
-    to_check = [
-        ("rankings",      "aangemaakt_door_id", sa.Column("aangemaakt_door_id", sa.Integer(), nullable=True)),
-        ("uitslagen",     "aangemaakt_door_id", sa.Column("aangemaakt_door_id", sa.Integer(), nullable=True)),
-        ("registrations", "team_naam",          sa.Column("team_naam",          sa.String(), nullable=True)),
-        ("registrations", "reserve1_naam",      sa.Column("reserve1_naam",      sa.String(), nullable=True)),
-        ("registrations", "reserve2_naam",      sa.Column("reserve2_naam",      sa.String(), nullable=True)),
-        ("manual_pairs",  "naam_3",             sa.Column("naam_3",             sa.String(), nullable=True)),
-        ("manual_pairs",  "naam_4",             sa.Column("naam_4",             sa.String(), nullable=True)),
-        ("manual_pairs",  "team_naam",          sa.Column("team_naam",          sa.String(), nullable=True)),
-        ("manual_pairs",  "naam_5",             sa.Column("naam_5",             sa.String(), nullable=True)),
-        ("manual_pairs",  "naam_6",             sa.Column("naam_6",             sa.String(), nullable=True)),
-    ]
-
-    try:
-        insp = sa_inspect(engine)
-        tabel_namen = set(insp.get_table_names())
-
-        # Groepeer per tabel
-        per_tabel: dict = {}
-        for tabel, kolom, col_def in to_check:
-            if tabel not in tabel_namen:
-                continue
-            kol_namen = {c["name"] for c in insp.get_columns(tabel)}
-            if kolom in kol_namen:
-                continue
-            per_tabel.setdefault(tabel, []).append((kolom, col_def))
-
-        for tabel, toe_te_voegen in per_tabel.items():
-            with engine.begin() as conn:
-                ctx = MigrationContext.configure(conn)
-                op = Operations(ctx)
-                with op.batch_alter_table(tabel, recreate="auto") as batch_op:
-                    for kolom, col_def in toe_te_voegen:
-                        batch_op.add_column(col_def)
-            logger.info("%s: kolommen toegevoegd: %s", tabel, [k for k, _ in toe_te_voegen])
-    except Exception as e:
-        logger.warning("Fix ontbrekende kolommen mislukt: %s", e)
-
-
-_fix_missing_columns()
-
-
-def _seed_admin():
-    from app.auth import hash_password
-    from app.database import SessionLocal
-    from app.models import EmailRoleAssignment, Member, MemberRole
-
-    admin_email = os.getenv("ADMIN_EMAIL", "")
-    if not admin_email:
-        return
-
-    admin_password = os.getenv("ADMIN_PASSWORD", "")
-    db = SessionLocal()
-    try:
-        assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == admin_email).first()
-        if assignment:
-            assignment.role = MemberRole.admin
-        else:
-            db.add(EmailRoleAssignment(email=admin_email, role=MemberRole.admin))
-
-        member = db.query(Member).filter(Member.email == admin_email).first()
-        if member:
-            if member.role != MemberRole.admin:
-                member.role = MemberRole.admin
-            if member.lidnummer != "ADMIN001":
-                member.lidnummer = "ADMIN001"
-            if admin_password:
-                member.wachtwoord_hash = hash_password(admin_password)
-                logger.info("Admin-wachtwoord bijgewerkt voor %s", admin_email)
-        elif admin_password:
-            db.add(Member(
-                voornaam="Admin",
-                achternaam="",
-                lidnummer=f"admin_{admin_email.split('@')[0]}",
-                email=admin_email,
-                wachtwoord_hash=hash_password(admin_password),
-                role=MemberRole.admin,
-            ))
-            logger.info("Admin-account aangemaakt voor %s", admin_email)
-
-        db.commit()
-    finally:
-        db.close()
-
-
-_seed_admin()
-
-
-def _seed_club():
-    """Maak de initiële club aan en koppel bestaande data als er nog geen clubs zijn."""
-    from sqlalchemy import text
-    from app.config import CLUB_NAAM, CLUB_STAD
-    from app.database import SessionLocal
-    from app.models import Club, Member, MemberClub
-
-    db = SessionLocal()
-    try:
-        club = db.query(Club).first()
-        if club is None:
-            club = Club(naam=CLUB_NAAM, stad=CLUB_STAD or None)
-            db.add(club)
-            db.flush()
-
-            cid = club.id
-            for tabel in ("seasons", "club_evenings", "leden", "rankings",
-                          "berichten", "account_requests", "invitations"):
-                db.execute(text(f"UPDATE {tabel} SET club_id = :cid WHERE club_id IS NULL"), {"cid": cid})
-
-            members = db.query(Member).filter(Member.verwijderd_op.is_(None)).all()
-            for m in members:
-                exists = db.query(MemberClub).filter(
-                    MemberClub.member_id == m.id,
-                    MemberClub.club_id == cid,
-                ).first()
-                if not exists:
-                    db.add(MemberClub(member_id=m.id, club_id=cid, role=m.role))
-
-            db.commit()
-            logger.info("Club '%s' aangemaakt (id=%d), bestaande data gekoppeld.", CLUB_NAAM, cid)
-        else:
-            cid = club.id
-            for tabel in ("seasons", "club_evenings", "leden"):
-                db.execute(text(f"UPDATE {tabel} SET club_id = :cid WHERE club_id IS NULL"), {"cid": cid})
-            db.commit()
-    except Exception as e:
-        db.rollback()
-        logger.warning("Seed club mislukt: %s", e)
-    finally:
-        db.close()
-
-
-_seed_club()
-
-
-def _seed_leden():
-    from app.config import CLUB_LEDENLIJST_CSV, CLUB_NAAM
-    from app.database import SessionLocal
-    from app.models import Lid
-    from pathlib import Path
-
-    csv_path = Path(CLUB_LEDENLIJST_CSV)
-    if not csv_path.exists():
-        return
-
-    db = SessionLocal()
-    try:
-        if db.query(Lid).first() is None:
-            from scripts.seed_crash_leden import seed
-            n = seed(db, csv_path=csv_path)
-            if n:
-                logger.info("%d leden van %s geladen.", n, CLUB_NAAM)
-    except Exception as e:
-        logger.warning("Seed leden mislukt: %s", e)
-    finally:
-        db.close()
-
-
-_seed_leden()
-
-
-def _cleanup_expired_data():
-    """Verwijder verlopen tokens en afgewezen aanvragen (bewaartermijn handhaving)."""
-    from datetime import datetime, timedelta, timezone
-    from app.database import SessionLocal
-    from app.models import AccountRequest, AccountRequestStatus, PasswordResetToken
-
-    db = SessionLocal()
-    try:
-        now = datetime.now(timezone.utc)
-
-        deleted_tokens = (
-            db.query(PasswordResetToken)
-            .filter(
-                PasswordResetToken.aangemaakt_op < now - timedelta(hours=24),
-                PasswordResetToken.gebruikt_op.is_(None),
-            )
-            .delete(synchronize_session=False)
-        )
-
-        deleted_requests = (
-            db.query(AccountRequest)
-            .filter(
-                AccountRequest.status == AccountRequestStatus.afgewezen,
-                AccountRequest.aangemaakt_op < now - timedelta(days=90),
-            )
-            .delete(synchronize_session=False)
-        )
-
-        db.commit()
-        if deleted_tokens or deleted_requests:
-            logger.info(
-                "Opschoning: %d verlopen tokens, %d afgewezen aanvragen verwijderd",
-                deleted_tokens,
-                deleted_requests,
-            )
-    except Exception as e:
-        db.rollback()
-        logger.warning("Opschoning mislukt: %s", e)
-    finally:
-        db.close()
-
-
-_cleanup_expired_data()
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Schema-sync, seeds en opschoning draaien bij het starten van de server,
+    # niet bij import — zie app/startup.py.
+    run_startup_tasks()
+    yield
 
 
 app = FastAPI(
@@ -402,9 +57,9 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
     dependencies=[Depends(require_csrf)],
+    lifespan=lifespan,
 )
 
-_https_only = os.getenv("HTTPS_ONLY", "false").lower() == "true"
 app.add_middleware(
     SessionMiddleware,
     secret_key=SECRET_KEY,
@@ -450,18 +105,45 @@ async def server_error_handler(request: Request, exc):
     )
 
 
-from starlette.middleware.base import BaseHTTPMiddleware
-
 class LogExceptionsMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         try:
             return await call_next(request)
-        except Exception as exc:
+        except Exception:
             import traceback
             logger.error("Onverwerkte fout op %s:\n%s", request.url.path, traceback.format_exc())
             raise
 
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    # 'unsafe-inline' is nodig: de templates gebruiken inline <script> en style-attributen.
+    # Google Fonts wordt geladen vanuit base.html.
+    _CSP = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("Content-Security-Policy", self._CSP)
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        if _https_only:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
+
+
 app.add_middleware(LogExceptionsMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
