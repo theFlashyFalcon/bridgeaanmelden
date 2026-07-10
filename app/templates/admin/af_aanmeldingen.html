@@ -22,10 +22,6 @@
         <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
           <span>
             {{ e.datum.strftime('%d %B %Y') }} — {{ e.naam or e.type }}
-            {% set n = open_requests.get(e.id, 0) %}
-            {% if n > 0 %}
-              <span class="badge badge-warning" style="margin-left:.5rem;">{{ n }} verzoek{{ 'en' if n != 1 else '' }}</span>
-            {% endif %}
           </span>
           <a href="/beheer/af-aanmeldingen/{{ e.id }}" class="btn btn-secondary btn-sm">Bekijken</a>
         </li>

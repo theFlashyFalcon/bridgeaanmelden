@@ -26,13 +26,20 @@
       <dt>Rol</dt>
       <dd><span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span></dd>
     </div>
-    {% if current_user.training_eligible %}
-    <div class="profiel-rij">
-      <dt>Trainingen</dt>
-      <dd>Toegang tot trainingsavonden</dd>
-    </div>
-    {% endif %}
   </dl>
+</section>
+
+<section class="card">
+  <h2>Mijn clubs</h2>
+  {% if mijn_clubs %}
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;">
+      {% for club in mijn_clubs %}
+        <span class="badge">{{ club.naam }}</span>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="empty-state">Geen clublidmaatschappen gevonden.</p>
+  {% endif %}
 </section>
 
 {% if herhalingen %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Export — {{ evening.naam or evening.type }} — Bridge Club{% endblock %}
+{% block content %}
+
+<section class="page-header">
+  <h1>Maak export</h1>
+  <p class="subtitle">{{ evening.naam or evening.type }} — {{ evening.datum.strftime('%A %d %B %Y') }}</p>
+</section>
+
+<section class="card">
+  <h2>Printversie</h2>
+  <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
+    Genereer een printbare lijst met de aangemelde paren.
+  </p>
+  <a href="/beheer/af-aanmeldingen/{{ evening.id }}/print" target="_blank" class="btn btn-secondary">
+    &#128438; Maak print versie
+  </a>
+</section>
+
+{% if dtype == 'paren' %}
+<section class="card" style="margin-top:1rem;">
+  <h2>Indeling voor NBB-clubsoftware</h2>
+  <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
+    Genereert een <code>.nbbcr</code>-bestand met de aangemelde paren, te importeren in de NBB-clubsoftware.
+    Paren worden verdeeld over secties op basis van de lokale ranking; onbekende NBB-nummers worden als nieuwe speler gemarkeerd.
+  </p>
+  {% set n_paren = volledig_aangemeld | length + manual_aangemeld | length %}
+  {% set n_loslopers = loslopers | length + manual_loslopers | length %}
+  {% if n_loslopers > 0 %}
+    <div class="alert alert-info" style="margin-bottom:1rem;">
+      {{ n_loslopers }} losloper{{ 's' if n_loslopers != 1 else '' }} {{ 'worden' if n_loslopers != 1 else 'wordt' }} niet meegenomen in de indeling.
+    </div>
+  {% endif %}
+  {% if n_paren == 0 %}
+    <p class="empty-state">Nog geen volledige paren aangemeld.</p>
+  {% else %}
+    <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/indeling" class="form-stack">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+      <div class="form-group" style="max-width:220px;">
+        <label for="secties">Aantal secties</label>
+        <input type="number" id="secties" name="secties" min="1" max="9" value="1">
+      </div>
+      <button type="submit" class="btn btn-primary">Maak indeling</button>
+    </form>
+  {% endif %}
+</section>
+{% else %}
+<section class="card" style="margin-top:1rem;">
+  <h2>Indeling voor NBB-clubsoftware</h2>
+  <p class="empty-state">Alleen beschikbaar voor avonden met paren.</p>
+</section>
+{% endif %}
+
+<div class="action-buttons" style="margin-top:1rem;">
+  <a href="/beheer/af-aanmeldingen/{{ evening.id }}" class="btn btn-secondary">Terug</a>
+</div>
+
+{% endblock %}

@@ -434,8 +434,8 @@ async def test_uc125_registreren_onbekend_clubloos_account(client, db_session):
         MemberClub.member_id == member.id).count() == 0
 
 
-async def test_uc126_registreren_zelfde_email_geweigerd(client, db_session):
-    """Tweede registratie met hetzelfde e-mailadres wordt geweigerd."""
+async def test_uc126_registreren_zelfde_email_toegestaan_ander_lidnummer(client, db_session):
+    """Twee leden mogen hetzelfde e-mailadres gebruiken; lidnummer is onderscheidend."""
     from app.main import app
     from app.models import Member
     _no_csrf(app)
@@ -447,13 +447,48 @@ async def test_uc126_registreren_zelfde_email_geweigerd(client, db_session):
     assert (await client.post("/registreren", data=data)).status_code == 302
     data["lidnummer"] = "NB126B"
     response = await client.post("/registreren", data=data)
+    assert response.status_code == 302
+    assert db_session.query(Member).filter(
+        Member.email == "dubbel@voorbeeld.nl").count() == 2
+
+
+async def test_uc126b_registreren_zelfde_lidnummer_geweigerd(client, db_session):
+    """Tweede registratie met hetzelfde lidnummer wordt geweigerd."""
+    from app.main import app
+    from app.models import Member
+    _no_csrf(app)
+    data = {
+        "voornaam": "Dub", "achternaam": "Bel", "email": "dubbel2@voorbeeld.nl",
+        "lidnummer": "NB126C", "password": WACHTWOORD, "password2": WACHTWOORD,
+        "toestemming": "on",
+    }
+    assert (await client.post("/registreren", data=data)).status_code == 302
+    data["email"] = "ander@voorbeeld.nl"
+    response = await client.post("/registreren", data=data)
     assert response.status_code == 422
     assert db_session.query(Member).filter(
-        Member.email == "dubbel@voorbeeld.nl").count() == 1
+        Member.lidnummer == "NB126C").count() == 1
 
 
 async def test_uc127_registreren_bestaand_account(client, db_session):
+    """Zelfde lidnummer opnieuw registreren wordt geweigerd."""
     from app.main import app
+    _no_csrf(app)
+    lid = make_member(db_session, lidnummer="NB127")
+    lid.email = "bestaand@voorbeeld.nl"
+    db_session.commit()
+    response = await client.post("/registreren", data={
+        "voornaam": "X", "achternaam": "Y", "email": "bestaand@voorbeeld.nl",
+        "lidnummer": "NB127", "password": WACHTWOORD, "password2": WACHTWOORD,
+        "toestemming": "on",
+    })
+    assert response.status_code == 422
+
+
+async def test_uc127b_registreren_zelfde_email_ander_lidnummer_toegestaan(client, db_session):
+    """Een ander lidnummer met hetzelfde e-mailadres mag wel een account krijgen."""
+    from app.main import app
+    from app.models import Member
     _no_csrf(app)
     lid = make_member(db_session, lidnummer="NB127")
     lid.email = "bestaand@voorbeeld.nl"
@@ -463,7 +498,9 @@ async def test_uc127_registreren_bestaand_account(client, db_session):
         "lidnummer": "ANDERS", "password": WACHTWOORD, "password2": WACHTWOORD,
         "toestemming": "on",
     })
-    assert response.status_code == 422
+    assert response.status_code == 302
+    assert db_session.query(Member).filter(
+        Member.email == "bestaand@voorbeeld.nl").count() == 2
 
 
 async def test_uc128_aanmelden_met_partner_uit_ledenlijst(client, db_session):
@@ -485,9 +522,9 @@ async def test_uc128_aanmelden_met_partner_uit_ledenlijst(client, db_session):
     assert reg.partner_naam == "Piet Klaassen"
 
 
-async def test_uc129_aanmelden_onbekende_partner_wordt_verzoek(client, db_session):
+async def test_uc129_aanmelden_onbekende_partner_direct_aangemeld(client, db_session):
     from app.main import app
-    from app.models import PartnerRequest
+    from app.models import Registration, RegistrationStatus
     lid = make_member(db_session, lidnummer="UC129")
     season = make_season(db_session)
     evening = make_evening(db_session, season.id)
@@ -496,10 +533,11 @@ async def test_uc129_aanmelden_onbekende_partner_wordt_verzoek(client, db_sessio
         "partner_voornaam": "Gast", "partner_achternaam": "Speler",
     })
     assert response.status_code == 302
-    assert db_session.query(PartnerRequest).filter(
-        PartnerRequest.requester_id == lid.id,
-        PartnerRequest.status == "wachtend",
-    ).count() == 1
+    assert "bevestigd=1" in response.headers["location"]
+    reg = db_session.query(Registration).filter(
+        Registration.person1_id == lid.id).first()
+    assert reg.status == RegistrationStatus.aangemeld
+    assert reg.partner_naam == "Gast Speler"
 
 
 async def test_uc130_aanmelden_zonder_partner_solo(client, db_session):
@@ -641,14 +679,17 @@ async def test_uc138_verleden_avond_aanmelden_geweigerd(client, db_session):
     assert response.headers["location"] == "/"
 
 
-async def test_uc139_training_niet_toegestaan(client, db_session):
+async def test_uc139_training_geen_toestemming_meer_nodig(client, db_session):
+    """Regressie: training_eligible beperkt aanmelden voor training niet meer."""
     from app.main import app
+    from app.models import Registration
     lid = make_member(db_session, lidnummer="UC139", training_eligible=False)
     season = make_season(db_session)
     evening = make_evening(db_session, season.id, ev_type="jeugdtraining")
     _set_auth(app, member=lid)
     response = await client.post(f"/aanmelden/{evening.id}", data={})
-    assert "training_niet_toegestaan=1" in response.headers["location"]
+    assert "training_niet_toegestaan" not in response.headers["location"]
+    assert db_session.query(Registration).count() == 1
 
 
 async def test_uc140_aanmelden_wijzigen_route_bereikbaar(client, db_session):
@@ -765,7 +806,8 @@ async def test_uc148_definitief_aanmelden_onbekend_type(client, db_session):
     assert response.status_code == 400
 
 
-async def test_uc149_voor_alles_aanmelden_respecteert_training(client, db_session):
+async def test_uc149_voor_alles_aanmelden_negeert_training_eligible(client, db_session):
+    """Regressie: training_eligible beperkt bulk-aanmelden voor training niet meer."""
     from app.main import app
     from app.models import Bericht, Registration
     lid = make_member(db_session, lidnummer="UC149", training_eligible=False)
@@ -775,8 +817,8 @@ async def test_uc149_voor_alles_aanmelden_respecteert_training(client, db_sessio
                  datum=date.today() + timedelta(days=8))
     _set_auth(app, member=lid)
     response = await client.post("/voor-alles-aanmelden", data={})
-    assert "bulk_ok=1" in response.headers["location"]
-    assert db_session.query(Registration).count() == 1
+    assert "bulk_ok=2" in response.headers["location"]
+    assert db_session.query(Registration).count() == 2
     assert db_session.query(Bericht).filter(
         Bericht.is_systeem == True  # noqa: E712
     ).count() == 1

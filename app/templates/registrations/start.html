@@ -9,12 +9,6 @@
     <div class="alert alert-error" style="margin-bottom:1rem;">
       Je kunt je niet aanmelden voor dit evenement. Neem contact op met de wedstrijdleider als je denkt dat dit niet klopt.
     </div>
-  {% elif pending_request %}
-    <div class="alert alert-info" style="margin-bottom:1rem;">
-      Je hebt een openstaand verzoek ingediend voor partner
-      <strong>{{ pending_request.partner_voornaam }} {{ pending_request.partner_achternaam }}</strong>.
-      De wedstrijdleider beoordeelt dit verzoek.
-    </div>
   {% elif existing and existing.status != 'afgemeld' %}
     <div class="alert alert-success" style="margin-bottom:1rem;">
       Je bent aangemeld
@@ -160,9 +154,6 @@
                  value="{% if existing and existing.partner_naam and ' ' in existing.partner_naam %}{{ existing.partner_naam.split(' ', 1)[1] }}{% elif existing and existing.person2 %}{{ existing.person2.achternaam }}{% endif %}">
         </div>
       </div>
-      <p style="font-size:.8rem;color:var(--color-muted);">
-        Als de partner niet in de ledenlijst staat, gaat er een verzoek naar de wedstrijdleider.
-      </p>
     {% endif %}
 
     <div class="action-buttons">

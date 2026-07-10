@@ -193,12 +193,12 @@ async def test_uc06_aanmelden_met_bekende_partner(client, db_session):
     assert reg.partner_naam == "Jan de Vries"
 
 
-# ── UC7: Aanmelden met onbekende partner → partner request ───────────────────
+# ── UC7: Aanmelden met onbekende partner → direct geregistreerd ──────────────
 
 async def test_uc07_aanmelden_met_onbekende_partner(client, db_session):
-    """Aanmelden met partner die NIET in ledenlijst staat → PartnerRequest aangemaakt."""
+    """Aanmelden met partner die NIET in ledenlijst staat → direct aangemeld, geen toestemming nodig."""
     from app.main import app
-    from app.models import ClubEvening, PartnerRequest
+    from app.models import ClubEvening, Registration, RegistrationStatus
 
     lid = make_member(db_session, lidnummer="UC07")
     season = make_season(db_session)
@@ -222,11 +222,12 @@ async def test_uc07_aanmelden_met_onbekende_partner(client, db_session):
         },
     )
     assert response.status_code == 302
+    assert "bevestigd=1" in response.headers["location"]
 
-    pr = db_session.query(PartnerRequest).filter(PartnerRequest.requester_id == lid.id).first()
-    assert pr is not None
-    assert pr.partner_voornaam == "Onbekend"
-    assert pr.status == "wachtend"
+    reg = db_session.query(Registration).filter(Registration.person1_id == lid.id).first()
+    assert reg is not None
+    assert reg.status == RegistrationStatus.aangemeld
+    assert reg.partner_naam == "Onbekend Persoon"
 
 
 # ── UC8: Afmelden van een aanmelding ─────────────────────────────────────────

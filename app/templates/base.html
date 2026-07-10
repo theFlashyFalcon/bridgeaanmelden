@@ -31,8 +31,8 @@
         {% set display_role = view_as_role if view_as_role else current_user.role %}
 
         <a href="/profiel" class="nav-user" style="text-decoration:none;color:inherit;">
-          {{ current_user.voornaam }}
-          <span class="role-badge role-{{ current_user.role }}">{{ current_user.role }}</span>
+          Mijn account
+          <span class="role-badge role-{{ current_user.role }}">{{ current_user.voornaam }}</span>
         </a>
 
         {% if current_user.role == 'admin' %}

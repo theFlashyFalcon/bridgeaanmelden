@@ -28,10 +28,6 @@
       Je bent aangemeld voor {{ n }} komend{{ 'e' if n|int != 1 else '' }} evenement{{ 'en' if n|int != 1 else '' }}.
     </div>
   {% endif %}
-{% elif request.query_params.get('verzoek_ingediend') %}
-  <div class="alert alert-info">
-    Je verzoek is ingediend. De wedstrijdleider beoordeelt de partnerkoppeling.
-  </div>
 {% elif request.query_params.get('te_laat') %}
   <div class="alert alert-info">Je hebt je ingeschreven na de inschrijftermijn. De wedstrijdleider neemt contact met je op of je nog mee kunt doen.</div>
 {% elif request.query_params.get('training_niet_toegestaan') %}

@@ -704,6 +704,13 @@ footer {
 @media (max-width: 900px) { .afd-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 600px) { .afd-grid { grid-template-columns: 1fr; } }
 
+/* Naam die niet in de ledenlijst van de club voorkomt (geen bekend lid) */
+.naam-niet-lid {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, .45);
+  border-radius: 4px;
+  padding: .05rem .35rem;
+}
+
 /* ── Hamburger button ────────────────────────────────────────────────────────── */
 .nav-toggle {
   display: none;

@@ -252,12 +252,11 @@ async def aanvraag_goedkeuren(
     aanvraag.beoordeeld_op = datetime.now(timezone.utc)
 
     if aanvraag.wachtwoord_hash:
-        # User provided a password during registration — create member directly
+        # User provided a password during registration — create member directly.
+        # Lidnummer is de onderscheidende factor voor een account, niet e-mail.
         al_bestaat = (
             db.query(Member)
-            .filter(
-                (Member.email == aanvraag.email) | (Member.lidnummer == aanvraag.lidnummer)
-            )
+            .filter(Member.lidnummer == aanvraag.lidnummer)
             .first()
         )
         if al_bestaat:

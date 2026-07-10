@@ -9,7 +9,13 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user, get_member_club_ids, is_member_of_club, require_auth
+from app.auth import (
+    get_algemene_club_id,
+    get_current_user,
+    get_member_club_ids,
+    is_member_of_club,
+    require_auth,
+)
 from app.database import get_db
 from app.email import (
     send_afmelding_wedstrijdleider_email,
@@ -21,7 +27,6 @@ from app.models import (
     Club,
     ClubEvening,
     EveningType,
-    Lid,
     Member,
     MemberClub,
     MemberRole,
@@ -41,9 +46,6 @@ from app.templates_env import templates
 
 # ── Per-evenement aanmelden ───────────────────────────────────────────────────
 
-_TRAINING_TYPES = {EveningType.jeugdtraining, EveningType.jeugdtraining.value,
-                   EveningType.training, EveningType.training.value}
-
 # De inschrijftermijn wordt gerekend in Nederlandse tijd, ongeacht de servertijdzone
 _TIJDZONE = ZoneInfo("Europe/Amsterdam")
 
@@ -58,10 +60,6 @@ _TYPE_SYNONIEMEN: dict[str, list[str]] = {
 
 def _synoniemen(event_type: str) -> list[str]:
     return _TYPE_SYNONIEMEN.get(event_type, [event_type])
-
-
-def _is_training(evening: ClubEvening) -> bool:
-    return evening.type in _TRAINING_TYPES
 
 
 def _is_na_inschrijftermijn(evening: ClubEvening) -> bool:
@@ -115,35 +113,12 @@ async def registration_form(
     if evening.datum < date.today():
         return RedirectResponse(url="/", status_code=302)
 
-    if _is_training(evening) and not current_user.training_eligible:
-        return templates.TemplateResponse(
-            request,
-            "registrations/start.html",
-            {
-                "current_user": current_user,
-                "evening": evening,
-                "existing": None,
-                "pending_request": None,
-                "training_niet_toegestaan": True,
-            },
-        )
-
     existing = (
         db.query(Registration)
         .filter(
             Registration.evening_id == event_id,
             Registration.person1_id == current_user.id,
             Registration.status != RegistrationStatus.afgemeld,
-        )
-        .first()
-    )
-
-    pending_request = (
-        db.query(PartnerRequest)
-        .filter(
-            PartnerRequest.evening_id == event_id,
-            PartnerRequest.requester_id == current_user.id,
-            PartnerRequest.status == "wachtend",
         )
         .first()
     )
@@ -155,7 +130,6 @@ async def registration_form(
             "current_user": current_user,
             "evening": evening,
             "existing": existing,
-            "pending_request": pending_request,
         },
     )
 
@@ -175,9 +149,6 @@ async def registration_submit(
 
     if evening.datum < date.today():
         return RedirectResponse(url="/", status_code=302)
-
-    if _is_training(evening) and not current_user.training_eligible:
-        return RedirectResponse(url="/?training_niet_toegestaan=1", status_code=302)
 
     form = await request.form()
     action = form.get("action", "aanmelden")
@@ -311,54 +282,26 @@ async def registration_submit(
     if partner_voornaam and partner_achternaam:
         partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
-        lid = (
-            db.query(Lid)
-            .filter(
-                func.lower(Lid.voornaam) == partner_voornaam.lower(),
-                func.lower(Lid.achternaam) == partner_achternaam.lower(),
-            )
-            .first()
-        )
-
-        if lid:
-            # Partner found in leden DB → direct registration
-            if existing:
-                existing.status = RegistrationStatus.aangemeld
-                existing.partner_naam = partner_naam
-                existing.partner2_naam = None
-                existing.partner3_naam = None
-                if te_laat:
-                    existing.te_laat = True
-                    # Nieuwe te-late wijziging: eerdere goedkeuring vervalt
-                    existing.te_laat_goedgekeurd = None
-            else:
-                db.add(Registration(
-                    evening_id=event_id,
-                    person1_id=current_user.id,
-                    partner_naam=partner_naam,
-                    type=RegistrationType.los,
-                    status=RegistrationStatus.aangemeld,
-                    te_laat=te_laat,
-                ))
-            db.commit()
-            return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
+        if existing:
+            existing.status = RegistrationStatus.aangemeld
+            existing.partner_naam = partner_naam
+            existing.partner2_naam = None
+            existing.partner3_naam = None
+            if te_laat:
+                existing.te_laat = True
+                # Nieuwe te-late wijziging: eerdere goedkeuring vervalt
+                existing.te_laat_goedgekeurd = None
         else:
-            # Partner not in leden DB → create partner request
-            # Remove existing pending request first
-            db.query(PartnerRequest).filter(
-                PartnerRequest.evening_id == event_id,
-                PartnerRequest.requester_id == current_user.id,
-                PartnerRequest.status == "wachtend",
-            ).delete()
-            db.add(PartnerRequest(
+            db.add(Registration(
                 evening_id=event_id,
-                requester_id=current_user.id,
-                partner_voornaam=partner_voornaam,
-                partner_achternaam=partner_achternaam,
+                person1_id=current_user.id,
+                partner_naam=partner_naam,
+                type=RegistrationType.los,
+                status=RegistrationStatus.aangemeld,
+                te_laat=te_laat,
             ))
-            db.commit()
-            redirect_param = "te_laat=1" if te_laat else "verzoek_ingediend=1"
-            return RedirectResponse(url=f"/?{redirect_param}", status_code=302)
+        db.commit()
+        return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
     else:
         # Geen partner opgegeven bij paren
         if existing:
@@ -479,18 +422,7 @@ async def instellingen_submit(
     if club_id and user_club_ids and club_id not in user_club_ids:
         raise HTTPException(status_code=403, detail="Geen lid van deze club")
 
-    partner_naam = None
-    if partner_voornaam and partner_achternaam:
-        lid = (
-            db.query(Lid)
-            .filter(
-                func.lower(Lid.voornaam) == partner_voornaam.lower(),
-                func.lower(Lid.achternaam) == partner_achternaam.lower(),
-            )
-            .first()
-        )
-        if lid:
-            partner_naam = f"{partner_voornaam} {partner_achternaam}"
+    partner_naam = f"{partner_voornaam} {partner_achternaam}" if partner_voornaam and partner_achternaam else None
 
     today = date.today()
     q = (
@@ -550,9 +482,6 @@ async def registration_herhaal(
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
 
-    if _is_training(evening) and not current_user.training_eligible:
-        raise HTTPException(status_code=403, detail="Geen toegang tot trainingsavonden")
-
     form = await request.form()
     alles = form.get("alles") == "on"
     alles_tot_str = form.get("alles_tot", "").strip()
@@ -561,18 +490,7 @@ async def registration_herhaal(
     partner_voornaam = form.get("partner_voornaam", "").strip()
     partner_achternaam = form.get("partner_achternaam", "").strip()
 
-    partner_naam = None
-    if partner_voornaam and partner_achternaam:
-        lid = (
-            db.query(Lid)
-            .filter(
-                func.lower(Lid.voornaam) == partner_voornaam.lower(),
-                func.lower(Lid.achternaam) == partner_achternaam.lower(),
-            )
-            .first()
-        )
-        if lid:
-            partner_naam = f"{partner_voornaam} {partner_achternaam}"
+    partner_naam = f"{partner_voornaam} {partner_achternaam}" if partner_voornaam and partner_achternaam else None
 
     today = date.today()
     user_club_ids = get_member_club_ids(current_user, db)
@@ -683,9 +601,6 @@ _TYPE_MAP: dict[str, list[str]] = {
     "speciaal": ["speciaal"],
 }
 
-_TRAINING_KEYS = {"training"}
-
-
 @router.post("/definitief-aanmelden/{event_type}")
 async def definitief_aanmelden(
     event_type: str,
@@ -696,25 +611,13 @@ async def definitief_aanmelden(
     if event_type not in _TYPE_MAP:
         raise HTTPException(status_code=400, detail="Onbekend type")
 
-    if event_type in _TRAINING_KEYS and not current_user.training_eligible:
-        raise HTTPException(status_code=403, detail="Geen toegang tot trainingsavonden")
-
     form = await request.form()
     partner_naam = None
     if form.get("met_partner") == "1":
         partner_voornaam = form.get("partner_voornaam", "").strip()
         partner_achternaam = form.get("partner_achternaam", "").strip()
         if partner_voornaam and partner_achternaam:
-            lid = (
-                db.query(Lid)
-                .filter(
-                    func.lower(Lid.voornaam) == partner_voornaam.lower(),
-                    func.lower(Lid.achternaam) == partner_achternaam.lower(),
-                )
-                .first()
-            )
-            if lid:
-                partner_naam = f"{partner_voornaam} {partner_achternaam}"
+            partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
     club_id_raw = form.get("club_id", "").strip()
     club_id = int(club_id_raw) if club_id_raw.isdigit() else None
@@ -866,6 +769,21 @@ async def mijn_profiel(
         .all()
     )
 
+    club_ids = {
+        mc.club_id
+        for mc in db.query(MemberClub)
+        .filter(MemberClub.member_id == current_user.id)
+        .all()
+    }
+    algemeen_id = get_algemene_club_id(db)
+    if algemeen_id is not None:
+        club_ids.add(algemeen_id)
+    mijn_clubs = (
+        db.query(Club).filter(Club.id.in_(club_ids)).order_by(Club.naam).all()
+        if club_ids
+        else []
+    )
+
     return templates.TemplateResponse(
         request,
         "profiel.html",
@@ -874,6 +792,7 @@ async def mijn_profiel(
             "agenda": agenda,
             "registrations": registrations,
             "herhalingen": herhalingen,
+            "mijn_clubs": mijn_clubs,
             "welkom": False,
         },
     )
@@ -901,16 +820,7 @@ async def voor_alles_aanmelden(
         partner_voornaam = form.get("partner_voornaam", "").strip()
         partner_achternaam = form.get("partner_achternaam", "").strip()
         if partner_voornaam and partner_achternaam:
-            lid = (
-                db.query(Lid)
-                .filter(
-                    func.lower(Lid.voornaam) == partner_voornaam.lower(),
-                    func.lower(Lid.achternaam) == partner_achternaam.lower(),
-                )
-                .first()
-            )
-            if lid:
-                partner_naam = f"{partner_voornaam} {partner_achternaam}"
+            partner_naam = f"{partner_voornaam} {partner_achternaam}"
 
     club_id_raw = form.get("club_id", "").strip()
     club_id = int(club_id_raw) if club_id_raw.isdigit() else None
@@ -920,9 +830,7 @@ async def voor_alles_aanmelden(
         raise HTTPException(status_code=403, detail="Geen lid van deze club")
 
     today = date.today()
-    all_db_types = ["clubavond", "regulier", "eten voor jeugdtraining", "speciaal"]
-    if current_user.training_eligible:
-        all_db_types += ["jeugdtraining", "training"]
+    all_db_types = ["clubavond", "regulier", "eten voor jeugdtraining", "speciaal", "jeugdtraining", "training"]
 
     q = (
         db.query(ClubEvening)

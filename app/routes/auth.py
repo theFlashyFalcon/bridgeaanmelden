@@ -143,14 +143,17 @@ async def login_submit(request: Request, db: Session = Depends(get_db)):
             request, "login.html", {"login_status": "wachtend"}, status_code=401
         )
     if account_request and account_request.status == AccountRequestStatus.goedgekeurd:
-        # Distinguish: account already created (new flow) vs invite still pending (old flow)
+        # Alleen relevant voor de oude uitnodigingsflow: het account bestaat nog
+        # niet en wacht op activatie via de invite-link. Bestaat het account al
+        # (self-service registratie), dan is een mislukte inlogpoging gewoon een
+        # onjuist wachtwoord — geen speciale melding nodig.
         account_bestaat = member is not None or (
             email and db.query(Member).filter(Member.email.ilike(email)).first()
         )
-        login_status = "account_klaar" if account_bestaat else "goedgekeurd"
-        return templates.TemplateResponse(
-            request, "login.html", {"login_status": login_status}, status_code=401
-        )
+        if not account_bestaat:
+            return templates.TemplateResponse(
+                request, "login.html", {"login_status": "goedgekeurd"}, status_code=401
+            )
     if account_request and account_request.status == AccountRequestStatus.afgewezen:
         return templates.TemplateResponse(
             request, "login.html", {"login_status": "afgewezen"}, status_code=401
@@ -217,9 +220,10 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         return _render({"errors": errors})
 
     # ── Controleer: account bestaat al ───────────────────────────────────────
-    bestaand_op_email = db.query(Member).filter(Member.email == email).first()
+    # Het lidnummer is de onderscheidende factor voor een account — meerdere
+    # leden (bv. gezinsleden) mogen hetzelfde e-mailadres gebruiken.
     bestaand_op_nbb = db.query(Member).filter(Member.lidnummer == nbb_nummer).first()
-    if bestaand_op_email or bestaand_op_nbb:
+    if bestaand_op_nbb:
         return _render({"melding": "al_account"})
 
     # ── Zoek in ledenlijsten van alle aangesloten clubs ───────────────────────
@@ -344,8 +348,10 @@ async def register_submit(token: str, request: Request, db: Session = Depends(ge
         errors.append("Wachtwoorden komen niet overeen.")
 
     email = invitation.email.lower().strip()
-    if db.query(Member).filter(Member.email == email).first():
-        errors.append("Er bestaat al een account met dit e-mailadres.")
+    # Lidnummer is de onderscheidende factor voor een account, niet e-mail —
+    # alleen blokkeren als dit specifieke lidnummer al een account heeft.
+    if lidnummer and db.query(Member).filter(Member.lidnummer == lidnummer).first():
+        errors.append("Er bestaat al een account met dit lidnummer.")
 
     if errors:
         return templates.TemplateResponse(

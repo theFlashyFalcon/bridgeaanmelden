@@ -11,10 +11,6 @@
   <div class="alert alert-success">Handmatig toegevoegd.</div>
 {% elif request.query_params.get('fout') == 'naam_verplicht' %}
   <div class="alert alert-error">Vul minimaal de naam van speler 1 in.</div>
-{% elif request.query_params.get('goedgekeurd') %}
-  <div class="alert alert-success">Verzoek goedgekeurd en aanmelding aangemaakt.</div>
-{% elif request.query_params.get('afgewezen') %}
-  <div class="alert alert-info">Verzoek afgewezen.</div>
 {% elif request.query_params.get('bericht_verstuurd') %}
   <div class="alert alert-success">Bericht verstuurd.</div>
 {% elif request.query_params.get('te_laat_goedgekeurd') %}
@@ -34,7 +30,38 @@
   {% set kolom1_naam = 'Paren' %}
 {% endif %}
 
+{# Naam die niet in de ledenlijst (bekende_leden) voorkomt krijgt een blauwe gloed #}
+{% macro niet_lid_class(voornaam, achternaam) %}{% if (voornaam.strip().lower(), achternaam.strip().lower()) not in bekende_leden %}naam-niet-lid{% endif %}{% endmacro %}
+
 <div class="afd-grid">
+
+  <!-- Berichtenbox -->
+  <section class="card">
+    <h2>Berichtenbox</h2>
+    <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
+      Stuur een bericht of bekijk je berichten.
+    </p>
+    <a href="/berichten?terug=/beheer/af-aanmeldingen/{{ evening.id }}" class="btn btn-secondary">Open berichtenbox</a>
+  </section>
+
+  {% if current_user.role == 'admin' %}
+  <section class="card">
+    <h2>Eigen agenda</h2>
+    <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
+      Bekijk de clubagenda en meld jezelf aan voor evenementen.
+    </p>
+    <a href="/" class="btn btn-secondary">Naar eigen agenda</a>
+  </section>
+  {% endif %}
+
+  <!-- Maak export -->
+  <section class="card">
+    <h2>Maak export</h2>
+    <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
+      Genereer een printversie of een indeling voor de NBB-clubsoftware.
+    </p>
+    <a href="/beheer/af-aanmeldingen/{{ evening.id }}/export" class="btn btn-secondary">Naar export</a>
+  </section>
 
   <!-- Kolom 1: Aangemeld -->
   <section class="card">
@@ -61,13 +88,15 @@
                 {{ reg.team_naam or reg.person1.voornaam }}
               </button>
             {% elif dtype == 'individueel' %}
-              {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+              <span class="{{ niet_lid_class(reg.person1.voornaam, reg.person1.achternaam) }}">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</span>
             {% else %}
-              {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+              <span class="{{ niet_lid_class(reg.person1.voornaam, reg.person1.achternaam) }}">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</span>
               {% if reg.partner_naam %}
-                &amp; {{ reg.partner_naam }}
+                {% set pv = reg.partner_naam.split(' ')[0] %}
+                {% set pa = reg.partner_naam.split(' ', 1)[1] if ' ' in reg.partner_naam else '' %}
+                &amp; <span class="{{ niet_lid_class(pv, pa) }}">{{ reg.partner_naam }}</span>
               {% elif reg.person2 %}
-                &amp; {{ reg.person2.voornaam }} {{ reg.person2.achternaam }}
+                &amp; <span class="{{ niet_lid_class(reg.person2.voornaam, reg.person2.achternaam) }}">{{ reg.person2.voornaam }} {{ reg.person2.achternaam }}</span>
               {% endif %}
             {% endif %}
             {% if reg.te_laat and not reg.te_laat_goedgekeurd %}
@@ -92,9 +121,16 @@
                   {{ pair.team_naam or pair.naam_1 }}
                 </button>
               {% elif dtype == 'individueel' %}
-                {{ pair.naam_1 }}
+                {% set pv = pair.naam_1.split(' ')[0] %}
+                {% set pa = pair.naam_1.split(' ', 1)[1] if ' ' in pair.naam_1 else '' %}
+                <span class="{{ niet_lid_class(pv, pa) }}">{{ pair.naam_1 }}</span>
               {% else %}
-                {{ pair.naam_1 }} &amp; {{ pair.naam_2 }}
+                {% set pv1 = pair.naam_1.split(' ')[0] %}
+                {% set pa1 = pair.naam_1.split(' ', 1)[1] if ' ' in pair.naam_1 else '' %}
+                <span class="{{ niet_lid_class(pv1, pa1) }}">{{ pair.naam_1 }}</span> &amp;
+                {% set pv2 = pair.naam_2.split(' ')[0] %}
+                {% set pa2 = pair.naam_2.split(' ', 1)[1] if ' ' in pair.naam_2 else '' %}
+                <span class="{{ niet_lid_class(pv2, pa2) }}">{{ pair.naam_2 }}</span>
               {% endif %}
               <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
             </span>
@@ -230,7 +266,7 @@
         {% for reg in loslopers | sort(attribute='person1.achternaam') %}
           <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
             <span>
-              {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
+              <span class="{{ niet_lid_class(reg.person1.voornaam, reg.person1.achternaam) }}">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</span>
               {% if dtype == 'viertallen' %}
                 {% set leden = [] %}
                 {% if reg.partner_naam %}{% set _ = leden.append(reg.partner_naam) %}{% endif %}
@@ -258,7 +294,9 @@
                 {% if ml.naam_3 %}{% set _ = groep.append(ml.naam_3) %}{% endif %}
                 {{ groep | join(', ') }}
               {% else %}
-                {{ ml.naam_1 }}
+                {% set pv = ml.naam_1.split(' ')[0] %}
+                {% set pa = ml.naam_1.split(' ', 1)[1] if ' ' in ml.naam_1 else '' %}
+                <span class="{{ niet_lid_class(pv, pa) }}">{{ ml.naam_1 }}</span>
               {% endif %}
               <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
             </span>
@@ -276,52 +314,21 @@
   </section>
   {% endif %}
 
-  <!-- Kolom 3: Partnerverzoeken (alleen paren) -->
-  {% if dtype == 'paren' %}
+  <!-- Afmeldingen -->
   <section class="card">
-    <h2>Partnerverzoeken
-      {% set wachtend_count = verzoeken | selectattr('status', 'equalto', 'wachtend') | list | length %}
-      {% if wachtend_count > 0 %}
-        <span class="badge badge-warning">{{ wachtend_count }} nieuw</span>
-      {% endif %}
-    </h2>
-
-    {% if verzoeken %}
-      <ul class="participant-list" style="gap:.75rem;">
-        {% for v in verzoeken %}
-          <li class="participant-item" style="flex-direction:column;align-items:flex-start;gap:.35rem;padding:.75rem 0;">
-            <div>
-              <strong>{{ v.requester.voornaam }} {{ v.requester.achternaam }}</strong>
-              vraagt om partner:
-              <strong>{{ v.partner_voornaam }} {{ v.partner_achternaam }}</strong>
-            </div>
-            <div style="font-size:.8rem;color:var(--color-muted);">
-              {{ v.aangemaakt_op.strftime('%d-%m-%Y %H:%M') }}
-            </div>
-            {% if v.status == 'wachtend' %}
-              <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
-                <form method="post" action="/beheer/verzoeken/{{ v.id }}/goedkeuren">
-  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-                  <button type="submit" class="btn btn-primary btn-sm">Goedkeuren</button>
-                </form>
-                <form method="post" action="/beheer/verzoeken/{{ v.id }}/afwijzen">
-  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
-                  <button type="submit" class="btn btn-danger btn-sm">Afwijzen</button>
-                </form>
-              </div>
-            {% elif v.status == 'goedgekeurd' %}
-              <span class="badge badge-success">Goedgekeurd</span>
-            {% else %}
-              <span class="badge" style="background:var(--color-muted);">Afgewezen</span>
-            {% endif %}
+    <h2>Afmeldingen <span class="badge">{{ afgemeld | length }}</span></h2>
+    {% if afgemeld %}
+      <ul class="participant-list">
+        {% for reg in afgemeld | sort(attribute='person1.achternaam') %}
+          <li class="participant-item">
+            <span class="{{ niet_lid_class(reg.person1.voornaam, reg.person1.achternaam) }}">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</span>
           </li>
         {% endfor %}
       </ul>
     {% else %}
-      <p class="empty-state">Geen partnerverzoeken.</p>
+      <p class="empty-state">Geen afmeldingen.</p>
     {% endif %}
   </section>
-  {% endif %}
 
   <!-- Te laat aangemeld -->
   {% if te_laat_regs %}
@@ -368,50 +375,10 @@
   </section>
   {% endif %}
 
-  <!-- Kolom 4: Afmeldingen -->
-  <section class="card">
-    <h2>Afmeldingen <span class="badge">{{ afgemeld | length }}</span></h2>
-    {% if afgemeld %}
-      <ul class="participant-list">
-        {% for reg in afgemeld | sort(attribute='person1.achternaam') %}
-          <li class="participant-item">
-            {{ reg.person1.voornaam }} {{ reg.person1.achternaam }}
-          </li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p class="empty-state">Geen afmeldingen.</p>
-    {% endif %}
-  </section>
-
-  <!-- Berichtenbox -->
-  <section class="card">
-    <h2>Berichtenbox</h2>
-    <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
-      Stuur een bericht of bekijk je berichten.
-    </p>
-    <a href="/berichten?terug=/beheer/af-aanmeldingen/{{ evening.id }}" class="btn btn-secondary">Open berichtenbox</a>
-  </section>
-
-  {% if current_user.role == 'admin' %}
-  <section class="card">
-    <h2>Eigen agenda</h2>
-    <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
-      Bekijk de clubagenda en meld jezelf aan voor evenementen.
-    </p>
-    <a href="/" class="btn btn-secondary">Naar eigen agenda</a>
-  </section>
-  {% endif %}
-
 </div>
 
 <div class="action-buttons" style="margin-top:1rem;">
   <a href="/beheer/af-aanmeldingen" class="btn btn-secondary">Terug naar overzicht</a>
-  {% if dtype != 'individueel' %}
-  <a href="/beheer/af-aanmeldingen/{{ evening.id }}/print" target="_blank" class="btn btn-secondary">
-    &#128438; Printversie genereren
-  </a>
-  {% endif %}
 </div>
 
 <!-- Berichtmodal voor loslopers -->

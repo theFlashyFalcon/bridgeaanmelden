@@ -1,10 +1,9 @@
-"""Beheer: aanmeldingsoverzichten, af/aanmeldingen, partnerverzoeken en aanwezigheid."""
-import logging
+"""Beheer: aanmeldingsoverzichten, af/aanmeldingen en aanwezigheid."""
 from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -17,19 +16,17 @@ from app.auth import (
 from app.database import get_db
 from app.models import (
     ClubEvening,
+    Lid,
     ManualPair,
     Member,
     MemberClub,
     MemberRole,
-    PartnerRequest,
     Registration,
     RegistrationStatus,
-    RegistrationType,
     Season,
 )
 from app.templates_env import templates
-
-logger = logging.getLogger(__name__)
+from app.utils.nbb_indeling import Speler, genereer_indeling_xml
 
 router = APIRouter(prefix="/beheer")
 
@@ -129,6 +126,15 @@ async def loslopers(
 
 # ── Af/aanmeldingen beheren (Wedstrijdleider + Admin) ────────────────────────
 
+def _bekende_leden_set(db: Session, club_id: Optional[int]) -> set[tuple[str, str]]:
+    """(voornaam, achternaam) in lowercase van alle bekende leden — voor de
+    "niet-lid"-weergave (blauwe gloed) bij namen die hier niet in voorkomen."""
+    q = db.query(Lid.voornaam, Lid.achternaam)
+    if club_id:
+        q = q.filter(Lid.club_id == club_id)
+    return {(vn.strip().lower(), an.strip().lower()) for vn, an in q.all()}
+
+
 _AF_TYPE_MAP: dict[str, list[str]] = {
     "clubavond": ["clubavond", "regulier"],
     "avondeten": ["eten voor jeugdtraining"],
@@ -157,37 +163,23 @@ async def af_aanmeldingen_list(
         query = query.filter(ClubEvening.type.in_(_AF_TYPE_MAP[active_filter]))
     evenings = query.all()
 
-    open_requests = {}
-    for e in evenings:
-        open_requests[e.id] = (
-            db.query(PartnerRequest)
-            .filter(PartnerRequest.evening_id == e.id, PartnerRequest.status == "wachtend")
-            .count()
-        )
     return templates.TemplateResponse(
         request,
         "admin/af_aanmeldingen.html",
         {
             "current_user": current_user,
             "evenings": evenings,
-            "open_requests": open_requests,
             "active_filter": active_filter if active_filter in _AF_TYPE_MAP else "",
         },
     )
 
 
-@router.get("/af-aanmeldingen/{event_id}")
-async def af_aanmeldingen_detail(
-    event_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Member = Depends(require_wedstrijdleider),
-):
+def _af_aanmeldingen_data(db: Session, event_id: int) -> Optional[dict]:
+    """Aanmeldingen/loslopers/afmeldingen voor een avond — gedeeld door het
+    beheerscherm en het exportscherm."""
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
-        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
-    if not can_manage_club(current_user, evening.club_id, db):
-        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
+        return None
 
     all_regs = (
         db.query(Registration)
@@ -240,30 +232,123 @@ async def af_aanmeldingen_detail(
         manual_aangemeld = [p for p in all_manual if p.naam_2]
         manual_loslopers = [p for p in all_manual if not p.naam_2]
 
-    verzoeken = (
-        db.query(PartnerRequest)
-        .filter(PartnerRequest.evening_id == event_id)
-        .order_by(PartnerRequest.aangemaakt_op)
-        .all()
-    )
-
     te_laat_regs = [r for r in all_regs if r.te_laat and r.status != RegistrationStatus.afgemeld]
+
+    return {
+        "evening": evening,
+        "volledig_aangemeld": volledig_aangemeld,
+        "afgemeld": afgemeld,
+        "loslopers": loslopers,
+        "manual_aangemeld": manual_aangemeld,
+        "manual_loslopers": manual_loslopers,
+        "te_laat_regs": te_laat_regs,
+        "dtype": dtype,
+    }
+
+
+@router.get("/af-aanmeldingen/{event_id}")
+async def af_aanmeldingen_detail(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    data = _af_aanmeldingen_data(db, event_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    evening = data["evening"]
+    if not can_manage_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
+
+    bekende_leden = _bekende_leden_set(db, evening.club_id)
 
     return templates.TemplateResponse(
         request,
         "admin/af_aanmeldingen_detail.html",
         {
             "current_user": current_user,
-            "evening": evening,
-            "volledig_aangemeld": volledig_aangemeld,
-            "afgemeld": afgemeld,
-            "loslopers": loslopers,
-            "manual_aangemeld": manual_aangemeld,
-            "manual_loslopers": manual_loslopers,
-            "verzoeken": verzoeken,
-            "te_laat_regs": te_laat_regs,
-            "dtype": dtype,
+            "bekende_leden": bekende_leden,
+            **data,
         },
+    )
+
+
+@router.get("/af-aanmeldingen/{event_id}/export")
+async def af_aanmeldingen_export(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    data = _af_aanmeldingen_data(db, event_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    evening = data["evening"]
+    if not can_manage_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
+
+    return templates.TemplateResponse(
+        request,
+        "admin/af_aanmeldingen_export.html",
+        {
+            "current_user": current_user,
+            **data,
+        },
+    )
+
+
+@router.post("/af-aanmeldingen/{event_id}/indeling")
+async def af_aanmeldingen_indeling(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    data = _af_aanmeldingen_data(db, event_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    evening = data["evening"]
+    if not can_manage_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
+    if data["dtype"] != "paren":
+        raise HTTPException(
+            status_code=400,
+            detail="Indeling-export is alleen beschikbaar voor paren-avonden",
+        )
+
+    form = await request.form()
+    try:
+        aantal_secties = max(1, int(form.get("secties", "1")))
+    except ValueError:
+        aantal_secties = 1
+
+    paren: list[tuple[Speler, Speler]] = []
+    for reg in data["volledig_aangemeld"]:
+        speler1 = Speler(reg.person1.voornaam, reg.person1.achternaam)
+        if reg.partner_naam:
+            pv, _, pa = reg.partner_naam.strip().partition(" ")
+            speler2 = Speler(pv, pa or pv)
+        elif reg.person2:
+            speler2 = Speler(reg.person2.voornaam, reg.person2.achternaam)
+        else:
+            continue
+        paren.append((speler1, speler2))
+    for pair in data["manual_aangemeld"]:
+        pv1, _, pa1 = pair.naam_1.strip().partition(" ")
+        pv2, _, pa2 = (pair.naam_2 or "").strip().partition(" ")
+        if not pa2:
+            continue
+        paren.append((
+            Speler(pv1, pa1 or pv1, pair.lidnummer_1),
+            Speler(pv2, pa2, pair.lidnummer_2),
+        ))
+
+    xml_inhoud = genereer_indeling_xml(db, evening, paren, aantal_secties)
+    bestandsnaam = f"indeling-{evening.datum.isoformat()}.nbbcr"
+    return Response(
+        content=xml_inhoud,
+        media_type="application/xml",
+        headers={"Content-Disposition": f'attachment; filename="{bestandsnaam}"'},
     )
 
 
@@ -387,88 +472,6 @@ async def manual_pair_verwijder(
         db.delete(pair)
         db.commit()
     return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}", status_code=302)
-
-
-@router.post("/verzoeken/{request_id}/goedkeuren")
-async def verzoek_goedkeuren(
-    request_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Member = Depends(require_wedstrijdleider),
-):
-    from app.email import send_partner_request_approved_email
-
-    partner_request = db.query(PartnerRequest).filter(PartnerRequest.id == request_id).first()
-    if not partner_request or partner_request.status != "wachtend":
-        return RedirectResponse(url="/beheer/af-aanmeldingen", status_code=302)
-    if partner_request.evening and not can_manage_club(current_user, partner_request.evening.club_id, db):
-        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
-
-    partner_naam = f"{partner_request.partner_voornaam} {partner_request.partner_achternaam}"
-    requester = partner_request.requester
-    evening = partner_request.evening
-
-    # Create registration
-    existing = (
-        db.query(Registration)
-        .filter(
-            Registration.evening_id == partner_request.evening_id,
-            Registration.person1_id == partner_request.requester_id,
-            Registration.status != RegistrationStatus.afgemeld,
-        )
-        .first()
-    )
-    if existing:
-        existing.status = RegistrationStatus.aangemeld
-        existing.partner_naam = partner_naam
-    else:
-        db.add(Registration(
-            evening_id=partner_request.evening_id,
-            person1_id=partner_request.requester_id,
-            partner_naam=partner_naam,
-            type=RegistrationType.los,
-            status=RegistrationStatus.aangemeld,
-        ))
-
-    partner_request.status = "goedgekeurd"
-    db.commit()
-
-    if requester.email:
-        try:
-            send_partner_request_approved_email(
-                requester.email,
-                requester.voornaam,
-                evening.naam or evening.type,
-                partner_naam,
-            )
-        except Exception:
-            logger.exception("E-mail versturen mislukt bij goedkeuren partnerverzoek voor %s", requester.email)
-
-    return RedirectResponse(
-        url=f"/beheer/af-aanmeldingen/{partner_request.evening_id}?goedgekeurd=1",
-        status_code=302,
-    )
-
-
-@router.post("/verzoeken/{request_id}/afwijzen")
-async def verzoek_afwijzen(
-    request_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Member = Depends(require_wedstrijdleider),
-):
-    partner_request = db.query(PartnerRequest).filter(PartnerRequest.id == request_id).first()
-    if not partner_request:
-        return RedirectResponse(url="/beheer/af-aanmeldingen", status_code=302)
-    if partner_request.evening and not can_manage_club(current_user, partner_request.evening.club_id, db):
-        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
-    if partner_request.status == "wachtend":
-        partner_request.status = "afgewezen"
-        db.commit()
-    return RedirectResponse(
-        url=f"/beheer/af-aanmeldingen/{partner_request.evening_id}?afgewezen=1",
-        status_code=302,
-    )
 
 
 @router.post("/te-laat/{reg_id}/goedkeuren")
