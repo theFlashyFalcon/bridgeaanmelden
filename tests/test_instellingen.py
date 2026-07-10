@@ -9,10 +9,11 @@ from tests.conftest import make_member, make_season
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def make_club(db_session, naam="BC Test", stad=None, evenement_types=None,
-              ranking_weergaves=None, labels=None):
+              ranking_weergaves=None, labels=None, is_algemeen=False):
     from app.models import Club
     club = Club(naam=naam, stad=stad, evenement_types=evenement_types,
-                ranking_weergaves=ranking_weergaves, labels=labels)
+                ranking_weergaves=ranking_weergaves, labels=labels,
+                is_algemeen=is_algemeen)
     db_session.add(club)
     db_session.commit()
     db_session.refresh(club)
@@ -93,6 +94,20 @@ def test_merged_event_types_vereniging_van_clubs():
     c2 = Club(naam="B", evenement_types="speciaal")
     assert merged_event_types([c1, c2]) == ["clubavond", "speciaal"]
     assert merged_event_types([]) == ["clubavond", "avondeten", "training", "speciaal"]
+
+
+def test_merged_instellingen_negeren_algemene_club():
+    """De algemene club (NULL = alles) mag de instellingen van echte clubs niet overrulen."""
+    from app.club_settings import EVENT_TYPE_KEYS, RANKING_KEYS, merged_event_types, merged_rankings
+    from app.models import Club
+
+    eigen = Club(naam="A", evenement_types="clubavond", ranking_weergaves="spanning")
+    algemeen = Club(naam="Algemeen", is_algemeen=True)
+    assert merged_event_types([eigen, algemeen]) == ["clubavond"]
+    assert merged_rankings([eigen, algemeen]) == ["spanning"]
+    # Alleen de algemene club (geen echte clubs) → standaard alles
+    assert merged_event_types([algemeen]) == EVENT_TYPE_KEYS
+    assert merged_rankings([algemeen]) == RANKING_KEYS
 
 
 # ── Instellingenscherm ────────────────────────────────────────────────────────
@@ -213,6 +228,25 @@ async def test_homepage_filters_volgen_clubinstellingen(client, db_session):
     assert 'data-value="avondeten"' not in response.text
     assert 'name="toon_clubavond"' in response.text
     assert 'name="toon_training"' not in response.text
+
+
+async def test_homepage_filters_met_algemene_club(client, db_session):
+    """De automatisch geseedde club 'Algemeen' zet uitgeschakelde filters niet weer aan."""
+    from app.auth import get_current_user
+    from app.main import app
+
+    make_club(db_session, naam="Algemeen", is_algemeen=True)
+    club = make_club(db_session, evenement_types="clubavond,speciaal")
+    lid = make_member(db_session, lidnummer="LID202", role="lid")
+    make_member_club(db_session, lid.id, club.id, role="lid")
+    make_season(db_session)
+
+    app.dependency_overrides[get_current_user] = lambda: lid
+    response = await client.get("/")
+    assert response.status_code == 200
+    assert 'data-value="clubavond"' in response.text
+    assert 'data-value="speciaal"' in response.text
+    assert 'data-value="training"' not in response.text
 
 
 async def test_homepage_zonder_instelling_toont_alles(client, db_session):

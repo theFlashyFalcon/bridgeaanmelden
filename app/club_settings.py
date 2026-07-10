@@ -94,8 +94,15 @@ def evening_label(evening) -> dict | None:
     return {"key": key, "naam": LABEL_NAMEN[key], "css": key.replace("_", "-")}
 
 
+def _zonder_algemene_club(clubs: list[Club]) -> list[Club]:
+    """De algemene club (iedereen is er lid van) heeft geen eigen instellingen;
+    zou die meetellen, dan stond via NULL (= alles) altijd alles weer aan."""
+    return [c for c in clubs if not c.is_algemeen]
+
+
 def merged_event_types(clubs: list[Club]) -> list[str]:
     """Vereniging van de evenementtypes van meerdere clubs (voor leden van meerdere clubs)."""
+    clubs = _zonder_algemene_club(clubs)
     if not clubs:
         return list(EVENT_TYPE_KEYS)
     samen: set[str] = set()
@@ -106,6 +113,7 @@ def merged_event_types(clubs: list[Club]) -> list[str]:
 
 def merged_rankings(clubs: list[Club]) -> list[str]:
     """Vereniging van de rankingweergaves van meerdere clubs."""
+    clubs = _zonder_algemene_club(clubs)
     if not clubs:
         return list(RANKING_KEYS)
     samen: set[str] = set()
