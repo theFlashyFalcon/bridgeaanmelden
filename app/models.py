@@ -262,6 +262,12 @@ class ManualPair(Base):
     naam_4 = Column(String, nullable=True)
     naam_5 = Column(String, nullable=True)
     naam_6 = Column(String, nullable=True)
+    lidnummer_1 = Column(String, nullable=True)
+    lidnummer_2 = Column(String, nullable=True)
+    lidnummer_3 = Column(String, nullable=True)
+    lidnummer_4 = Column(String, nullable=True)
+    lidnummer_5 = Column(String, nullable=True)
+    lidnummer_6 = Column(String, nullable=True)
     team_naam = Column(String, nullable=True)
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
 

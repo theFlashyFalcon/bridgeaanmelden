@@ -333,27 +333,40 @@ async def af_aanmeldingen_toevoegen(
     naam_1 = form.get("naam_1", "").strip()
     if not naam_1:
         return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?fout=naam_verplicht", status_code=302)
+    lidnummer_1 = form.get("lidnummer_1", "").strip() or None
 
     if dtype == "individueel":
         # Elke naam is een individuele deelnemer → direct naar aangemeld (geen losloper)
-        db.add(ManualPair(evening_id=event_id, naam_1=naam_1))
+        db.add(ManualPair(evening_id=event_id, naam_1=naam_1, lidnummer_1=lidnummer_1))
     elif dtype == "viertallen":
         naam_2 = form.get("naam_2", "").strip() or None
         naam_3 = form.get("naam_3", "").strip() or None
         naam_4 = form.get("naam_4", "").strip() or None
         naam_5 = form.get("naam_5", "").strip() or None
         naam_6 = form.get("naam_6", "").strip() or None
+        lidnummer_2 = form.get("lidnummer_2", "").strip() or None
+        lidnummer_3 = form.get("lidnummer_3", "").strip() or None
+        lidnummer_4 = form.get("lidnummer_4", "").strip() or None
+        lidnummer_5 = form.get("lidnummer_5", "").strip() or None
+        lidnummer_6 = form.get("lidnummer_6", "").strip() or None
         team_naam = form.get("team_naam", "").strip() or None
         # < 4 spelers → losloper-groep (naam_4 is None); alle 4 → aangemeld
         db.add(ManualPair(
             evening_id=event_id,
             naam_1=naam_1, naam_2=naam_2, naam_3=naam_3, naam_4=naam_4,
             naam_5=naam_5, naam_6=naam_6,
+            lidnummer_1=lidnummer_1, lidnummer_2=lidnummer_2, lidnummer_3=lidnummer_3,
+            lidnummer_4=lidnummer_4, lidnummer_5=lidnummer_5, lidnummer_6=lidnummer_6,
             team_naam=team_naam,
         ))
     else:  # paren
         naam_2 = form.get("naam_2", "").strip() or None
-        db.add(ManualPair(evening_id=event_id, naam_1=naam_1, naam_2=naam_2))
+        lidnummer_2 = form.get("lidnummer_2", "").strip() or None
+        db.add(ManualPair(
+            evening_id=event_id,
+            naam_1=naam_1, naam_2=naam_2,
+            lidnummer_1=lidnummer_1, lidnummer_2=lidnummer_2,
+        ))
 
     db.commit()
     return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?toegevoegd=1", status_code=302)
