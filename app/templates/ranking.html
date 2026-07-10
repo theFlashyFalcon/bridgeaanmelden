@@ -2,6 +2,11 @@
 {% block title %}Ranking — {{ club_naam }}{% endblock %}
 {% block content %}
 
+<div class="filter-tabs" style="margin-bottom:1.25rem;">
+  <a href="/uitslagen" class="filter-tab">Uitslagen</a>
+  <a href="/ranking" class="filter-tab filter-tab--active">Ranking</a>
+</div>
+
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem;margin-bottom:1rem;">
   <h1 style="margin:0;">Ranking</h1>
   <a href="/ranking/mijn-overzicht{% if seizoen_id %}?seizoen_id={{ seizoen_id }}{% endif %}"

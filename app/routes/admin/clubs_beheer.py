@@ -1,4 +1,6 @@
 """Beheer: clubs, club-ledenlijsten en weergave-instellingen."""
+from urllib.parse import urlsplit
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func
@@ -36,10 +38,19 @@ async def actieve_club_instellen(
             raise HTTPException(status_code=404, detail="Club niet gevonden")
 
     request.session["active_beheer_club_id"] = club_id
-    referer = request.headers.get("referer", "/beheer/avonden")
-    if not referer.startswith("/") or referer.startswith("//"):
-        referer = "/beheer/avonden"
-    return RedirectResponse(url=referer, status_code=302)
+
+    terug = "/beheer/avonden"
+    referer = request.headers.get("referer")
+    if referer:
+        # Referer is een volledige URL (incl. host) — alleen het pad (+query)
+        # overnemen, nooit de host, om open redirects te voorkomen.
+        onderdelen = urlsplit(referer)
+        if onderdelen.path.startswith("/") and not onderdelen.path.startswith("//"):
+            terug = onderdelen.path
+            if onderdelen.query:
+                terug += f"?{onderdelen.query}"
+
+    return RedirectResponse(url=terug, status_code=302)
 
 
 # ── Clubs (Admin only) ────────────────────────────────────────────────────────

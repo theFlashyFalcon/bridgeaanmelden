@@ -44,7 +44,6 @@
     <a href="/berichten?terug=/beheer/af-aanmeldingen/{{ evening.id }}" class="btn btn-secondary">Open berichtenbox</a>
   </section>
 
-  {% if current_user.role == 'admin' %}
   <section class="card">
     <h2>Eigen agenda</h2>
     <p style="color:var(--color-muted);font-size:.9rem;margin-bottom:1rem;">
@@ -52,7 +51,6 @@
     </p>
     <a href="/" class="btn btn-secondary">Naar eigen agenda</a>
   </section>
-  {% endif %}
 
   <!-- Maak export -->
   <section class="card">

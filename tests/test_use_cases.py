@@ -549,3 +549,39 @@ async def test_uc20_wl_actieve_club_instellen(client, db_session):
     )
     assert response.status_code == 302
     assert response.headers["location"] == "/beheer/avonden"
+
+
+async def test_actieve_club_instellen_stuurt_terug_naar_absolute_referer(client, db_session):
+    """Browsers sturen een volledige URL als Referer — alleen het pad moet worden overgenomen."""
+    from app.main import app
+
+    wl = make_member(db_session, role="wedstrijdleider", lidnummer="REF-WL")
+    club = make_club(db_session, naam="Club REF")
+    make_member_club(db_session, wl.id, club.id, role="wedstrijdleider")
+
+    _set_auth(app, wl=wl)
+
+    response = await client.get(
+        f"/beheer/actieve-club/{club.id}",
+        headers={"Referer": "http://test/beheer/af-aanmeldingen"},
+    )
+    assert response.status_code == 302
+    assert response.headers["location"] == "/beheer/af-aanmeldingen"
+
+
+async def test_actieve_club_instellen_weigert_open_redirect(client, db_session):
+    """Een protocol-relative referer (//evil.com) mag niet worden gevolgd."""
+    from app.main import app
+
+    wl = make_member(db_session, role="wedstrijdleider", lidnummer="REF-WL2")
+    club = make_club(db_session, naam="Club REF2")
+    make_member_club(db_session, wl.id, club.id, role="wedstrijdleider")
+
+    _set_auth(app, wl=wl)
+
+    response = await client.get(
+        f"/beheer/actieve-club/{club.id}",
+        headers={"Referer": "http://evil.example//attacker.com"},
+    )
+    assert response.status_code == 302
+    assert response.headers["location"] == "/beheer/avonden"

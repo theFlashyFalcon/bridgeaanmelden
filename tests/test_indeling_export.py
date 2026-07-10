@@ -150,6 +150,26 @@ async def test_af_aanmeldingen_detail_geen_partnerverzoeken_wel_export_tegel(cli
     assert "Maak export" in response.text
 
 
+async def test_af_aanmeldingen_detail_zes_tegels_ook_voor_wedstrijdleider(client, db_session):
+    """Eigen agenda mag niet admin-only zijn, anders klopt de 3+3-tegelindeling niet voor WL's."""
+    from app.main import app
+    wl = make_member(db_session, lidnummer="WL-DET3", role="wedstrijdleider")
+    season = make_season_nu(db_session)
+    evening = make_evening(db_session, season.id, deelnemers_type="paren")
+    _set_auth(app, wl=wl)
+
+    response = await client.get(f"/beheer/af-aanmeldingen/{evening.id}")
+    assert response.status_code == 200
+    tekst = response.text
+    for tegel in ("Berichtenbox", "Eigen agenda", "Maak export", "Loslopers", "Afmeldingen"):
+        assert tegel in tekst
+
+    # Volgorde: rij 1 = Berichtenbox, Eigen agenda, Maak export; rij 2 begint met Aanmeldingen (kolom1).
+    posities = [tekst.index(t) for t in ("Berichtenbox", "Eigen agenda", "Maak export")]
+    assert posities == sorted(posities)
+    assert posities[-1] < tekst.index("Loslopers")
+
+
 async def test_af_aanmeldingen_detail_blauwe_gloed_voor_onbekende_partner(client, db_session):
     from app.main import app
     wl = make_member(db_session, lidnummer="WL-DET2", role="wedstrijdleider")

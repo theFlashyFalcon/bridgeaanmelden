@@ -90,6 +90,66 @@ def _club_wedstrijdleiders(db: Session, club_id: Optional[int]) -> list[Member]:
     return basis.filter(Member.role == MemberRole.wedstrijdleider.value).all()
 
 
+def _partner_lid(
+    db: Session, current_user: Member, voornaam: str, achternaam: str
+) -> Optional[Member]:
+    """Zoek het clublid dat overeenkomt met de opgegeven partnernaam (voor de aanmeldnotificatie)."""
+    if not voornaam or not achternaam:
+        return None
+    kandidaat = (
+        db.query(Member)
+        .filter(
+            func.lower(Member.voornaam) == voornaam.lower(),
+            func.lower(Member.achternaam) == achternaam.lower(),
+            Member.verwijderd_op == None,  # noqa: E711
+            Member.id != current_user.id,
+        )
+        .first()
+    )
+    if not kandidaat:
+        return None
+    mijn_clubs = set(get_member_club_ids(current_user, db))
+    zijn_clubs = set(get_member_club_ids(kandidaat, db))
+    if mijn_clubs and zijn_clubs and not (mijn_clubs & zijn_clubs):
+        return None
+    return kandidaat
+
+
+def _stuur_aanmeld_notificatie(
+    db: Session, current_user: Member, partner: Member, event_naam: str
+) -> None:
+    afzender_naam = f"{current_user.voornaam} {current_user.achternaam}"
+    db.add(Bericht(
+        afzender_id=current_user.id,
+        ontvanger_id=partner.id,
+        onderwerp=f"Aangemeld voor {event_naam}",
+        tekst=f"{afzender_naam} heeft jullie opgegeven voor {event_naam}",
+        is_systeem=True,
+    ))
+    db.commit()
+
+
+def _stuur_herhaal_notificatie(
+    db: Session,
+    current_user: Member,
+    partner: Member,
+    event_naam: str,
+    tot: Optional[date],
+) -> None:
+    afzender_naam = f"{current_user.voornaam} {current_user.achternaam}"
+    tekst = f"{afzender_naam} heeft jullie opgegeven voor een herhalende serie van {event_naam}"
+    if tot:
+        tekst += f" tot {tot.strftime('%d-%m-%Y')}"
+    db.add(Bericht(
+        afzender_id=current_user.id,
+        ontvanger_id=partner.id,
+        onderwerp=f"Herhaalaanmelding: {event_naam}",
+        tekst=tekst,
+        is_systeem=True,
+    ))
+    db.commit()
+
+
 # Let op: deze route moet vóór /aanmelden/{event_id} staan, anders matcht
 # "wijzigen" als event_id en geeft dat een 422.
 @router.get("/aanmelden/wijzigen")
@@ -281,6 +341,7 @@ async def registration_submit(
     # Paren (standaard): één partner opgeven
     if partner_voornaam and partner_achternaam:
         partner_naam = f"{partner_voornaam} {partner_achternaam}"
+        partner_gewijzigd = not existing or existing.partner_naam != partner_naam
 
         if existing:
             existing.status = RegistrationStatus.aangemeld
@@ -301,6 +362,12 @@ async def registration_submit(
                 te_laat=te_laat,
             ))
         db.commit()
+
+        if partner_gewijzigd:
+            partner_lid = _partner_lid(db, current_user, partner_voornaam, partner_achternaam)
+            if partner_lid:
+                _stuur_aanmeld_notificatie(db, current_user, partner_lid, evening.naam or evening.type)
+
         return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
     else:
         # Geen partner opgegeven bij paren
@@ -565,6 +632,12 @@ async def registration_herhaal(
             ))
 
         db.commit()
+
+        if count and partner_naam:
+            partner_lid = _partner_lid(db, current_user, partner_voornaam, partner_achternaam)
+            if partner_lid:
+                _stuur_herhaal_notificatie(db, current_user, partner_lid, evening.type, alles_tot)
+
         return RedirectResponse(url=f"/?bulk_ok={count}", status_code=302)
 
     elif elke_str:
@@ -587,6 +660,12 @@ async def registration_herhaal(
         count = _register_for_events(selected)
 
         db.commit()
+
+        if count and partner_naam:
+            partner_lid = _partner_lid(db, current_user, partner_voornaam, partner_achternaam)
+            if partner_lid:
+                _stuur_herhaal_notificatie(db, current_user, partner_lid, evening.type, herhaal_tot)
+
         return RedirectResponse(url=f"/?bulk_ok={count}", status_code=302)
 
     return RedirectResponse(url=f"/aanmelden/{event_id}", status_code=302)

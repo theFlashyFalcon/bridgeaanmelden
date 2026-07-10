@@ -2,6 +2,11 @@
 {% block title %}Uitslagen — {{ club_naam }}{% endblock %}
 {% block content %}
 
+<div class="filter-tabs" style="margin-bottom:1.25rem;">
+  <a href="/uitslagen" class="filter-tab filter-tab--active">Uitslagen</a>
+  <a href="/ranking" class="filter-tab">Ranking</a>
+</div>
+
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:.75rem;">
   <h1 style="margin:0;">Uitslagen</h1>
   {% if kan_uploaden %}

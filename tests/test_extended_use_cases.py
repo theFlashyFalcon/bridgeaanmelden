@@ -943,3 +943,133 @@ async def test_uc70_admin_lid_verwijderen_uit_club_synct_global_rol(client, db_s
 
     db_session.refresh(lid)
     assert lid.role == "lid"
+
+
+# ── UC71: Aanmelden met partner die appgebruiker is → bericht naar partner ───
+
+async def test_uc71_aanmelden_partner_appgebruiker_krijgt_bericht(client, db_session):
+    """Als de opgegeven partner ook een appgebruiker is (naam komt overeen), krijgt
+    die partner een bericht in de berichtenbox."""
+    from app.main import app
+    from app.models import Bericht
+
+    lid = make_member(db_session, voornaam="Piet", achternaam="Jansen", lidnummer="UC71-A")
+    partner = make_member(db_session, voornaam="Marie", achternaam="Bakker", lidnummer="UC71-B")
+    season = make_season(db_session)
+    evening = make_evening(db_session, season.id)
+
+    _set_auth(app, member=lid)
+
+    response = await client.post(
+        f"/aanmelden/{evening.id}",
+        data={
+            "partner_voornaam": "Marie",
+            "partner_achternaam": "Bakker",
+            "_csrf_token": "x",
+        },
+    )
+    assert response.status_code == 302
+
+    bericht = (
+        db_session.query(Bericht)
+        .filter(Bericht.ontvanger_id == partner.id, Bericht.afzender_id == lid.id)
+        .first()
+    )
+    assert bericht is not None
+    assert bericht.tekst == f"Piet Jansen heeft jullie opgegeven voor {evening.naam or evening.type}"
+
+
+# ── UC72: Aanmelden met onbekende partner → geen bericht ─────────────────────
+
+async def test_uc72_aanmelden_onbekende_partner_geen_bericht(client, db_session):
+    """Als de opgegeven partner geen appgebruiker is, wordt er geen bericht aangemaakt."""
+    from app.main import app
+    from app.models import Bericht
+
+    lid = make_member(db_session, voornaam="Piet", achternaam="Jansen", lidnummer="UC72-A")
+    season = make_season(db_session)
+    evening = make_evening(db_session, season.id)
+
+    _set_auth(app, member=lid)
+
+    response = await client.post(
+        f"/aanmelden/{evening.id}",
+        data={
+            "partner_voornaam": "Onbekende",
+            "partner_achternaam": "Naam",
+            "_csrf_token": "x",
+        },
+    )
+    assert response.status_code == 302
+
+    assert db_session.query(Bericht).filter(Bericht.afzender_id == lid.id).first() is None
+
+
+# ── UC73: Herhaalaanmelding met partner die appgebruiker is → bericht ────────
+
+async def test_uc73_herhaalaanmelding_partner_appgebruiker_krijgt_bericht(client, db_session):
+    """Bij een herhalende aanmelding krijgt de partner een apart geformuleerd bericht
+    met de einddatum van de serie."""
+    from app.main import app
+    from app.models import Bericht
+
+    lid = make_member(db_session, voornaam="Piet", achternaam="Jansen", lidnummer="UC73-A")
+    partner = make_member(db_session, voornaam="Marie", achternaam="Bakker", lidnummer="UC73-B")
+    season = make_season(db_session)
+    evening1 = make_evening(db_session, season.id, datum=date.today() + timedelta(days=7))
+    make_evening(db_session, season.id, datum=date.today() + timedelta(days=14))
+
+    _set_auth(app, member=lid)
+
+    tot = date.today() + timedelta(days=30)
+    response = await client.post(
+        f"/aanmelden/{evening1.id}/herhaal",
+        data={
+            "alles": "on",
+            "alles_tot": tot.isoformat(),
+            "partner_voornaam": "Marie",
+            "partner_achternaam": "Bakker",
+            "_csrf_token": "x",
+        },
+    )
+    assert response.status_code == 302
+
+    bericht = (
+        db_session.query(Bericht)
+        .filter(Bericht.ontvanger_id == partner.id, Bericht.afzender_id == lid.id)
+        .first()
+    )
+    assert bericht is not None
+    verwacht = (
+        f"Piet Jansen heeft jullie opgegeven voor een herhalende serie van "
+        f"{evening1.type} tot {tot.strftime('%d-%m-%Y')}"
+    )
+    assert bericht.tekst == verwacht
+
+
+# ── UC74: Herhaald aanmelden met ongewijzigde partner → geen dubbel bericht ──
+
+async def test_uc74_aanmelden_zelfde_partner_geen_dubbel_bericht(client, db_session):
+    """Opnieuw indienen van hetzelfde formulier met dezelfde partner stuurt geen
+    tweede notificatie."""
+    from app.main import app
+    from app.models import Bericht
+
+    lid = make_member(db_session, voornaam="Piet", achternaam="Jansen", lidnummer="UC74-A")
+    make_member(db_session, voornaam="Marie", achternaam="Bakker", lidnummer="UC74-B")
+    season = make_season(db_session)
+    evening = make_evening(db_session, season.id)
+
+    _set_auth(app, member=lid)
+
+    data = {
+        "partner_voornaam": "Marie",
+        "partner_achternaam": "Bakker",
+        "_csrf_token": "x",
+    }
+    await client.post(f"/aanmelden/{evening.id}", data=data)
+    response = await client.post(f"/aanmelden/{evening.id}", data=data)
+    assert response.status_code == 302
+
+    count = db_session.query(Bericht).filter(Bericht.afzender_id == lid.id).count()
+    assert count == 1
