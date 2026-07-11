@@ -34,6 +34,12 @@
   <div class="alert alert-error">Je kunt je niet aanmelden voor dit evenement. Neem contact op met de wedstrijdleider als je denkt dat dit niet klopt.</div>
 {% elif request.query_params.get('voorkeuren_opgeslagen') %}
   <div class="alert alert-success">Agendaweergave opgeslagen.</div>
+{% elif request.query_params.get('paar_toegevoegd') %}
+  <div class="alert alert-success">Paar toegevoegd aan de aanmeldingen.</div>
+{% elif request.query_params.get('wacht_goedkeuring') %}
+  <div class="alert alert-info">Je aanmelding is ontvangen en wacht op goedkeuring van de wedstrijdleider.</div>
+{% elif request.query_params.get('fout') == 'niet_lid' %}
+  <div class="alert alert-error">Niet-leden kunnen niet aangemeld worden.</div>
 {% endif %}
 
 <section class="page-header">
@@ -47,6 +53,15 @@
     <p class="subtitle">Welkom, {{ current_user.voornaam }}</p>
   {% endif %}
 </section>
+
+{% if gast_club %}
+  <section class="card" style="border-left:4px solid var(--color-primary,#1e3a5f);">
+    <p style="margin:0;">
+      Je bekijkt de agenda van <strong>{{ gast_club.naam }}</strong> als gast. Je kunt je hieronder
+      aanmelden voor evenementen zonder in te loggen — vul daarbij ook je eigen naam in.
+    </p>
+  </section>
+{% endif %}
 
 {% if not current_user %}
   <section class="card account-options">
@@ -283,6 +298,8 @@
             </a>
           {% endif %}
           <a href="/beheer/aanmeldingen/{{ evening.id }}" class="btn btn-secondary btn-sm">Bekijk aanmeldingen</a>
+        {% elif gast_club %}
+          <a href="/aanmelden/{{ evening.id }}" class="btn btn-primary btn-sm">Aanmelden</a>
         {% endif %}
         {% if evening_club %}
           <span class="club-badge" style="margin-left:auto;align-self:center;{% if evening_club.kleur %}background:{{ evening_club.kleur }};{% endif %}">{{ evening_club.naam }}</span>

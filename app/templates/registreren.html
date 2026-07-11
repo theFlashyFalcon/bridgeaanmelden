@@ -41,7 +41,7 @@
                  maxlength="100" value="{{ voornaam or '' }}">
         </div>
         <div class="form-group">
-          <label for="achternaam">Achternaam <span class="form-hint">(inclusief tussenvoegsel)</span></label>
+          <label for="achternaam">Achternaam</label>
           <input type="text" id="achternaam" name="achternaam" required autocomplete="family-name"
                  placeholder="bijv. van den Berg" maxlength="100" value="{{ achternaam or '' }}">
         </div>
@@ -90,7 +90,7 @@
       <div class="form-group">
         <label class="checkbox-label">
           <input type="checkbox" name="toestemming" required value="1">
-          Ik ga akkoord met het <a href="/privacy" target="_blank">privacybeleid</a> en geef toestemming voor verwerking van mijn persoonsgegevens voor clubbeheer.
+          <span>Ik ga akkoord met het <a href="/privacy" target="_blank">privacybeleid</a> en geef toestemming voor verwerking van mijn persoonsgegevens voor clubbeheer.</span>
         </label>
       </div>
       <button type="submit" class="btn btn-primary btn-full">Account aanmaken</button>

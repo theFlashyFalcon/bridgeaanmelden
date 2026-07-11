@@ -41,6 +41,101 @@
   </div>
 </section>
 
+{% if current_user.role == 'admin' and member.id != current_user.id %}
+<section class="card">
+  <h2>Rol beheren</h2>
+
+  {% if request.query_params.get('opgeslagen') %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">Rol opgeslagen.</div>
+  {% elif request.query_params.get('fout') %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">Er is een fout opgetreden.</div>
+  {% endif %}
+
+  <div style="margin-bottom:1.5rem;">
+    <h3 style="font-size:.95rem;margin:0 0 .5rem;">Admin-rechten</h3>
+    {% if member.role == 'admin' %}
+    <form method="post" action="/leden/{{ member.id }}/rol"
+          data-bevestig="Weet je zeker dat je admin-rechten van {{ member.voornaam }} {{ member.achternaam }} wilt intrekken?">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="role" value="lid">
+      <button type="submit" class="btn btn-secondary">Admin-rechten intrekken</button>
+    </form>
+    {% else %}
+    <form method="post" action="/leden/{{ member.id }}/rol"
+          data-bevestig="Weet je zeker dat je {{ member.voornaam }} {{ member.achternaam }} admin wilt maken? Dit geeft volledige toegang tot alle clubs.">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+      <input type="hidden" name="role" value="admin">
+      <button type="submit" class="btn btn-primary">Maak admin</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if member.role != 'admin' %}
+  <div>
+    <h3 style="font-size:.95rem;margin:0 0 .5rem;">Wedstrijdleider per club</h3>
+    <p style="font-size:.8rem;color:var(--color-muted);margin:0 0 .75rem;">
+      Een wedstrijdleider van een club beheert alleen de agenda en af-/aanmeldingen van die club.
+    </p>
+    {% if clubs %}
+    <table class="data-table" style="font-size:.9rem;">
+      <thead>
+        <tr>
+          <th>Club</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in clubs %}
+        {% set mc = club_membership_map.get(c.id) %}
+        <tr>
+          <td>{{ c.naam }}</td>
+          <td>
+            {% if mc and mc.role == 'wedstrijdleider' %}
+              <span class="role-badge-tabel role-wedstrijdleider">Wedstrijdleider</span>
+            {% elif mc and mc.role == 'admin' %}
+              <span class="role-badge-tabel role-admin">Club-admin</span>
+            {% else %}
+              <span class="role-badge-tabel role-lid">Lid</span>
+            {% endif %}
+          </td>
+          <td style="text-align:right;">
+            {% if mc and mc.role == 'wedstrijdleider' %}
+            <form method="post" action="/beheer/clubs/{{ c.id }}/leden/{{ member.id }}/rol" style="display:inline;">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+              <input type="hidden" name="role" value="lid">
+              <input type="hidden" name="next" value="/leden/{{ member.id }}">
+              <button type="submit" class="btn btn-secondary btn-sm">Verwijder wedstrijdleiderschap</button>
+            </form>
+            {% elif not mc %}
+            <form method="post" action="/beheer/clubs/{{ c.id }}/leden/toevoegen" style="display:inline;">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+              <input type="hidden" name="member_id" value="{{ member.id }}">
+              <input type="hidden" name="role" value="wedstrijdleider">
+              <input type="hidden" name="next" value="/leden/{{ member.id }}">
+              <button type="submit" class="btn btn-primary btn-sm">Maak wedstrijdleider van {{ c.naam }}</button>
+            </form>
+            {% elif mc.role == 'lid' %}
+            <form method="post" action="/beheer/clubs/{{ c.id }}/leden/{{ member.id }}/rol" style="display:inline;">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+              <input type="hidden" name="role" value="wedstrijdleider">
+              <input type="hidden" name="next" value="/leden/{{ member.id }}">
+              <button type="submit" class="btn btn-primary btn-sm">Maak wedstrijdleider van {{ c.naam }}</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <p class="empty-state">Nog geen clubs aangemaakt.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="card">
   <h2>Accountgegevens</h2>
   <dl class="detail-list">

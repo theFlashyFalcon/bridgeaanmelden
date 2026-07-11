@@ -134,8 +134,11 @@ def get_algemene_club_id(db: Session) -> Optional[int]:
 def is_member_of_club(member: Member, club_id: Optional[int], db: Session) -> bool:
     """
     True als het lid bij deze club hoort. club_id None (legacy data) is altijd
-    toegankelijk; van de algemene club is iedereen automatisch lid.
+    toegankelijk; van de algemene club is iedereen automatisch lid; globale
+    admins hebben altijd toegang tot alle clubs.
     """
+    if member.role == MemberRole.admin.value:
+        return True
     if club_id is None:
         return True
     exists = (
@@ -153,12 +156,16 @@ def can_manage_club(member: Member, club_id: Optional[int], db: Session) -> bool
     """
     True als dit lid beheerrechten heeft voor deze club:
     - globale admins altijd;
+    - de algemene club kan uitsluitend door globale admins beheerd worden,
+      ongeacht eventuele (club-)rollen op MemberClub;
     - club_id None (legacy data zonder club) is voor elke WL toegankelijk;
     - anders is een WL/admin-rol bij die club vereist (globale WL's zonder
       enige clubkoppeling gelden als legacy en mogen ook).
     """
     if member.role == MemberRole.admin.value:
         return True
+    if club_id is not None and club_id == get_algemene_club_id(db):
+        return False
     if club_id is None:
         return True
     rows = db.query(MemberClub).filter(MemberClub.member_id == member.id).all()
@@ -166,6 +173,18 @@ def can_manage_club(member: Member, club_id: Optional[int], db: Session) -> bool
         return True
     beheer_rollen = (MemberRole.admin.value, MemberRole.wedstrijdleider.value)
     return any(mc.club_id == club_id and mc.role in beheer_rollen for mc in rows)
+
+
+def sync_global_role(member: Member, db: Session) -> None:
+    """Synchroniseert member.role met de hoogste rol in alle MemberClub-rijen."""
+    all_mc = db.query(MemberClub).filter(MemberClub.member_id == member.id).all()
+    roles = [mc.role for mc in all_mc]
+    if MemberRole.admin.value in roles:
+        member.role = MemberRole.admin.value
+    elif MemberRole.wedstrijdleider.value in roles:
+        member.role = MemberRole.wedstrijdleider.value
+    else:
+        member.role = MemberRole.lid.value
 
 
 def get_club_role(member: Member, club_id: int, db: Session) -> Optional[str]:
@@ -178,7 +197,12 @@ def get_club_role(member: Member, club_id: int, db: Session) -> Optional[str]:
 
 
 def get_member_club_ids(member: Member, db: Session) -> list[int]:
-    """Geeft alle club-id's waarvan dit lid lid is, inclusief de algemene club."""
+    """
+    Geeft alle club-id's waarvan dit lid lid is, inclusief de algemene club.
+    Globale admins krijgen alle clubs, ongeacht expliciete MemberClub-koppeling.
+    """
+    if member.role == MemberRole.admin.value:
+        return [r[0] for r in db.query(Club.id).all()]
     rows = db.query(MemberClub.club_id).filter(MemberClub.member_id == member.id).all()
     ids = [r[0] for r in rows]
     algemeen_id = get_algemene_club_id(db)

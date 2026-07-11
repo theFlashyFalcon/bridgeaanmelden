@@ -6,6 +6,10 @@
 
   {% if request.query_params.get('aangemaakt') %}
     <div class="alert alert-success">Seizoen aangemaakt.</div>
+  {% elif request.query_params.get('fout') == 'datum' %}
+    <div class="alert alert-error">De startdatum moet voor de einddatum liggen.</div>
+  {% elif request.query_params.get('fout') == 'overlap' %}
+    <div class="alert alert-error">Deze club heeft al een seizoen dat deze periode overlapt.</div>
   {% endif %}
 
   <h2>Nieuw seizoen</h2>

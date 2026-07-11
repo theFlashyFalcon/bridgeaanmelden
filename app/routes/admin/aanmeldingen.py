@@ -87,6 +87,22 @@ async def aanmeldingen_detail(
         volledig = [r for r in active if (r.person2_id or r.partner_naam) and r.status != RegistrationStatus.beschikbaar_solo]
         loslopers = [r for r in active if r not in volledig]
 
+    all_manual = (
+        db.query(ManualPair)
+        .filter(ManualPair.evening_id == event_id)
+        .order_by(ManualPair.aangemaakt_op)
+        .all()
+    )
+    if dtype_detail == "individueel":
+        manual_volledig = all_manual
+        manual_loslopers = []
+    elif dtype_detail == "viertallen":
+        manual_volledig = [p for p in all_manual if p.naam_4]
+        manual_loslopers = [p for p in all_manual if not p.naam_4]
+    else:
+        manual_volledig = [p for p in all_manual if p.naam_2]
+        manual_loslopers = [p for p in all_manual if not p.naam_2]
+
     return templates.TemplateResponse(
         request,
         "admin/event_detail.html",
@@ -97,9 +113,51 @@ async def aanmeldingen_detail(
             "volledig": volledig,
             "recent_changes": recent_changes,
             "loslopers": loslopers,
+            "manual_volledig": manual_volledig,
+            "manual_loslopers": manual_loslopers,
             "dtype": dtype_detail,
         },
     )
+
+
+@router.post("/aanmeldingen/{event_id}/toevoegen")
+async def aanmeldingen_paar_toevoegen(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_auth),
+):
+    evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+    if not evening:
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    if not is_member_of_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen lid van deze club")
+
+    form = await request.form()
+    dtype = evening.deelnemers_type or "paren"
+
+    naam_1 = form.get("naam_1", "").strip()
+    if not naam_1:
+        return RedirectResponse(url=f"/beheer/aanmeldingen/{event_id}?fout=naam_verplicht", status_code=302)
+
+    if dtype == "individueel":
+        db.add(ManualPair(evening_id=event_id, naam_1=naam_1))
+    elif dtype == "viertallen":
+        naam_2 = form.get("naam_2", "").strip() or None
+        naam_3 = form.get("naam_3", "").strip() or None
+        naam_4 = form.get("naam_4", "").strip() or None
+        team_naam = form.get("team_naam", "").strip() or None
+        db.add(ManualPair(
+            evening_id=event_id,
+            naam_1=naam_1, naam_2=naam_2, naam_3=naam_3, naam_4=naam_4,
+            team_naam=team_naam,
+        ))
+    else:  # paren
+        naam_2 = form.get("naam_2", "").strip() or None
+        db.add(ManualPair(evening_id=event_id, naam_1=naam_1, naam_2=naam_2))
+
+    db.commit()
+    return RedirectResponse(url="/?paar_toegevoegd=1", status_code=302)
 
 
 # ── Loslopers (Wedstrijdleider + Admin) ───────────────────────────────────────
@@ -163,6 +221,21 @@ async def af_aanmeldingen_list(
         query = query.filter(ClubEvening.type.in_(_AF_TYPE_MAP[active_filter]))
     evenings = query.all()
 
+    wachtend_counts: dict[int, int] = {}
+    if evenings:
+        rows = (
+            db.query(Registration.evening_id)
+            .filter(
+                Registration.evening_id.in_([e.id for e in evenings]),
+                Registration.niet_lid_goedkeuring_vereist == True,  # noqa: E712
+                Registration.niet_lid_goedgekeurd.isnot(True),
+                Registration.status != RegistrationStatus.afgemeld,
+            )
+            .all()
+        )
+        for (evening_id,) in rows:
+            wachtend_counts[evening_id] = wachtend_counts.get(evening_id, 0) + 1
+
     return templates.TemplateResponse(
         request,
         "admin/af_aanmeldingen.html",
@@ -170,6 +243,7 @@ async def af_aanmeldingen_list(
             "current_user": current_user,
             "evenings": evenings,
             "active_filter": active_filter if active_filter in _AF_TYPE_MAP else "",
+            "wachtend_counts": wachtend_counts,
         },
     )
 
@@ -187,34 +261,44 @@ def _af_aanmeldingen_data(db: Session, event_id: int) -> Optional[dict]:
         .all()
     )
 
+    # Aanmeldingen die nog op goedkeuring wachten (niet-ledenbeleid) tellen nog
+    # niet mee in de normale lijsten — pas ná goedkeuring verschijnen ze daar.
+    niet_lid_wachtend = [
+        r for r in all_regs
+        if r.niet_lid_goedkeuring_vereist
+        and not r.niet_lid_goedgekeurd
+        and r.status != RegistrationStatus.afgemeld
+    ]
+    regs = [r for r in all_regs if r not in niet_lid_wachtend]
+
     dtype = evening.deelnemers_type or "paren"
 
     if dtype == "individueel":
-        volledig_aangemeld = [r for r in all_regs if r.status == RegistrationStatus.aangemeld]
+        volledig_aangemeld = [r for r in regs if r.status == RegistrationStatus.aangemeld]
         loslopers = []
     elif dtype == "viertallen":
         volledig_aangemeld = [
-            r for r in all_regs
+            r for r in regs
             if r.status == RegistrationStatus.aangemeld and r.partner_naam and r.partner2_naam and r.partner3_naam
         ]
         loslopers = [
-            r for r in all_regs
+            r for r in regs
             if r.status in (RegistrationStatus.beschikbaar_solo, RegistrationStatus.aangemeld)
             and r not in volledig_aangemeld
             and r.status != RegistrationStatus.afgemeld
         ]
     else:  # paren
         volledig_aangemeld = [
-            r for r in all_regs
+            r for r in regs
             if r.status == RegistrationStatus.aangemeld and (r.partner_naam or r.person2_id)
         ]
         loslopers = [
-            r for r in all_regs
+            r for r in regs
             if r.status == RegistrationStatus.beschikbaar_solo
             or (r.status == RegistrationStatus.aangemeld and not r.partner_naam and not r.person2_id)
         ]
 
-    afgemeld = [r for r in all_regs if r.status == RegistrationStatus.afgemeld]
+    afgemeld = [r for r in regs if r.status == RegistrationStatus.afgemeld]
     all_manual = (
         db.query(ManualPair)
         .filter(ManualPair.evening_id == event_id)
@@ -232,7 +316,7 @@ def _af_aanmeldingen_data(db: Session, event_id: int) -> Optional[dict]:
         manual_aangemeld = [p for p in all_manual if p.naam_2]
         manual_loslopers = [p for p in all_manual if not p.naam_2]
 
-    te_laat_regs = [r for r in all_regs if r.te_laat and r.status != RegistrationStatus.afgemeld]
+    te_laat_regs = [r for r in regs if r.te_laat and r.status != RegistrationStatus.afgemeld]
 
     return {
         "evening": evening,
@@ -242,6 +326,7 @@ def _af_aanmeldingen_data(db: Session, event_id: int) -> Optional[dict]:
         "manual_aangemeld": manual_aangemeld,
         "manual_loslopers": manual_loslopers,
         "te_laat_regs": te_laat_regs,
+        "niet_lid_wachtend": niet_lid_wachtend,
         "dtype": dtype,
     }
 
@@ -511,6 +596,47 @@ async def te_laat_verwijderen(
     db.commit()
     return RedirectResponse(
         url=f"/beheer/af-aanmeldingen/{evening_id}?te_laat_verwijderd=1",
+        status_code=302,
+    )
+
+
+@router.post("/niet-lid/{reg_id}/goedkeuren")
+async def niet_lid_goedkeuren(
+    reg_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    reg = db.query(Registration).filter(Registration.id == reg_id).first()
+    if not reg:
+        return RedirectResponse(url="/beheer/af-aanmeldingen", status_code=302)
+    if reg.evening and not can_manage_club(current_user, reg.evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
+    reg.niet_lid_goedgekeurd = True
+    db.commit()
+    return RedirectResponse(
+        url=f"/beheer/af-aanmeldingen/{reg.evening_id}?niet_lid_goedgekeurd=1",
+        status_code=302,
+    )
+
+
+@router.post("/niet-lid/{reg_id}/afwijzen")
+async def niet_lid_afwijzen(
+    reg_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    reg = db.query(Registration).filter(Registration.id == reg_id).first()
+    if not reg:
+        return RedirectResponse(url="/beheer/af-aanmeldingen", status_code=302)
+    if reg.evening and not can_manage_club(current_user, reg.evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
+    evening_id = reg.evening_id
+    db.delete(reg)
+    db.commit()
+    return RedirectResponse(
+        url=f"/beheer/af-aanmeldingen/{evening_id}?niet_lid_afgewezen=1",
         status_code=302,
     )
 

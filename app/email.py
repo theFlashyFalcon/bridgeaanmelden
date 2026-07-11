@@ -221,6 +221,111 @@ def send_bulk_afmelding_wedstrijdleider_email(
     _send(to_email, f"Bulk afmelding {lid_naam} ({len(events)} evenementen)", html_body, text_body)
 
 
+def send_gastlink_email(to_email: str, club_naam: str, link_url: str) -> None:
+    _club_naam = _html.escape(club_naam)
+    _link_url = _html.escape(link_url)
+    html_body = f"""
+    <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">
+      <div style="background: #1e3a5f; padding: 1rem 1.5rem; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 1.3rem;">&#9824; Bridge Club</h1>
+      </div>
+      <div style="background: #fff; padding: 1.5rem; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hallo,</p>
+        <p>Je bent uitgenodigd om je aan te melden voor evenementen van <strong>{_club_naam}</strong>,
+        ook als je geen lid bent.</p>
+        <p style="text-align: center; margin: 1.5rem 0;">
+          <a href="{_link_url}"
+             style="background: #2e6da4; color: #fff; padding: .75rem 1.5rem; border-radius: 8px;
+                    text-decoration: none; font-weight: 600; display: inline-block;">
+            Naar de aanmeldpagina
+          </a>
+        </p>
+        <p style="font-size: .85rem; color: #666;">Of kopieer deze link: <span style="word-break: break-all;">{_link_url}</span></p>
+      </div>
+    </body></html>
+    """
+    text_body = (
+        f"Je bent uitgenodigd om je aan te melden voor evenementen van {club_naam}, "
+        f"ook als je geen lid bent.\n\n"
+        f"Ga naar de aanmeldpagina:\n{link_url}"
+    )
+    _send(to_email, f"Uitnodiging aanmelden — {club_naam}", html_body, text_body)
+
+
+def send_niet_lid_melding_email(
+    to_email: str,
+    wedstrijdleider_voornaam: str,
+    naam: str,
+    event_naam: str,
+    event_datum,
+) -> None:
+    datum_str = event_datum.strftime("%d-%m-%Y") if hasattr(event_datum, "strftime") else str(event_datum)
+    _wl_voornaam = _html.escape(wedstrijdleider_voornaam)
+    _naam = _html.escape(naam)
+    _event_naam = _html.escape(event_naam)
+    _datum_str = _html.escape(datum_str)
+    html_body = f"""
+    <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">
+      <div style="background: #1e3a5f; padding: 1rem 1.5rem; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 1.3rem;">&#9824; Bridge Club</h1>
+      </div>
+      <div style="background: #fff; padding: 1.5rem; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hallo {_wl_voornaam},</p>
+        <p><strong>{_naam}</strong> (niet-lid) is aangemeld voor <strong>{_event_naam}</strong>
+        op <strong>{_datum_str}</strong>. Dit is uitsluitend ter informatie, er is geen actie nodig.</p>
+      </div>
+    </body></html>
+    """
+    text_body = (
+        f"Hallo {wedstrijdleider_voornaam},\n\n"
+        f"{naam} (niet-lid) is aangemeld voor {event_naam} op {datum_str}. "
+        f"Dit is uitsluitend ter informatie, er is geen actie nodig."
+    )
+    _send(to_email, f"Aanmelding niet-lid {naam} — {event_naam}", html_body, text_body)
+
+
+def send_niet_lid_goedkeuring_email(
+    to_email: str,
+    wedstrijdleider_voornaam: str,
+    naam: str,
+    event_naam: str,
+    event_datum,
+    beheer_url: str,
+) -> None:
+    datum_str = event_datum.strftime("%d-%m-%Y") if hasattr(event_datum, "strftime") else str(event_datum)
+    _wl_voornaam = _html.escape(wedstrijdleider_voornaam)
+    _naam = _html.escape(naam)
+    _event_naam = _html.escape(event_naam)
+    _datum_str = _html.escape(datum_str)
+    _beheer_url = _html.escape(beheer_url)
+    html_body = f"""
+    <html><body style="font-family: system-ui, sans-serif; color: #1a1a1a; max-width: 480px; margin: 0 auto;">
+      <div style="background: #1e3a5f; padding: 1rem 1.5rem; border-radius: 8px 8px 0 0;">
+        <h1 style="color: #fff; margin: 0; font-size: 1.3rem;">&#9824; Bridge Club</h1>
+      </div>
+      <div style="background: #fff; padding: 1.5rem; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px;">
+        <p>Hallo {_wl_voornaam},</p>
+        <p><strong>{_naam}</strong> (niet-lid) wil zich aanmelden voor <strong>{_event_naam}</strong>
+        op <strong>{_datum_str}</strong>. Deze aanmelding wacht op jouw goedkeuring.</p>
+        <p style="text-align: center; margin: 1.5rem 0;">
+          <a href="{_beheer_url}"
+             style="background: #2e6da4; color: #fff; padding: .75rem 1.5rem; border-radius: 8px;
+                    text-decoration: none; font-weight: 600; display: inline-block;">
+            Aanmelding beoordelen
+          </a>
+        </p>
+      </div>
+    </body></html>
+    """
+    text_body = (
+        f"Hallo {wedstrijdleider_voornaam},\n\n"
+        f"{naam} (niet-lid) wil zich aanmelden voor {event_naam} op {datum_str}. "
+        f"Deze aanmelding wacht op jouw goedkeuring.\n\n"
+        f"Beoordeel de aanmelding op: {beheer_url}"
+    )
+    _send(to_email, f"Goedkeuring nodig: {naam} — {event_naam}", html_body, text_body)
+
+
 def send_approval_email(to_email: str, voornaam: str, login_url: str) -> None:
     _voornaam = _html.escape(voornaam)
     _login_url = _html.escape(login_url)

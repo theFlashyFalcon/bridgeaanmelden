@@ -15,6 +15,9 @@
       </div>
       {% endif %}
 
+      <input type="text" id="leden-zoek" placeholder="Zoek op naam of lidnummer…" autocomplete="off"
+             class="form-control" style="max-width:260px;">
+
       <div class="sort-container">
         <button type="button" class="btn btn-secondary btn-sm" id="sort-btn" onclick="toggleSortMenu()">&#9660; Sorteren</button>
         <div class="sort-menu" id="sort-menu">
@@ -99,5 +102,17 @@
       menu.classList.remove('is-open');
     }
   });
+
+  var ledenZoek = document.getElementById('leden-zoek');
+  if (ledenZoek) {
+    var rijen = document.querySelectorAll('.gebruiker-rij');
+    ledenZoek.addEventListener('input', function() {
+      var q = this.value.trim().toLowerCase();
+      rijen.forEach(function(rij) {
+        var tekst = rij.textContent.toLowerCase();
+        rij.style.display = !q || tekst.indexOf(q) !== -1 ? '' : 'none';
+      });
+    });
+  }
 </script>
 {% endblock %}

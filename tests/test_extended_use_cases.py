@@ -76,17 +76,20 @@ def make_lid_entry(db_session, voornaam, achternaam, nbb_nummer=None, club_id=No
 
 
 def _set_auth(app, member=None, admin=None, wl=None):
-    from app.auth import require_auth, require_admin, require_wedstrijdleider
+    from app.auth import get_current_user, require_auth, require_admin, require_wedstrijdleider
     from app.csrf import require_csrf
     app.dependency_overrides[require_csrf] = lambda: None
     if admin is not None:
         app.dependency_overrides[require_admin] = lambda: admin
         app.dependency_overrides[require_auth] = lambda: admin
+        app.dependency_overrides[get_current_user] = lambda: admin
     if wl is not None:
         app.dependency_overrides[require_wedstrijdleider] = lambda: wl
         app.dependency_overrides[require_auth] = lambda: wl
+        app.dependency_overrides[get_current_user] = lambda: wl
     if member is not None:
         app.dependency_overrides[require_auth] = lambda: member
+        app.dependency_overrides[get_current_user] = lambda: member
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -837,37 +840,6 @@ async def test_uc65_admin_club_aanmaken(client, db_session):
     assert club.stad == "Teststad"
 
 
-async def test_uc66_admin_rollen_overzicht(client, db_session):
-    """GET /beheer/rollen geeft 200 voor admin."""
-    from app.main import app
-    admin = make_member(db_session, role="admin", lidnummer="UC66")
-    _set_auth(app, admin=admin)
-
-    response = await client.get("/beheer/rollen")
-    assert response.status_code == 200
-
-
-async def test_uc67_admin_rol_toewijzen(client, db_session):
-    """POST /beheer/rollen koppelt een e-mailadres aan een rol."""
-    from app.main import app
-    from app.models import EmailRoleAssignment
-
-    admin = make_member(db_session, role="admin", lidnummer="UC67")
-    _set_auth(app, admin=admin)
-
-    response = await client.post(
-        "/beheer/rollen",
-        data={"email": "wl@test.nl", "role": "wedstrijdleider", "_csrf_token": "x"},
-    )
-    assert response.status_code == 302
-
-    toewijzing = db_session.query(EmailRoleAssignment).filter(
-        EmailRoleAssignment.email == "wl@test.nl"
-    ).first()
-    assert toewijzing is not None
-    assert toewijzing.role == "wedstrijdleider"
-
-
 async def test_uc68_admin_lid_toevoegen_aan_club(client, db_session):
     """POST /beheer/clubs/{id}/leden/toevoegen voegt een bestaand lid toe aan een club."""
     from app.main import app
@@ -888,6 +860,116 @@ async def test_uc68_admin_lid_toevoegen_aan_club(client, db_session):
         MemberClub.member_id == lid.id, MemberClub.club_id == club.id
     ).first()
     assert mc is not None and mc.role == "lid"
+
+
+# ── Rolbeheer via /leden ("Lijst met gebruikers") ──────────────────────────────
+
+async def test_leden_detail_toont_rolbeheer_per_club_niet_algemeen(client, db_session):
+    """
+    GET /leden/{id} toont voor een admin per (niet-algemene) club een knop om
+    iemand wedstrijdleider te maken; de algemene club wordt nooit als optie
+    getoond.
+    """
+    from app.main import app
+    from app.models import Club
+
+    admin = make_member(db_session, role="admin", lidnummer="UC-DET-A")
+    lid = make_member(db_session, voornaam="Bekijk", achternaam="Mij", lidnummer="UC-DET-L")
+    club_a = make_club(db_session, naam="Club Alpha")
+    algemeen = Club(naam="Algemeen", is_algemeen=True)
+    db_session.add(algemeen)
+    db_session.commit()
+    _set_auth(app, admin=admin)
+
+    response = await client.get(f"/leden/{lid.id}")
+    assert response.status_code == 200
+    assert f"Maak wedstrijdleider van {club_a.naam}" in response.text
+    assert "Maak wedstrijdleider van Algemeen" not in response.text
+
+
+async def test_leden_detail_wl_maken_van_specifieke_club(client, db_session):
+    """
+    Vanaf de /leden/{id}-pagina wordt een lid wedstrijdleider van één club via
+    de bestaande club-ledenbeheerroute (met next=terug naar /leden/{id}).
+    """
+    from app.auth import can_manage_club
+    from app.main import app
+    from app.models import MemberClub
+
+    admin = make_member(db_session, role="admin", lidnummer="UC-WL-A")
+    lid = make_member(db_session, voornaam="Nieuwe", achternaam="WL", lidnummer="UC-WL-L")
+    club_a = make_club(db_session, naam="Club A")
+    club_b = make_club(db_session, naam="Club B")
+    _set_auth(app, admin=admin)
+
+    response = await client.post(
+        f"/beheer/clubs/{club_a.id}/leden/toevoegen",
+        data={
+            "member_id": str(lid.id), "role": "wedstrijdleider",
+            "next": f"/leden/{lid.id}", "_csrf_token": "x",
+        },
+    )
+    assert response.status_code == 302
+    assert response.headers["location"].startswith(f"/leden/{lid.id}")
+
+    db_session.expire_all()
+    mc = db_session.query(MemberClub).filter(
+        MemberClub.member_id == lid.id, MemberClub.club_id == club_a.id
+    ).first()
+    assert mc is not None and mc.role == "wedstrijdleider"
+    assert lid.role == "wedstrijdleider"
+    assert can_manage_club(lid, club_a.id, db_session)
+    assert not can_manage_club(lid, club_b.id, db_session)
+
+
+async def test_leden_rol_route_wijst_wedstrijdleider_af(client, db_session):
+    """POST /leden/{id}/rol accepteert alleen lid of admin, nooit wedstrijdleider."""
+    from app.main import app
+
+    admin = make_member(db_session, role="admin", lidnummer="UC-ROL-A")
+    lid = make_member(db_session, lidnummer="UC-ROL-L")
+    _set_auth(app, admin=admin)
+
+    response = await client.post(
+        f"/leden/{lid.id}/rol",
+        data={"role": "wedstrijdleider", "_csrf_token": "x"},
+    )
+    assert response.status_code == 302
+    assert "fout=rol" in response.headers["location"]
+    db_session.expire_all()
+    assert lid.role == "lid"
+
+
+async def test_leden_rol_route_maakt_admin(client, db_session):
+    """POST /leden/{id}/rol met role=admin zet de globale rol direct op admin."""
+    from app.main import app
+
+    admin = make_member(db_session, role="admin", lidnummer="UC-ROL-A2")
+    lid = make_member(db_session, lidnummer="UC-ROL-L2")
+    _set_auth(app, admin=admin)
+
+    response = await client.post(
+        f"/leden/{lid.id}/rol",
+        data={"role": "admin", "_csrf_token": "x"},
+    )
+    assert response.status_code == 302
+    db_session.expire_all()
+    assert lid.role == "admin"
+
+
+async def test_leden_rol_route_alleen_voor_admins(client, db_session):
+    """Een niet-admin (ook een wedstrijdleider) krijgt 403 op POST /leden/{id}/rol."""
+    from app.main import app
+
+    wl = make_member(db_session, role="wedstrijdleider", lidnummer="UC-ROL-WL")
+    lid = make_member(db_session, lidnummer="UC-ROL-L3")
+    _set_auth(app, wl=wl)
+
+    response = await client.post(
+        f"/leden/{lid.id}/rol",
+        data={"role": "admin", "_csrf_token": "x"},
+    )
+    assert response.status_code == 403
 
 
 async def test_uc69_admin_clubrol_wijzigen(client, db_session):
@@ -1073,3 +1155,75 @@ async def test_uc74_aanmelden_zelfde_partner_geen_dubbel_bericht(client, db_sess
 
     count = db_session.query(Bericht).filter(Bericht.afzender_id == lid.id).count()
     assert count == 1
+
+
+# ── UC75: Viertallen — teamgenoten die appgebruiker zijn krijgen bericht ─────
+
+async def test_uc75_viertallen_teamgenoten_appgebruiker_krijgen_bericht(client, db_session):
+    """Bij een viertallen-aanmelding krijgt elke teamgenoot die ook appgebruiker is
+    (naam komt overeen) een bericht; onbekende namen leveren geen bericht op."""
+    from app.main import app
+    from app.models import Bericht
+
+    lid = make_member(db_session, voornaam="Piet", achternaam="Jansen", lidnummer="UC75-A")
+    teamgenoot2 = make_member(db_session, voornaam="Marie", achternaam="Bakker", lidnummer="UC75-B")
+    teamgenoot3 = make_member(db_session, voornaam="Klaas", achternaam="de Boer", lidnummer="UC75-C")
+    season = make_season(db_session)
+    evening = make_evening(db_session, season.id, deelnemers_type="viertallen")
+
+    _set_auth(app, member=lid)
+
+    response = await client.post(
+        f"/aanmelden/{evening.id}",
+        data={
+            "team_naam": "Team Piet",
+            "partner_voornaam": "Onbekende",
+            "partner_achternaam": "Speler",
+            "partner2_voornaam": "Marie",
+            "partner2_achternaam": "Bakker",
+            "partner3_voornaam": "Klaas",
+            "partner3_achternaam": "de Boer",
+            "_csrf_token": "x",
+        },
+    )
+    assert response.status_code == 302
+
+    berichten = db_session.query(Bericht).filter(Bericht.afzender_id == lid.id).all()
+    ontvangers = {b.ontvanger_id for b in berichten}
+    assert ontvangers == {teamgenoot2.id, teamgenoot3.id}
+    for b in berichten:
+        assert b.tekst == f"Piet Jansen heeft jullie opgegeven voor {evening.naam or evening.type}"
+
+
+# ── UC76: Viertallen — ongewijzigde teamgenoot geen dubbel bericht ───────────
+
+async def test_uc76_viertallen_ongewijzigde_teamgenoot_geen_dubbel_bericht(client, db_session):
+    """Opnieuw indienen van hetzelfde teamformulier stuurt geen tweede notificatie,
+    maar een nieuw toegevoegde teamgenoot krijgt wel een bericht."""
+    from app.main import app
+    from app.models import Bericht
+
+    lid = make_member(db_session, voornaam="Piet", achternaam="Jansen", lidnummer="UC76-A")
+    teamgenoot2 = make_member(db_session, voornaam="Marie", achternaam="Bakker", lidnummer="UC76-B")
+    teamgenoot3 = make_member(db_session, voornaam="Klaas", achternaam="de Boer", lidnummer="UC76-C")
+    season = make_season(db_session)
+    evening = make_evening(db_session, season.id, deelnemers_type="viertallen")
+
+    _set_auth(app, member=lid)
+
+    eerste = {
+        "team_naam": "Team Piet",
+        "partner2_voornaam": "Marie",
+        "partner2_achternaam": "Bakker",
+        "_csrf_token": "x",
+    }
+    await client.post(f"/aanmelden/{evening.id}", data=eerste)
+
+    tweede = dict(eerste, partner3_voornaam="Klaas", partner3_achternaam="de Boer")
+    response = await client.post(f"/aanmelden/{evening.id}", data=tweede)
+    assert response.status_code == 302
+
+    berichten = db_session.query(Bericht).filter(Bericht.afzender_id == lid.id).all()
+    ontvangers = [b.ontvanger_id for b in berichten]
+    assert ontvangers.count(teamgenoot2.id) == 1
+    assert ontvangers.count(teamgenoot3.id) == 1

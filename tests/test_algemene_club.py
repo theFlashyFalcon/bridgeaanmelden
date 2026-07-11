@@ -118,3 +118,21 @@ async def test_algemene_club_niet_verwijderbaar(client, db_session):
     assert response.status_code == 302
     assert "fout=algemeen" in response.headers["location"]
     assert db_session.query(Club).filter(Club.id == algemeen.id).first() is not None
+
+
+async def test_wedstrijdleider_rol_op_algemene_club_geeft_geen_beheerrechten(db_session):
+    """
+    Een MemberClub-rij met rol wedstrijdleider gekoppeld aan de algemene club
+    mag daar geen beheerrechten aan ontlenen — alleen globale admins mogen de
+    algemene club beheren.
+    """
+    from app.auth import can_manage_club
+
+    algemeen = make_algemene_club(db_session)
+    andere = make_club(db_session, naam="BC Andere")
+    wl = make_member(db_session, lidnummer="ALG-WL")
+    make_member_club(db_session, wl.id, algemeen.id, role="wedstrijdleider")
+    make_member_club(db_session, wl.id, andere.id, role="wedstrijdleider")
+
+    assert not can_manage_club(wl, algemeen.id, db_session)
+    assert can_manage_club(wl, andere.id, db_session)

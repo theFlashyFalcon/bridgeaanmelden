@@ -1,4 +1,5 @@
 """Beheer: clubs, club-ledenlijsten en weergave-instellingen."""
+from typing import Optional
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -6,12 +7,30 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth import require_admin, require_wedstrijdleider
+from app.auth import require_admin, require_wedstrijdleider, sync_global_role
 from app.database import get_db
 from app.models import Club, Lid, Member, MemberClub, MemberRole
 from app.templates_env import templates
 
 router = APIRouter(prefix="/beheer")
+
+
+def _veilig_pad(ruwe_url: Optional[str]) -> Optional[str]:
+    """
+    Geeft alleen het pad (+query) van ruwe_url terug als dat een veilig
+    relatief pad is, anders None. ruwe_url mag een volledige URL zijn (bv.
+    uit de Referer-header) of al een kaal pad — nooit de host overnemen, om
+    open redirects te voorkomen.
+    """
+    if not ruwe_url:
+        return None
+    onderdelen = urlsplit(ruwe_url)
+    if not onderdelen.path.startswith("/") or onderdelen.path.startswith("//"):
+        return None
+    pad = onderdelen.path
+    if onderdelen.query:
+        pad += f"?{onderdelen.query}"
+    return pad
 
 
 # ── Actieve beheer-club instellen (Admin + Wedstrijdleider) ──────────────────
@@ -39,17 +58,7 @@ async def actieve_club_instellen(
 
     request.session["active_beheer_club_id"] = club_id
 
-    terug = "/beheer/avonden"
-    referer = request.headers.get("referer")
-    if referer:
-        # Referer is een volledige URL (incl. host) — alleen het pad (+query)
-        # overnemen, nooit de host, om open redirects te voorkomen.
-        onderdelen = urlsplit(referer)
-        if onderdelen.path.startswith("/") and not onderdelen.path.startswith("//"):
-            terug = onderdelen.path
-            if onderdelen.query:
-                terug += f"?{onderdelen.query}"
-
+    terug = _veilig_pad(request.headers.get("referer")) or "/beheer/avonden"
     return RedirectResponse(url=terug, status_code=302)
 
 
@@ -214,8 +223,14 @@ def _vereis_clubbeheer(current_user: Member, club_id: int, db: Session) -> Club:
     return club
 
 
-def _toewijsbare_rollen(current_user: Member) -> list[str]:
-    """Rollen die deze beheerder mag toekennen: alleen admins de admin-rol."""
+def _toewijsbare_rollen(current_user: Member, club: Club) -> list[str]:
+    """
+    Rollen die deze beheerder mag toekennen: alleen admins de admin-rol; de
+    algemene club kan uitsluitend door globale admins beheerd worden, dus
+    daar is wedstrijdleider/club-admin nooit toewijsbaar.
+    """
+    if club.is_algemeen:
+        return [MemberRole.lid.value]
     if current_user.role == MemberRole.admin.value:
         return [r.value for r in MemberRole]
     return [MemberRole.lid.value, MemberRole.wedstrijdleider.value]
@@ -270,7 +285,7 @@ async def club_leden_beheer(
             "club": club,
             "club_leden": club_leden,
             "alle_members": alle_members,
-            "roles": _toewijsbare_rollen(current_user),
+            "roles": _toewijsbare_rollen(current_user, club),
         },
     )
 
@@ -282,34 +297,39 @@ async def club_lid_toevoegen(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
-    _vereis_clubbeheer(current_user, club_id, db)
+    club = _vereis_clubbeheer(current_user, club_id, db)
+    standaard_terug = f"/beheer/clubs/{club_id}/leden"
 
     form = await request.form()
     member_id_str = form.get("member_id", "").strip()
     role = form.get("role", MemberRole.lid.value).strip()
+    terug = _veilig_pad(form.get("next")) or standaard_terug
 
-    if role not in _toewijsbare_rollen(current_user):
+    if role not in _toewijsbare_rollen(current_user, club):
         role = MemberRole.lid.value
 
     try:
         member_id = int(member_id_str)
     except (ValueError, TypeError):
-        return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?fout=lid", status_code=302)
+        return RedirectResponse(url=f"{standaard_terug}?fout=lid", status_code=302)
 
     member = db.query(Member).filter(Member.id == member_id, Member.verwijderd_op.is_(None)).first()
     if not member:
-        return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?fout=lid", status_code=302)
+        return RedirectResponse(url=f"{standaard_terug}?fout=lid", status_code=302)
 
     existing = db.query(MemberClub).filter(
         MemberClub.club_id == club_id, MemberClub.member_id == member_id,
     ).first()
     if not existing:
         db.add(MemberClub(member_id=member_id, club_id=club_id, role=role))
-        db.flush()  # autoflush staat uit; zonder flush ziet _sync_global_role de nieuwe rij niet
-        _sync_global_role(member, db)
+        db.flush()  # autoflush staat uit; anders mist sync_global_role deze rij
+        sync_global_role(member, db)
         db.commit()
 
-    return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?toegevoegd=1", status_code=302)
+    scheidingsteken = "&" if "?" in terug else "?"
+    return RedirectResponse(
+        url=f"{terug}{scheidingsteken}toegevoegd=1", status_code=302
+    )
 
 
 @router.post("/clubs/{club_id}/leden/{member_id}/rol")
@@ -320,32 +340,35 @@ async def club_lid_rol_wijzigen(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
-    _vereis_clubbeheer(current_user, club_id, db)
+    club = _vereis_clubbeheer(current_user, club_id, db)
+    standaard_terug = f"/beheer/clubs/{club_id}/leden"
 
     form = await request.form()
     role = form.get("role", "").strip()
-    if role not in _toewijsbare_rollen(current_user):
-        return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?fout=rol", status_code=302)
+    terug = _veilig_pad(form.get("next")) or standaard_terug
+    if role not in _toewijsbare_rollen(current_user, club):
+        return RedirectResponse(url=f"{standaard_terug}?fout=rol", status_code=302)
 
     mc = db.query(MemberClub).filter(
         MemberClub.club_id == club_id, MemberClub.member_id == member_id,
     ).first()
     if not mc:
-        return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?fout=lid", status_code=302)
+        return RedirectResponse(url=f"{standaard_terug}?fout=lid", status_code=302)
 
     # Wedstrijdleiders mogen de rol van een club-admin niet aanpassen
     is_admin = current_user.role == MemberRole.admin.value
     if mc.role == MemberRole.admin.value and not is_admin:
-        return RedirectResponse(
-            url=f"/beheer/clubs/{club_id}/leden?fout=rol", status_code=302
-        )
+        return RedirectResponse(url=f"{standaard_terug}?fout=rol", status_code=302)
 
     mc.role = role
     member = db.query(Member).filter(Member.id == member_id).first()
     if member:
-        _sync_global_role(member, db)
+        sync_global_role(member, db)
     db.commit()
-    return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?opgeslagen=1", status_code=302)
+    scheidingsteken = "&" if "?" in terug else "?"
+    return RedirectResponse(
+        url=f"{terug}{scheidingsteken}opgeslagen=1", status_code=302
+    )
 
 
 @router.post("/clubs/{club_id}/leden/{member_id}/verwijder")
@@ -386,18 +409,6 @@ async def club_lid_uit_club_verwijder(
     return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?verwijderd=1", status_code=302)
 
 
-def _sync_global_role(member: Member, db: Session) -> None:
-    """Synchroniseert member.role met de hoogste rol in alle MemberClub rijen."""
-    all_mc = db.query(MemberClub).filter(MemberClub.member_id == member.id).all()
-    roles = [mc.role for mc in all_mc]
-    if MemberRole.admin.value in roles:
-        member.role = MemberRole.admin.value
-    elif MemberRole.wedstrijdleider.value in roles:
-        member.role = MemberRole.wedstrijdleider.value
-    else:
-        member.role = MemberRole.lid.value
-
-
 @router.get("/weergave/{rol}")
 async def set_weergave(
     rol: str,
@@ -411,8 +422,5 @@ async def set_weergave(
     else:
         raise HTTPException(status_code=400, detail="Ongeldige rol")
 
-    referer = request.headers.get("referer", "/")
-    # Only follow relative paths — reject absolute URLs to prevent open redirect
-    if not referer.startswith("/") or referer.startswith("//"):
-        referer = "/"
+    referer = _veilig_pad(request.headers.get("referer")) or "/"
     return RedirectResponse(url=referer, status_code=302)

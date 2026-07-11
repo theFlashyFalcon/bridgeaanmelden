@@ -66,7 +66,7 @@ def make_lid_entry(db_session, voornaam, achternaam, nbb_nummer=None, club_id=No
 
 def _set_auth(app, member=None, admin=None, wl=None):
     """Override auth-dependencies op de FastAPI-app voor de duur van één test."""
-    from app.auth import require_auth, require_admin, require_wedstrijdleider
+    from app.auth import get_current_user, require_auth, require_admin, require_wedstrijdleider
     from app.csrf import require_csrf
 
     app.dependency_overrides[require_csrf] = lambda: None
@@ -74,11 +74,14 @@ def _set_auth(app, member=None, admin=None, wl=None):
     if admin is not None:
         app.dependency_overrides[require_admin] = lambda: admin
         app.dependency_overrides[require_auth] = lambda: admin
+        app.dependency_overrides[get_current_user] = lambda: admin
     if wl is not None:
         app.dependency_overrides[require_wedstrijdleider] = lambda: wl
         app.dependency_overrides[require_auth] = lambda: wl
+        app.dependency_overrides[get_current_user] = lambda: wl
     if member is not None:
         app.dependency_overrides[require_auth] = lambda: member
+        app.dependency_overrides[get_current_user] = lambda: member
 
 
 # ── UC1: Homepage is publiek toegankelijk ─────────────────────────────────────

@@ -1,4 +1,4 @@
-"""Beheer: uitnodigingen, accountaanvragen, rollen, ledenlijst en SMTP-test."""
+"""Beheer: uitnodigingen, accountaanvragen, ledenlijst en SMTP-test."""
 import logging
 import secrets
 from datetime import datetime, timezone
@@ -22,7 +22,7 @@ from app.models import (
     MemberClub,
     MemberRole,
 )
-from app.routes.admin.helpers import _base_url
+from app.routes.admin.helpers import _base_url, _rol_opties
 from app.templates_env import templates
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ async def uitnodigingen(
         {
             "current_user": current_user,
             "invitations": invitations,
-            "roles": [r.value for r in MemberRole],
+            "role_opties": _rol_opties(club),
             "smtp_ok": smtp_geconfigureerd(),
         },
     )
@@ -98,7 +98,8 @@ async def create_invitation(
     form = await request.form()
     email = form.get("email", "").strip().lower()
     role = form.get("role", MemberRole.lid.value)
-    if role not in [r.value for r in MemberRole]:
+    toegestane_rollen = [waarde for waarde, _ in _rol_opties(club)]
+    if role not in toegestane_rollen:
         role = MemberRole.lid.value
 
     if not email:
@@ -205,7 +206,7 @@ async def aanvragen_list(
             "current_user": current_user,
             "aanvragen": aanvragen,
             "pending_count": pending_count,
-            "roles": [r.value for r in MemberRole],
+            "role_opties": _rol_opties(club),
             "smtp_ok": smtp_geconfigureerd(),
             "berichten": berichten,
             "ongelezen_berichten": ongelezen_berichten,
@@ -239,14 +240,19 @@ async def aanvraag_goedkeuren(
 ):
     from app.email import send_approval_email, send_invitation_email
 
-    form = await request.form()
-    role = form.get("role", MemberRole.lid.value)
-    if role not in [r.value for r in MemberRole]:
-        role = MemberRole.lid.value
-
     aanvraag = db.query(AccountRequest).filter(AccountRequest.id == aanvraag_id).first()
     if not aanvraag or aanvraag.status != AccountRequestStatus.wachtend:
         return RedirectResponse(url="/beheer/aanvragen", status_code=302)
+
+    aanvraag_club = (
+        db.query(Club).filter(Club.id == aanvraag.club_id).first()
+        if aanvraag.club_id else None
+    )
+    form = await request.form()
+    role = form.get("role", MemberRole.lid.value)
+    toegestane_rollen = [waarde for waarde, _ in _rol_opties(aanvraag_club)]
+    if role not in toegestane_rollen:
+        role = MemberRole.lid.value
 
     aanvraag.status = AccountRequestStatus.goedgekeurd
     aanvraag.beoordeeld_op = datetime.now(timezone.utc)
@@ -336,70 +342,6 @@ async def bericht_gelezen(
         bericht.gelezen = True
         db.commit()
     return RedirectResponse(url="/beheer/aanvragen", status_code=302)
-
-
-# ── Roltoewijzingen (Admin only) ──────────────────────────────────────────────
-
-@router.get("/rollen")
-async def rollen_list(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Member = Depends(require_admin),
-):
-    assignments = db.query(EmailRoleAssignment).order_by(EmailRoleAssignment.email).all()
-    return templates.TemplateResponse(
-        request,
-        "admin/rollen.html",
-        {
-            "current_user": current_user,
-            "assignments": assignments,
-            "roles": [r.value for r in MemberRole],
-        },
-    )
-
-
-@router.post("/rollen")
-async def upsert_role(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Member = Depends(require_admin),
-):
-    form = await request.form()
-    email = form.get("email", "").strip().lower()
-    role = form.get("role", "").strip()
-
-    if not email or role not in [r.value for r in MemberRole]:
-        return RedirectResponse(url="/beheer/rollen?error=1", status_code=302)
-
-    assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == email).first()
-    if assignment:
-        assignment.role = role
-    else:
-        db.add(EmailRoleAssignment(email=email, role=role))
-
-    member = db.query(Member).filter(Member.email == email).first()
-    if member:
-        member.role = role
-
-    db.commit()
-    return RedirectResponse(url="/beheer/rollen?opgeslagen=1", status_code=302)
-
-
-@router.post("/rollen/verwijder")
-async def delete_role(
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: Member = Depends(require_admin),
-):
-    form = await request.form()
-    assignment_id = form.get("id")
-    if assignment_id:
-        try:
-            db.query(EmailRoleAssignment).filter(EmailRoleAssignment.id == int(assignment_id)).delete()
-            db.commit()
-        except ValueError:
-            pass
-    return RedirectResponse(url="/beheer/rollen", status_code=302)
 
 
 # ── Ledenlijst beheren (Admin only) ──────────────────────────────────────────

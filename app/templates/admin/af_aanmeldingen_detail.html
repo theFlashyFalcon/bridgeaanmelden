@@ -17,6 +17,10 @@
   <div class="alert alert-success">Te-laat inschrijving goedgekeurd.</div>
 {% elif request.query_params.get('te_laat_verwijderd') %}
   <div class="alert alert-info">Te-laat inschrijving verwijderd.</div>
+{% elif request.query_params.get('niet_lid_goedgekeurd') %}
+  <div class="alert alert-success">Aanmelding goedgekeurd.</div>
+{% elif request.query_params.get('niet_lid_afgewezen') %}
+  <div class="alert alert-info">Aanmelding afgewezen.</div>
 {% endif %}
 
 {# ═══════════════════════════════════════════════════════════════════════════
@@ -327,6 +331,42 @@
       <p class="empty-state">Geen afmeldingen.</p>
     {% endif %}
   </section>
+
+  <!-- Niet-leden wachtend op goedkeuring -->
+  {% if niet_lid_wachtend %}
+  <section class="card">
+    <h2>Niet-leden wachtend op goedkeuring <span class="badge badge-warning">{{ niet_lid_wachtend | length }}</span></h2>
+    <p style="font-size:.85rem;color:var(--color-muted);margin-bottom:.75rem;">
+      Deze aanmeldingen tellen pas mee in de lijsten hierboven zodra je ze goedkeurt.
+    </p>
+    <ul class="participant-list" style="gap:.75rem;">
+      {% for reg in niet_lid_wachtend %}
+        <li class="participant-item" style="flex-direction:column;align-items:flex-start;gap:.35rem;padding:.75rem 0;">
+          <div>
+            <span class="{{ niet_lid_class(reg.person1.voornaam, reg.person1.achternaam) }}">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</span>
+            {% if reg.partner_naam %}
+              &amp; <span class="{{ niet_lid_class(reg.partner_naam.split(' ')[0], reg.partner_naam.split(' ', 1)[1] if ' ' in reg.partner_naam else '') }}">{{ reg.partner_naam }}</span>
+            {% endif %}
+          </div>
+          <div style="font-size:.8rem;color:var(--color-muted);">
+            Aangemeld op {{ reg.aangemeld_op.strftime('%d-%m-%Y %H:%M') }}
+          </div>
+          <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
+            <form method="post" action="/beheer/niet-lid/{{ reg.id }}/goedkeuren">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+              <button type="submit" class="btn btn-primary btn-sm">Goedkeuren</button>
+            </form>
+            <form method="post" action="/beheer/niet-lid/{{ reg.id }}/afwijzen"
+                  data-bevestig="Aanmelding afwijzen en verwijderen?">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+              <button type="submit" class="btn btn-danger btn-sm">Afwijzen</button>
+            </form>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
 
   <!-- Te laat aangemeld -->
   {% if te_laat_regs %}

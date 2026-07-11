@@ -31,17 +31,20 @@ def _no_csrf(app):
 
 
 def _set_auth(app, member=None, admin=None, wl=None):
-    from app.auth import require_admin, require_auth, require_wedstrijdleider
+    from app.auth import get_current_user, require_admin, require_auth, require_wedstrijdleider
     _no_csrf(app)
     if admin is not None:
         app.dependency_overrides[require_admin] = lambda: admin
         app.dependency_overrides[require_wedstrijdleider] = lambda: admin
         app.dependency_overrides[require_auth] = lambda: admin
+        app.dependency_overrides[get_current_user] = lambda: admin
     if wl is not None:
         app.dependency_overrides[require_wedstrijdleider] = lambda: wl
         app.dependency_overrides[require_auth] = lambda: wl
+        app.dependency_overrides[get_current_user] = lambda: wl
     if member is not None:
         app.dependency_overrides[require_auth] = lambda: member
+        app.dependency_overrides[get_current_user] = lambda: member
 
 
 def make_club(db_session, naam="BC Gen"):
@@ -1142,6 +1145,26 @@ async def test_uc174_seizoen_activeren_deactiveert_andere(client, db_session):
     assert s1.actief is False
 
 
+async def test_seizoen_overlap_geweigerd(client, db_session):
+    """Regressie: twee seizoenen met overlappende data voor dezelfde club
+    verbergen avonden achter het Season.actief-filter (bug gerapporteerd bij
+    club 'Crash', avonden van een oud seizoen verdwenen uit af-aanmeldingen)."""
+    from app.main import app
+    from app.models import Season
+    club = make_club(db_session)
+    make_season_nu(db_session, club_id=club.id, actief=True)
+    admin = make_member(db_session, lidnummer="UCOVL", role="admin")
+    _set_auth(app, admin=admin)
+    response = await client.post("/beheer/seizoenen", data={
+        "naam": "Overlappend",
+        "start_datum": (date.today() - timedelta(days=10)).isoformat(),
+        "eind_datum": (date.today() + timedelta(days=10)).isoformat(),
+    })
+    assert response.status_code == 302
+    assert "fout=overlap" in response.headers["location"]
+    assert db_session.query(Season).filter(Season.naam == "Overlappend").count() == 0
+
+
 async def test_uc175_leden_csv_import(client, db_session):
     from app.main import app
     from app.models import Lid
@@ -1227,23 +1250,31 @@ async def test_uc179_aanvraag_afwijzen(client, db_session):
 
 
 async def test_uc180_rol_toewijzen_en_valideren(client, db_session):
+    """POST /beheer/uitnodigingen valideert de rol en koppelt 'm aan het e-mailadres."""
     from app.main import app
     from app.models import EmailRoleAssignment
     admin = make_member(db_session, lidnummer="UC180", role="admin")
-    lid = make_member(db_session, lidnummer="UC180L")
-    lid.email = "rol@voorbeeld.nl"
-    db_session.commit()
+    make_club(db_session, naam="BC UC180")
     _set_auth(app, admin=admin)
-    fout = await client.post("/beheer/rollen", data={
+    ongeldig = await client.post("/beheer/uitnodigingen", data={
         "email": "rol@voorbeeld.nl", "role": "superuser",
     })
-    assert "error=1" in fout.headers["location"]
-    ok = await client.post("/beheer/rollen", data={
+    assert ongeldig.status_code == 302
+    db_session.expire_all()
+    toewijzing = db_session.query(EmailRoleAssignment).filter(
+        EmailRoleAssignment.email == "rol@voorbeeld.nl"
+    ).first()
+    assert toewijzing is not None and toewijzing.role == "lid"  # ongeldige rol valt terug op lid
+
+    ok = await client.post("/beheer/uitnodigingen", data={
         "email": "rol@voorbeeld.nl", "role": "wedstrijdleider",
     })
-    assert "opgeslagen=1" in ok.headers["location"]
+    assert ok.status_code == 302
     db_session.expire_all()
-    assert lid.role == "wedstrijdleider"
+    toewijzing = db_session.query(EmailRoleAssignment).filter(
+        EmailRoleAssignment.email == "rol@voorbeeld.nl"
+    ).first()
+    assert toewijzing.role == "wedstrijdleider"
     assert db_session.query(EmailRoleAssignment).count() == 1
 
 

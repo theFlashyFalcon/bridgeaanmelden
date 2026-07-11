@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, get_member_club_ids, is_member_of_club, require_auth
@@ -30,6 +31,17 @@ _TYPE_MAP: dict[str, list[str]] = {
 }
 
 
+@router.get("/gast/{token}")
+async def gast_binnenkomst(token: str, request: Request, db: Session = Depends(get_db)):
+    """Publieke ingang via de gepersonaliseerde clublink (zie /beheer/instellingen):
+    scoped de agenda op deze club voor niet-ingelogde bezoekers (gasten)."""
+    club = db.query(Club).filter(Club.gast_token == token).first()
+    if not club:
+        return RedirectResponse(url="/", status_code=302)
+    request.session["gast_club_id"] = club.id
+    return RedirectResponse(url="/?gast=1", status_code=302)
+
+
 @router.get("/")
 async def index(
     request: Request,
@@ -44,11 +56,16 @@ async def index(
 
     user_club_ids: list[int] = []
     user_clubs: list[Club] = []
+    gast_club: Optional[Club] = None
 
     if current_user:
         user_club_ids = get_member_club_ids(current_user, db)
         if user_club_ids:
             user_clubs = db.query(Club).filter(Club.id.in_(user_club_ids)).order_by(Club.naam).all()
+    else:
+        gast_club_id = request.session.get("gast_club_id")
+        if gast_club_id:
+            gast_club = db.query(Club).filter(Club.id == gast_club_id).first()
 
     query = (
         db.query(ClubEvening)
@@ -62,6 +79,10 @@ async def index(
         query = query.filter(
             (ClubEvening.club_id.in_(user_club_ids)) | (ClubEvening.club_id.is_(None))
         )
+    elif gast_club:
+        # Gasten zien uitsluitend de avonden van de club achter hun gastlink
+        # (geen legacy avonden zonder club).
+        query = query.filter(ClubEvening.club_id == gast_club.id)
 
     if hidden_types:
         all_hidden_db: list[str] = []
@@ -74,6 +95,8 @@ async def index(
 
     # Club-opzoektabel voor gebruik in de template (club_id → Club)
     club_map: dict[int, Club] = {c.id: c for c in user_clubs}
+    if gast_club:
+        club_map[gast_club.id] = gast_club
 
     user_regs: dict[int, Registration] = {}
     if current_user:
@@ -106,7 +129,7 @@ async def index(
             termijn_deadlines[e.id] = deadline
 
     # Alleen de evenementtypes die de club(s) van dit lid gebruiken (clubinstellingen)
-    beschikbare_types = merged_event_types(user_clubs)
+    beschikbare_types = merged_event_types([gast_club] if gast_club else user_clubs)
 
     welkom = request.session.pop("welkom", False)
     return templates.TemplateResponse(
@@ -122,6 +145,7 @@ async def index(
             "user_clubs": user_clubs,
             "club_map": club_map,
             "beschikbare_types": beschikbare_types,
+            "gast_club": gast_club,
         },
     )
 

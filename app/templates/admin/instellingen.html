@@ -19,6 +19,10 @@
     <div class="alert alert-error">Kies minimaal één label.</div>
   {% elif request.query_params.get('fout') == 'geen_club' %}
     <div class="alert alert-error">Geen club gevonden om instellingen voor op te slaan.</div>
+  {% elif request.query_params.get('mail_verstuurd') %}
+    <div class="alert alert-success">Mail met de aanmeldlink is verstuurd.</div>
+  {% elif request.query_params.get('mail_fout') %}
+    <div class="alert alert-error">Mail versturen is mislukt. Controleer het e-mailadres en de mailinstellingen.</div>
   {% endif %}
 
   <form method="post" action="/beheer/instellingen">
@@ -70,7 +74,72 @@
       {% endfor %}
     </div>
 
+    <h2 style="font-size:1.05rem;margin:1rem 0 .25rem;">Aanmelden door niet-leden</h2>
+    <p style="color: var(--color-muted); margin-bottom: .5rem; font-size: .85rem;">
+      Als er iemand wordt aangemeld die niet in de ledenlijst staat, moet het volgende gebeuren:
+    </p>
+    <div class="toggle-list" style="margin-bottom:1.25rem;">
+      {% for key, label in niet_lid_beleid_keuzes %}
+      <label class="toggle-item">
+        <input type="radio" name="niet_lid_beleid" value="{{ key }}"
+               {% if key == actief_niet_lid_beleid %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <h2 style="font-size:1.05rem;margin:1rem 0 .25rem;">Niet-lid-partner opgeven</h2>
+    <p style="color: var(--color-muted); margin-bottom: .5rem; font-size: .85rem;">
+      Het is mogelijk voor een lid om een niet-lid partner aan te melden:
+    </p>
+    <div class="toggle-list" style="margin-bottom:1.25rem;">
+      {% for key, label in niet_lid_paar_beleid_keuzes %}
+      <label class="toggle-item">
+        <input type="radio" name="niet_lid_paar_beleid" value="{{ key }}"
+               {% if key == actief_niet_lid_paar_beleid %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endfor %}
+    </div>
+
     <button type="submit" class="btn btn-primary">Opslaan</button>
   </form>
 </section>
+
+{% if gast_link %}
+<section class="card">
+  <h2 style="font-size:1.05rem;margin-bottom:.25rem;">Niet-leden uitnodigen</h2>
+  <p style="color: var(--color-muted); margin-bottom: .75rem; font-size: .9rem;">
+    Om niet-leden uit te nodigen om aan te melden voor je gebeurtenissen stuur ze deze link.
+    Ze komen dan bij de aanmeldpagina van je club en kunnen zich aanmelden — ze worden dan wel
+    gelabeld als niet-leden.
+  </p>
+  <div class="form-row" style="align-items:flex-end;">
+    <div class="form-group" style="flex:1;">
+      <label for="gast-link-veld">Aanmeldlink voor niet-leden</label>
+      <input type="text" id="gast-link-veld" value="{{ gast_link }}" readonly
+             style="width:100%;" onclick="this.select();">
+    </div>
+    <button type="button" class="btn btn-secondary" id="gast-link-kopieer">Kopieer</button>
+  </div>
+
+  <h3 style="font-size:.95rem;margin:1.25rem 0 .5rem;">Stuur mail met link naar</h3>
+  <form method="post" action="/beheer/instellingen/gastlink-mail" class="form-row" style="align-items:flex-end;">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+    <div class="form-group" style="flex:1;">
+      <label for="gast-link-email">E-mailadres</label>
+      <input type="email" id="gast-link-email" name="email" required placeholder="naam@voorbeeld.nl">
+    </div>
+    <button type="submit" class="btn btn-primary">Verstuur</button>
+  </form>
+</section>
+
+<script>
+  document.getElementById('gast-link-kopieer').addEventListener('click', function() {
+    var veld = document.getElementById('gast-link-veld');
+    veld.select();
+    navigator.clipboard && navigator.clipboard.writeText(veld.value);
+  });
+</script>
+{% endif %}
 {% endblock %}

@@ -22,6 +22,9 @@
         <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
           <span>
             {{ e.datum.strftime('%d %B %Y') }} — {{ e.naam or e.type }}
+            {% if wachtend_counts.get(e.id) %}
+              <span class="badge badge-warning">{{ wachtend_counts[e.id] }} wachtend op goedkeuring</span>
+            {% endif %}
           </span>
           <a href="/beheer/af-aanmeldingen/{{ e.id }}" class="btn btn-secondary btn-sm">Bekijken</a>
         </li>

@@ -7,7 +7,12 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.auth import get_wedstrijdleider_clubs, require_admin, require_wedstrijdleider
+from app.auth import (
+    get_wedstrijdleider_clubs,
+    require_admin,
+    require_wedstrijdleider,
+    sync_global_role,
+)
 from app.database import get_db
 from app.models import Club, ClubEvening, Lid, Member, MemberClub, MemberRole, Registration
 
@@ -121,6 +126,17 @@ async def member_detail(
     club_map = {
         c.id: c for c in db.query(Club).filter(Club.id.in_(club_ids)).all()
     } if club_ids else {}
+    club_membership_map = {mc.club_id: mc for mc in club_memberships}
+
+    # Clubs waarvan dit lid eventueel wedstrijdleider gemaakt kan worden; de
+    # algemene club kan uitsluitend door globale admins beheerd worden en
+    # wordt hier dus nooit als optie getoond.
+    clubs = (
+        db.query(Club)
+        .filter(Club.is_algemeen == False)  # noqa: E712
+        .order_by(Club.naam)
+        .all()
+    )
 
     return templates.TemplateResponse(
         request,
@@ -132,8 +148,40 @@ async def member_detail(
             "lid_match": lid_match,
             "club_memberships": club_memberships,
             "club_map": club_map,
+            "club_membership_map": club_membership_map,
+            "clubs": clubs,
         },
     )
+
+
+@router.post("/{member_id}/rol")
+async def member_rol_wijzigen(
+    member_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_admin),
+):
+    """
+    Zet de globale rol van een lid: lid of admin. Wedstrijdleiderschap is
+    altijd per club en loopt via de club-ledenbeheerroutes (/beheer/clubs/...).
+    """
+    form = await request.form()
+    role = form.get("role", "").strip()
+    if role not in (MemberRole.lid.value, MemberRole.admin.value):
+        return RedirectResponse(url=f"/leden/{member_id}?fout=rol", status_code=302)
+
+    member = db.query(Member).filter(Member.id == member_id).first()
+    if not member:
+        raise HTTPException(status_code=404)
+
+    if role == MemberRole.admin.value:
+        member.role = MemberRole.admin.value
+    else:
+        # Niet blind op 'lid' zetten: als dit lid nog per-club wedstrijdleider
+        # is, moet de globale rol dat blijven weerspiegelen.
+        sync_global_role(member, db)
+    db.commit()
+    return RedirectResponse(url=f"/leden/{member_id}?opgeslagen=1", status_code=302)
 
 
 @router.post("/{member_id}/verwijder")

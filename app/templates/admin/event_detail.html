@@ -10,11 +10,19 @@
   </p>
 </section>
 
+{% if request.query_params.get('fout') == 'naam_verplicht' %}
+  <div class="alert alert-error">Vul minimaal de naam van de eerste speler in.</div>
+{% endif %}
+
+<div class="action-buttons" style="margin-bottom:1rem;">
+  <button type="button" id="paar-toevoegen-toggle" class="btn btn-primary">Voeg paar toe</button>
+</div>
+
 {% if dtype == 'viertallen' %}
 
   <section class="card">
-    <h2>Teams <span class="badge">{{ volledig | length }}</span></h2>
-    {% if volledig %}
+    <h2>Teams <span class="badge">{{ volledig | length + manual_volledig | length }}</span></h2>
+    {% if volledig or manual_volledig %}
       <ul class="participant-list">
         {% for reg in volledig | sort(attribute='person1.achternaam') %}
           <li class="participant-item">
@@ -30,15 +38,30 @@
             </button>
           </li>
         {% endfor %}
+        {% for pair in manual_volledig %}
+          <li class="participant-item">
+            <button type="button" class="team-toggle-btn"
+                    data-captain="{{ pair.naam_1 }}"
+                    data-p1="{{ pair.naam_2 or '' }}"
+                    data-p2="{{ pair.naam_3 or '' }}"
+                    data-p3="{{ pair.naam_4 or '' }}"
+                    data-r1=""
+                    data-r2=""
+                    style="background:none;border:none;color:var(--color-primary,#1e3a5f);cursor:pointer;font-weight:600;text-decoration:underline;font-size:inherit;padding:0;">
+              {{ pair.team_naam or pair.naam_1 }}
+            </button>
+            <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
+          </li>
+        {% endfor %}
       </ul>
     {% else %}
       <p class="empty-state">Nog geen volledige teams aangemeld.</p>
     {% endif %}
   </section>
 
-  {% if loslopers %}
+  {% if loslopers or manual_loslopers %}
   <section class="card">
-    <h2>Onvolledige teams / loslopers <span class="badge badge-warning">{{ loslopers | length }}</span></h2>
+    <h2>Onvolledige teams / loslopers <span class="badge badge-warning">{{ loslopers | length + manual_loslopers | length }}</span></h2>
     <ul class="participant-list">
       {% for reg in loslopers %}
         <li class="participant-item">
@@ -54,6 +77,15 @@
           </button>
         </li>
       {% endfor %}
+      {% for pair in manual_loslopers %}
+        <li class="participant-item">
+          {% set groep = [pair.naam_1] %}
+          {% if pair.naam_2 %}{% set _ = groep.append(pair.naam_2) %}{% endif %}
+          {% if pair.naam_3 %}{% set _ = groep.append(pair.naam_3) %}{% endif %}
+          {{ groep | join(', ') }}
+          <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
+        </li>
+      {% endfor %}
     </ul>
   </section>
   {% endif %}
@@ -61,11 +93,14 @@
 {% elif dtype == 'individueel' %}
 
   <section class="card">
-    <h2>Aangemeld <span class="badge">{{ volledig | length }}</span></h2>
-    {% if volledig %}
+    <h2>Aangemeld <span class="badge">{{ volledig | length + manual_volledig | length }}</span></h2>
+    {% if volledig or manual_volledig %}
       <ul class="participant-list">
         {% for reg in volledig | sort(attribute='person1.achternaam') %}
           <li class="participant-item">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</li>
+        {% endfor %}
+        {% for pair in manual_volledig %}
+          <li class="participant-item">{{ pair.naam_1 }} <em style="font-size:.8rem;color:var(--color-muted);">(handmatig)</em></li>
         {% endfor %}
       </ul>
     {% else %}
@@ -76,8 +111,8 @@
 {% else %}
 
   <section class="card">
-    <h2>Aangemelde paren <span class="badge">{{ volledig | length }}</span></h2>
-    {% if volledig %}
+    <h2>Aangemelde paren <span class="badge">{{ volledig | length + manual_volledig | length }}</span></h2>
+    {% if volledig or manual_volledig %}
       <ul class="participant-list">
         {% for reg in volledig | sort(attribute='person1.achternaam') %}
           <li class="participant-item">
@@ -90,21 +125,30 @@
             {% if reg.status == 'combipaar' %}<em>(combipaar)</em>{% endif %}
           </li>
         {% endfor %}
+        {% for pair in manual_volledig %}
+          <li class="participant-item">
+            {{ pair.naam_1 }} &amp; {{ pair.naam_2 }}
+            <em style="font-size:.8rem;color:var(--color-muted);"> (handmatig)</em>
+          </li>
+        {% endfor %}
       </ul>
     {% else %}
       <p class="empty-state">Nog geen paren aangemeld.</p>
     {% endif %}
   </section>
 
-  {% if loslopers %}
+  {% if loslopers or manual_loslopers %}
   <section class="card">
-    <h2>Loslopers <span class="badge badge-warning">{{ loslopers | length }}</span></h2>
+    <h2>Loslopers <span class="badge badge-warning">{{ loslopers | length + manual_loslopers | length }}</span></h2>
     <p style="color:var(--color-muted);font-size:.875rem;margin-bottom:.75rem;">
       Aangemeld zonder partner of als beschikbaar losloper.
     </p>
     <ul class="participant-list">
       {% for reg in loslopers %}
         <li class="participant-item">{{ reg.person1.voornaam }} {{ reg.person1.achternaam }}</li>
+      {% endfor %}
+      {% for pair in manual_loslopers %}
+        <li class="participant-item">{{ pair.naam_1 }} <em style="font-size:.8rem;color:var(--color-muted);">(handmatig)</em></li>
       {% endfor %}
     </ul>
   </section>
@@ -160,6 +204,63 @@
             style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
     <h2 id="team-modal-titel" style="margin-bottom:1rem;"></h2>
     <ul id="team-modal-leden" class="participant-list" style="margin:0;padding:0;"></ul>
+  </div>
+</div>
+
+<!-- Voeg paar toe modal -->
+<div id="paar-toevoegen-modal" class="modal-overlay" style="display:none;" aria-modal="true" role="dialog">
+  <div class="modal" style="max-width:400px;text-align:left;position:relative;">
+    <button id="paar-toevoegen-sluiten" type="button" aria-label="Sluiten"
+            style="position:absolute;top:.75rem;right:.75rem;background:none;border:none;font-size:1.4rem;cursor:pointer;line-height:1;">&times;</button>
+    <h2 style="margin-bottom:1rem;">Voeg paar toe</h2>
+    <form method="post" action="/beheer/aanmeldingen/{{ evening.id }}/toevoegen" class="form-stack">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+
+      {% if dtype == 'individueel' %}
+        <div class="form-group">
+          <label for="paar-naam-1">Naam deelnemer</label>
+          <input type="text" id="paar-naam-1" name="naam_1" required autocomplete="off" placeholder="Volledige naam">
+        </div>
+      {% elif dtype == 'viertallen' %}
+        <div class="form-group">
+          <label for="paar-team-naam">Teamnaam <span style="font-weight:400;color:var(--color-muted)">(optioneel)</span></label>
+          <input type="text" id="paar-team-naam" name="team_naam" autocomplete="off" placeholder="Teamnaam">
+        </div>
+        <div class="form-group">
+          <label for="paar-naam-1">Naam speler 1 (captain)</label>
+          <input type="text" id="paar-naam-1" name="naam_1" required autocomplete="off" placeholder="Volledige naam">
+        </div>
+        <div class="form-group">
+          <label for="paar-naam-2">Naam speler 2</label>
+          <input type="text" id="paar-naam-2" name="naam_2" autocomplete="off" placeholder="Volledige naam">
+        </div>
+        <div class="form-group">
+          <label for="paar-naam-3">Naam speler 3</label>
+          <input type="text" id="paar-naam-3" name="naam_3" autocomplete="off" placeholder="Volledige naam">
+        </div>
+        <div class="form-group">
+          <label for="paar-naam-4">Naam speler 4</label>
+          <input type="text" id="paar-naam-4" name="naam_4" autocomplete="off" placeholder="Volledige naam">
+        </div>
+        <p style="font-size:.8rem;color:var(--color-muted);">
+          Minder dan 4 namen ingevuld? Dan verschijnt het team bij de loslopers.
+        </p>
+      {% else %}
+        <div class="form-group">
+          <label for="paar-naam-1">Naam speler 1</label>
+          <input type="text" id="paar-naam-1" name="naam_1" required autocomplete="off" placeholder="Volledige naam">
+        </div>
+        <div class="form-group">
+          <label for="paar-naam-2">Naam speler 2</label>
+          <input type="text" id="paar-naam-2" name="naam_2" autocomplete="off" placeholder="Volledige naam">
+        </div>
+      {% endif %}
+
+      <div class="action-buttons" style="margin-top:1rem;">
+        <button type="submit" class="btn btn-primary">Bevestig</button>
+        <button type="button" id="paar-toevoegen-annuleer" class="btn btn-secondary">Annuleren</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -222,6 +323,29 @@
   teamModal.addEventListener('click', function(e) { if (e.target === teamModal) teamModal.style.display = 'none'; });
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' && teamModal.style.display !== 'none') teamModal.style.display = 'none';
+  });
+})();
+
+(function() {
+  var toggle  = document.getElementById('paar-toevoegen-toggle');
+  var modal   = document.getElementById('paar-toevoegen-modal');
+  var sluiten = document.getElementById('paar-toevoegen-sluiten');
+  var annuleer = document.getElementById('paar-toevoegen-annuleer');
+  if (!toggle || !modal) return;
+
+  function openModal() {
+    modal.style.display = 'flex';
+    var eersteVeld = modal.querySelector('input[type="text"]');
+    if (eersteVeld) eersteVeld.focus();
+  }
+  function sluitModal() { modal.style.display = 'none'; }
+
+  toggle.addEventListener('click', openModal);
+  sluiten.addEventListener('click', sluitModal);
+  annuleer.addEventListener('click', sluitModal);
+  modal.addEventListener('click', function(e) { if (e.target === modal) sluitModal(); });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && modal.style.display !== 'none') sluitModal();
   });
 })();
 </script>

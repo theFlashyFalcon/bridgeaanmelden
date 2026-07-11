@@ -34,6 +34,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/beheer")
 
 
+def _seizoen_overlapt(
+    db: Session, club_id: Optional[int], start: date, eind: date
+) -> bool:
+    """True als deze club al een seizoen heeft dat deze periode overlapt."""
+    return (
+        db.query(Season)
+        .filter(
+            Season.club_id == club_id,
+            Season.start_datum <= eind,
+            Season.eind_datum >= start,
+        )
+        .first()
+        is not None
+    )
+
+
 EVENING_TYPES = [
     ("clubavond", "Clubavond"),
     ("jeugdtraining", "Jeugdtraining"),
@@ -213,10 +229,14 @@ async def seizoen_add_from_beheren(
     if start >= eind:
         return RedirectResponse(url="/beheer/avonden?fout=datum", status_code=302)
 
+    club_id = club.id if club else None
+    if _seizoen_overlapt(db, club_id, start, eind):
+        return RedirectResponse(url="/beheer/avonden?fout=overlap", status_code=302)
+
     actief = form.get("actief") == "on"
     if actief and club:
         db.query(Season).filter(Season.club_id == club.id).update({"actief": False})
-    db.add(Season(naam=naam, start_datum=start, eind_datum=eind, actief=actief, club_id=club.id if club else None))
+    db.add(Season(naam=naam, start_datum=start, eind_datum=eind, actief=actief, club_id=club_id))
     db.commit()
     return RedirectResponse(url="/beheer/avonden?seizoen_aangemaakt=1", status_code=302)
 
@@ -414,6 +434,9 @@ async def seizoen_add(
             return RedirectResponse(url="/beheer/seizoenen?fout=datum", status_code=302)
         if start_datum >= eind_datum:
             return RedirectResponse(url="/beheer/seizoenen?fout=datum", status_code=302)
+        club_id = club.id if club else None
+        if _seizoen_overlapt(db, club_id, start_datum, eind_datum):
+            return RedirectResponse(url="/beheer/seizoenen?fout=overlap", status_code=302)
         if actief and club:
             db.query(Season).filter(Season.club_id == club.id).update({"actief": False})
         db.add(Season(
@@ -421,7 +444,7 @@ async def seizoen_add(
             start_datum=start_datum,
             eind_datum=eind_datum,
             actief=actief,
-            club_id=club.id if club else None,
+            club_id=club_id,
         ))
         db.commit()
     return RedirectResponse(url="/beheer/seizoenen?aangemaakt=1", status_code=302)
@@ -460,8 +483,25 @@ async def instellingen_form(
         enabled_labels,
         enabled_rankings,
     )
+    from app.niet_leden import (
+        NIET_LID_BELEID_KEUZES,
+        NIET_LID_PAAR_BELEID_KEUZES,
+        maak_gast_token,
+        niet_lid_beleid,
+        niet_lid_paar_beleid,
+    )
+    from app.routes.admin.helpers import _base_url
 
     club = get_admin_club(current_user, db, request)
+
+    gast_link = None
+    if club is not None:
+        if not club.gast_token:
+            club.gast_token = maak_gast_token()
+            db.commit()
+            db.refresh(club)
+        gast_link = f"{_base_url(request)}/gast/{club.gast_token}"
+
     return templates.TemplateResponse(
         request,
         "admin/instellingen.html",
@@ -474,6 +514,11 @@ async def instellingen_form(
             "actieve_types": enabled_event_types(club),
             "actieve_rankings": enabled_rankings(club),
             "actieve_labels": enabled_labels(club),
+            "niet_lid_beleid_keuzes": NIET_LID_BELEID_KEUZES,
+            "niet_lid_paar_beleid_keuzes": NIET_LID_PAAR_BELEID_KEUZES,
+            "actief_niet_lid_beleid": niet_lid_beleid(club),
+            "actief_niet_lid_paar_beleid": niet_lid_paar_beleid(club),
+            "gast_link": gast_link,
         },
     )
 
@@ -485,6 +530,7 @@ async def instellingen_save(
     current_user: Member = Depends(require_wedstrijdleider),
 ):
     from app.club_settings import EVENT_TYPE_KEYS, LABEL_KEYS, RANKING_KEYS
+    from app.niet_leden import NIET_LID_BELEID_KEYS, NIET_LID_PAAR_BELEID_KEYS
 
     club = get_admin_club(current_user, db, request)
     if not club:
@@ -505,7 +551,51 @@ async def instellingen_save(
     club.evenement_types = ",".join(gekozen_types)
     club.ranking_weergaves = ",".join(gekozen_rankings)
     club.labels = ",".join(gekozen_labels)
+
+    niet_lid_beleid = form.get("niet_lid_beleid", "")
+    if niet_lid_beleid in NIET_LID_BELEID_KEYS:
+        club.niet_lid_beleid = niet_lid_beleid
+    niet_lid_paar_beleid = form.get("niet_lid_paar_beleid", "")
+    if niet_lid_paar_beleid in NIET_LID_PAAR_BELEID_KEYS:
+        club.niet_lid_paar_beleid = niet_lid_paar_beleid
+
     db.commit()
     return RedirectResponse(url="/beheer/instellingen?opgeslagen=1", status_code=302)
+
+
+@router.post("/instellingen/gastlink-mail")
+async def instellingen_gastlink_mail(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    from app.email import send_gastlink_email, smtp_geconfigureerd
+    from app.niet_leden import maak_gast_token
+    from app.routes.admin.helpers import _base_url
+
+    club = get_admin_club(current_user, db, request)
+    if not club:
+        return RedirectResponse(url="/beheer/instellingen?fout=geen_club", status_code=302)
+
+    form = await request.form()
+    email = form.get("email", "").strip()
+    if not email:
+        return RedirectResponse(url="/beheer/instellingen?mail_fout=1", status_code=302)
+
+    if not club.gast_token:
+        club.gast_token = maak_gast_token()
+        db.commit()
+
+    if not smtp_geconfigureerd():
+        return RedirectResponse(url="/beheer/instellingen?mail_fout=1", status_code=302)
+
+    link = f"{_base_url(request)}/gast/{club.gast_token}"
+    try:
+        send_gastlink_email(email, club.naam, link)
+    except Exception:
+        logger.exception("Gastlink-mail versturen mislukt naar %s", email)
+        return RedirectResponse(url="/beheer/instellingen?mail_fout=1", status_code=302)
+
+    return RedirectResponse(url="/beheer/instellingen?mail_verstuurd=1", status_code=302)
 
 

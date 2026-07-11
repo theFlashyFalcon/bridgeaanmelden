@@ -1,4 +1,5 @@
 import logging
+import secrets
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -150,6 +151,80 @@ def _stuur_herhaal_notificatie(
     db.commit()
 
 
+def _meld_niet_lid_wl(
+    db: Session,
+    request: Request,
+    evening: ClubEvening,
+    naam: str,
+    afzender: Member,
+    goedkeuring: bool,
+) -> None:
+    """Meldt WL's over een niet-lid-aanmelding: bericht altijd, e-mail alleen als
+    SMTP geconfigureerd is. `goedkeuring=True` betekent dat de aanmelding nog
+    goedgekeurd moet worden; anders is het puur informatief."""
+    from app.email import send_niet_lid_goedkeuring_email, send_niet_lid_melding_email
+    from app.routes.admin.helpers import _base_url
+
+    event_naam = evening.naam or evening.type
+    wedstrijdleiders = _club_wedstrijdleiders(db, evening.club_id)
+    for wl in wedstrijdleiders:
+        tekst = (
+            f"{naam} (niet-lid) wil zich aanmelden voor {event_naam} en wacht op jouw goedkeuring."
+            if goedkeuring
+            else f"{naam} (niet-lid) is aangemeld voor {event_naam}. Ter informatie, geen actie nodig."
+        )
+        db.add(Bericht(
+            afzender_id=afzender.id,
+            ontvanger_id=wl.id,
+            onderwerp=f"{'Goedkeuring nodig' if goedkeuring else 'Aanmelding niet-lid'}: {naam}",
+            tekst=tekst,
+            is_systeem=True,
+        ))
+    db.commit()
+
+    if smtp_geconfigureerd():
+        for wl in wedstrijdleiders:
+            if not wl.email:
+                continue
+            try:
+                if goedkeuring:
+                    beheer_url = f"{_base_url(request)}/beheer/af-aanmeldingen/{evening.id}"
+                    send_niet_lid_goedkeuring_email(
+                        wl.email, wl.voornaam, naam, event_naam, evening.datum, beheer_url,
+                    )
+                else:
+                    send_niet_lid_melding_email(wl.email, wl.voornaam, naam, event_naam, evening.datum)
+            except Exception:
+                logger.exception("E-mail niet-lid-melding versturen mislukt naar wedstrijdleider %s", wl.email)
+
+
+def _niet_lid_redirect(
+    db: Session,
+    request: Request,
+    evening: ClubEvening,
+    current_user: Member,
+    vereist: bool,
+    beleid: Optional[str],
+    gast_toegang: bool,
+    normale_url: str,
+) -> RedirectResponse:
+    """Redirect na een aanmelding die (mogelijk) onder niet-ledenbeleid valt: stuurt
+    een WL-melding wanneer nodig en geeft de bijpassende bevestigingspagina terug.
+    `normale_url` is de redirect die zonder niet-ledenbeleid gebruikt zou worden."""
+    naam = f"{current_user.voornaam} {current_user.achternaam}"
+    if vereist and beleid == "goedkeuring":
+        _meld_niet_lid_wl(db, request, evening, naam, current_user, goedkeuring=True)
+        url = "/?gast=1&wacht_goedkeuring=1" if gast_toegang else "/?wacht_goedkeuring=1"
+        return RedirectResponse(url=url, status_code=302)
+    if vereist and beleid == "gemeld":
+        _meld_niet_lid_wl(db, request, evening, naam, current_user, goedkeuring=False)
+    url = normale_url
+    if gast_toegang:
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}gast=1"
+    return RedirectResponse(url=url, status_code=302)
+
+
 # Let op: deze route moet vóór /aanmelden/{event_id} staan, anders matcht
 # "wijzigen" als event_id en geeft dat een 422.
 @router.get("/aanmelden/wijzigen")
@@ -157,31 +232,52 @@ async def wijzigen_redirect(request: Request):
     return RedirectResponse(url="/", status_code=302)
 
 
+def _gast_check(request: Request, current_user: Optional[Member], evening: ClubEvening) -> bool:
+    """Bepaalt of dit een geldige gast-toegang is (geen login, wel een gastlink-sessie
+    voor exact deze club) en raist 401 voor elke andere niet-ingelogde bezoeker."""
+    if current_user:
+        return False
+    if not evening.club_id or request.session.get("gast_club_id") != evening.club_id:
+        raise HTTPException(status_code=401, detail="Niet ingelogd")
+    return True
+
+
 @router.get("/aanmelden/{event_id}")
 async def registration_form(
     event_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Member = Depends(require_auth),
+    current_user: Optional[Member] = Depends(get_current_user),
 ):
+    from app.niet_leden import niet_lid_beleid
+
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
-    if not is_member_of_club(current_user, evening.club_id, db):
-        raise HTTPException(status_code=403, detail="Geen lid van deze club")
+
+    if current_user:
+        if not is_member_of_club(current_user, evening.club_id, db):
+            raise HTTPException(status_code=403, detail="Geen lid van deze club")
+        gast_toegang = False
+    else:
+        gast_toegang = _gast_check(request, current_user, evening)
 
     if evening.datum < date.today():
         return RedirectResponse(url="/", status_code=302)
 
-    existing = (
-        db.query(Registration)
-        .filter(
-            Registration.evening_id == event_id,
-            Registration.person1_id == current_user.id,
-            Registration.status != RegistrationStatus.afgemeld,
+    niet_lid_geblokkeerd = gast_toegang and niet_lid_beleid(evening.club) == "geblokkeerd"
+
+    existing = None
+    if current_user:
+        existing = (
+            db.query(Registration)
+            .filter(
+                Registration.evening_id == event_id,
+                Registration.person1_id == current_user.id,
+                Registration.status != RegistrationStatus.afgemeld,
+            )
+            .first()
         )
-        .first()
-    )
 
     return templates.TemplateResponse(
         request,
@@ -190,6 +286,8 @@ async def registration_form(
             "current_user": current_user,
             "evening": evening,
             "existing": existing,
+            "gast_toegang": gast_toegang,
+            "niet_lid_geblokkeerd": niet_lid_geblokkeerd,
         },
     )
 
@@ -199,35 +297,41 @@ async def registration_submit(
     event_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Member = Depends(require_auth),
+    current_user: Optional[Member] = Depends(get_current_user),
 ):
+    from app.niet_leden import is_bekend_lid, niet_lid_beleid, niet_lid_paar_beleid
+
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
-    if not is_member_of_club(current_user, evening.club_id, db):
-        raise HTTPException(status_code=403, detail="Geen lid van deze club")
+
+    if current_user:
+        if not is_member_of_club(current_user, evening.club_id, db):
+            raise HTTPException(status_code=403, detail="Geen lid van deze club")
+        gast_toegang = False
+    else:
+        gast_toegang = _gast_check(request, current_user, evening)
 
     if evening.datum < date.today():
         return RedirectResponse(url="/", status_code=302)
 
     form = await request.form()
     action = form.get("action", "aanmelden")
-    partner_voornaam = form.get("partner_voornaam", "").strip()
-    partner_achternaam = form.get("partner_achternaam", "").strip()
-
-    te_laat = _is_na_inschrijftermijn(evening)
-
-    existing = (
-        db.query(Registration)
-        .filter(
-            Registration.evening_id == event_id,
-            Registration.person1_id == current_user.id,
-            Registration.status != RegistrationStatus.afgemeld,
-        )
-        .first()
-    )
 
     if action == "afmelden":
+        if gast_toegang:
+            # Gasten hebben geen bestaande aanmelding om af te melden.
+            return RedirectResponse(url="/?gast=1", status_code=302)
+
+        existing = (
+            db.query(Registration)
+            .filter(
+                Registration.evening_id == event_id,
+                Registration.person1_id == current_user.id,
+                Registration.status != RegistrationStatus.afgemeld,
+            )
+            .first()
+        )
         if existing:
             existing.status = RegistrationStatus.afgemeld
             existing.partner_naam = None
@@ -259,6 +363,52 @@ async def registration_submit(
                     logger.exception("E-mail afmelding versturen mislukt naar wedstrijdleider %s", wl.email)
         return RedirectResponse(url="/?afgemeld=1", status_code=302)
 
+    # Vanaf hier: aanmelden. Niet-leden (gasten) worden hier pas aangemaakt —
+    # zo blijft een afmeld-verzoek (hierboven) volledig kosteloos.
+    gast_niet_lid_beleid: Optional[str] = None
+    if gast_toegang:
+        gast_niet_lid_beleid = niet_lid_beleid(evening.club)
+        if gast_niet_lid_beleid == "geblokkeerd":
+            return RedirectResponse(url=f"/aanmelden/{event_id}?fout=niet_lid", status_code=302)
+
+        eigen_voornaam = form.get("eigen_voornaam", "").strip()
+        eigen_achternaam = form.get("eigen_achternaam", "").strip()
+        if not eigen_voornaam or not eigen_achternaam:
+            return RedirectResponse(url=f"/aanmelden/{event_id}?fout=eigen_naam", status_code=302)
+
+        current_user = Member(
+            voornaam=eigen_voornaam,
+            achternaam=eigen_achternaam,
+            lidnummer=f"GAST-{secrets.token_hex(6)}",
+            role=MemberRole.lid.value,
+        )
+        db.add(current_user)
+        db.commit()
+        db.refresh(current_user)
+
+    # "vereist" stuurt de bevestigingspagina/melding aan (goedkeuring én gemeld);
+    # "db_goedkeuring" is het opgeslagen vlag dat de aanmelding uit de normale
+    # lijsten houdt totdat de WL goedkeurt (alleen bij het beleid "goedkeuring").
+    gast_niet_lid_vereist = gast_toegang and gast_niet_lid_beleid in ("goedkeuring", "gemeld")
+    gast_db_goedkeuring = gast_toegang and gast_niet_lid_beleid == "goedkeuring"
+
+    partner_voornaam = form.get("partner_voornaam", "").strip()
+    partner_achternaam = form.get("partner_achternaam", "").strip()
+
+    te_laat = _is_na_inschrijftermijn(evening)
+
+    existing = None
+    if not gast_toegang:
+        existing = (
+            db.query(Registration)
+            .filter(
+                Registration.evening_id == event_id,
+                Registration.person1_id == current_user.id,
+                Registration.status != RegistrationStatus.afgemeld,
+            )
+            .first()
+        )
+
     deelnemers_type = evening.deelnemers_type or "paren"
 
     # Individueel: geen partner nodig
@@ -280,9 +430,13 @@ async def registration_submit(
                 type=RegistrationType.los,
                 status=RegistrationStatus.aangemeld,
                 te_laat=te_laat,
+                niet_lid_goedkeuring_vereist=gast_db_goedkeuring,
             ))
         db.commit()
-        return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
+        return _niet_lid_redirect(
+            db, request, evening, current_user, gast_niet_lid_vereist, gast_niet_lid_beleid,
+            gast_toegang, "/?te_laat=1" if te_laat else "/?bevestigd=1",
+        )
 
     # Viertallen: teamnaam + tot 3 teamgenoten opgeven
     if deelnemers_type == "viertallen":
@@ -305,6 +459,17 @@ async def registration_submit(
         r2 = f"{reserve2_voornaam} {reserve2_achternaam}".strip() if reserve2_voornaam and reserve2_achternaam else None
 
         volledig = bool(p1 and p2 and p3)
+
+        # Teamgenoten van wie de naam nieuw is of gewijzigd t.o.v. de vorige aanmelding
+        teamgenoten_gewijzigd = [
+            (vn, an)
+            for vn, an, nieuw, oud in (
+                (partner_voornaam, partner_achternaam, p1, existing.partner_naam if existing else None),
+                (partner2_voornaam, partner2_achternaam, p2, existing.partner2_naam if existing else None),
+                (partner3_voornaam, partner3_achternaam, p3, existing.partner3_naam if existing else None),
+            )
+            if nieuw and nieuw != oud
+        ]
 
         if existing:
             existing.status = RegistrationStatus.aangemeld
@@ -331,17 +496,38 @@ async def registration_submit(
                 type=RegistrationType.los,
                 status=RegistrationStatus.aangemeld,
                 te_laat=te_laat,
+                niet_lid_goedkeuring_vereist=gast_db_goedkeuring,
             ))
         db.commit()
 
-        if volledig:
-            return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
-        return RedirectResponse(url="/?aangemeld_onvolledig_team=1", status_code=302)
+        for vn, an in teamgenoten_gewijzigd:
+            teamgenoot_lid = _partner_lid(db, current_user, vn, an)
+            if teamgenoot_lid:
+                _stuur_aanmeld_notificatie(db, current_user, teamgenoot_lid, evening.naam or evening.type)
+
+        normale_url = "/?aangemeld_onvolledig_team=1" if not volledig else ("/?te_laat=1" if te_laat else "/?bevestigd=1")
+        return _niet_lid_redirect(
+            db, request, evening, current_user, gast_niet_lid_vereist, gast_niet_lid_beleid,
+            gast_toegang, normale_url,
+        )
 
     # Paren (standaard): één partner opgeven
     if partner_voornaam and partner_achternaam:
         partner_naam = f"{partner_voornaam} {partner_achternaam}"
         partner_gewijzigd = not existing or existing.partner_naam != partner_naam
+
+        paar_beleid = niet_lid_paar_beleid(evening.club) if not gast_toegang else "toegestaan"
+        partner_onbekend = (
+            not gast_toegang
+            and paar_beleid != "toegestaan"
+            and not is_bekend_lid(db, evening.club_id, partner_voornaam, partner_achternaam)
+        )
+        if partner_onbekend and paar_beleid == "verwijderd":
+            return RedirectResponse(url=f"/aanmelden/{event_id}?fout=niet_lid_partner", status_code=302)
+        partner_vereist = partner_onbekend and paar_beleid in ("goedkeuring", "gemeld")
+        partner_db_goedkeuring = partner_onbekend and paar_beleid == "goedkeuring"
+        niet_lid_vereist = gast_niet_lid_vereist or partner_vereist
+        db_goedkeuring = gast_db_goedkeuring or partner_db_goedkeuring
 
         if existing:
             existing.status = RegistrationStatus.aangemeld
@@ -352,6 +538,9 @@ async def registration_submit(
                 existing.te_laat = True
                 # Nieuwe te-late wijziging: eerdere goedkeuring vervalt
                 existing.te_laat_goedgekeurd = None
+            existing.niet_lid_goedkeuring_vereist = db_goedkeuring
+            if db_goedkeuring:
+                existing.niet_lid_goedgekeurd = None
         else:
             db.add(Registration(
                 evening_id=event_id,
@@ -360,6 +549,7 @@ async def registration_submit(
                 type=RegistrationType.los,
                 status=RegistrationStatus.aangemeld,
                 te_laat=te_laat,
+                niet_lid_goedkeuring_vereist=db_goedkeuring,
             ))
         db.commit()
 
@@ -368,7 +558,11 @@ async def registration_submit(
             if partner_lid:
                 _stuur_aanmeld_notificatie(db, current_user, partner_lid, evening.naam or evening.type)
 
-        return RedirectResponse(url="/?te_laat=1" if te_laat else "/?bevestigd=1", status_code=302)
+        beleid_voor_melding = gast_niet_lid_beleid if gast_toegang else paar_beleid
+        return _niet_lid_redirect(
+            db, request, evening, current_user, niet_lid_vereist, beleid_voor_melding,
+            gast_toegang, "/?te_laat=1" if te_laat else "/?bevestigd=1",
+        )
     else:
         # Geen partner opgegeven bij paren
         if existing:
@@ -380,6 +574,9 @@ async def registration_submit(
                 existing.te_laat = True
                 # Nieuwe te-late wijziging: eerdere goedkeuring vervalt
                 existing.te_laat_goedgekeurd = None
+            existing.niet_lid_goedkeuring_vereist = gast_db_goedkeuring
+            if gast_db_goedkeuring:
+                existing.niet_lid_goedgekeurd = None
         else:
             db.add(Registration(
                 evening_id=event_id,
@@ -388,9 +585,13 @@ async def registration_submit(
                 type=RegistrationType.los,
                 status=RegistrationStatus.beschikbaar_solo,
                 te_laat=te_laat,
+                niet_lid_goedkeuring_vereist=gast_db_goedkeuring,
             ))
         db.commit()
-        return RedirectResponse(url="/?te_laat=1" if te_laat else "/?aangemeld_zonder_partner=1", status_code=302)
+        return _niet_lid_redirect(
+            db, request, evening, current_user, gast_niet_lid_vereist, gast_niet_lid_beleid,
+            gast_toegang, "/?te_laat=1" if te_laat else "/?aangemeld_zonder_partner=1",
+        )
 
 
 # ── Instellingen / bulk aanmelden ─────────────────────────────────────────────

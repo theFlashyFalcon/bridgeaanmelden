@@ -71,6 +71,11 @@ class Club(Base):
     evenement_types = Column(String, nullable=True)
     ranking_weergaves = Column(String, nullable=True)
     labels = Column(String, nullable=True)
+    # Beleid rond niet-leden (zie app/niet_leden.py); NULL = "toegestaan" (standaard)
+    niet_lid_beleid = Column(String, nullable=True)
+    niet_lid_paar_beleid = Column(String, nullable=True)
+    # Token voor de publieke gastaanmeldlink (/gast/{token}); lazy aangemaakt
+    gast_token = Column(String, unique=True, nullable=True)
 
     seasons = relationship("Season", back_populates="club")
     evenings = relationship("ClubEvening", back_populates="club")
@@ -370,6 +375,10 @@ class Registration(Base):
     )
     te_laat = Column(Boolean, default=False, nullable=False, server_default="0")
     te_laat_goedgekeurd = Column(Boolean, nullable=True)
+    # Niet-lid-goedkeuring (zie app/niet_leden.py): vereist als het beleid van de
+    # club goedkeuring voorschrijft voor deze (gast- of partner-)aanmelding.
+    niet_lid_goedkeuring_vereist = Column(Boolean, default=False, nullable=False, server_default="0")
+    niet_lid_goedgekeurd = Column(Boolean, nullable=True)
     aangemeld_op = Column(DateTime, server_default=func.now(), nullable=False)
     gewijzigd_op = Column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False

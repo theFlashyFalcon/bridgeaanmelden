@@ -5,9 +5,21 @@
   <h1>{{ evening.naam or evening.type }}</h1>
   <p class="event-meta">{{ evening.datum.strftime('%A %d %B %Y') }}</p>
 
-  {% if training_niet_toegestaan %}
+  {% if request.query_params.get('fout') == 'niet_lid_partner' %}
     <div class="alert alert-error" style="margin-bottom:1rem;">
-      Je kunt je niet aanmelden voor dit evenement. Neem contact op met de wedstrijdleider als je denkt dat dit niet klopt.
+      Deze partner staat niet in de ledenlijst. Voor deze club is aanmelden met een niet-lid partner niet mogelijk.
+    </div>
+  {% elif request.query_params.get('fout') == 'eigen_naam' %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">Vul je voornaam en achternaam in.</div>
+  {% endif %}
+
+  {% if training_niet_toegestaan or niet_lid_geblokkeerd %}
+    <div class="alert alert-error" style="margin-bottom:1rem;">
+      {% if niet_lid_geblokkeerd %}
+        Niet-leden kunnen niet aangemeld worden.
+      {% else %}
+        Je kunt je niet aanmelden voor dit evenement. Neem contact op met de wedstrijdleider als je denkt dat dit niet klopt.
+      {% endif %}
     </div>
   {% elif existing and existing.status != 'afgemeld' %}
     <div class="alert alert-success" style="margin-bottom:1rem;">
@@ -39,9 +51,27 @@
     </div>
   {% endif %}
 
-  {% if not training_niet_toegestaan %}
+  {% if not training_niet_toegestaan and not niet_lid_geblokkeerd %}
   <form method="post" action="/aanmelden/{{ evening.id }}" class="form-stack">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+
+    {% if not current_user %}
+      <p style="color:var(--color-muted);font-size:.9rem;">
+        Je bent niet ingelogd. Vul je eigen naam in om je aan te melden.
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="eigen_voornaam">Je voornaam</label>
+          <input type="text" id="eigen_voornaam" name="eigen_voornaam" required
+                 autocomplete="off" placeholder="Voornaam">
+        </div>
+        <div class="form-group">
+          <label for="eigen_achternaam">Je achternaam</label>
+          <input type="text" id="eigen_achternaam" name="eigen_achternaam" required
+                 autocomplete="off" placeholder="Achternaam">
+        </div>
+      </div>
+    {% endif %}
 
     {% if evening.deelnemers_type == 'individueel' %}
       {# Geen partnervelden nodig #}
@@ -172,7 +202,7 @@
 
   {% endif %}{# einde training_niet_toegestaan guard #}
 
-  {% if not training_niet_toegestaan and evening.deelnemers_type != 'individueel' %}
+  {% if current_user and not training_niet_toegestaan and evening.deelnemers_type != 'individueel' %}
   <div style="margin-top:1.25rem;border-top:1px solid #e0e0e0;padding-top:1rem;">
     <button type="button" class="btn btn-secondary" onclick="toggleHerhaalPaneel()">
       Herhaal mijn aanmelding
