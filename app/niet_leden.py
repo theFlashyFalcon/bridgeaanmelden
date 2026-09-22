@@ -35,10 +35,15 @@ _NIET_LID_PAAR_BELEID_STANDAARD = "toegestaan"
 
 
 def niet_lid_beleid(club: Club | None) -> str:
-    """Beleid van deze club voor gast-zelfaanmeldingen; NULL/onbekend → 'toegestaan'."""
-    if club is None or club.niet_lid_beleid not in NIET_LID_BELEID_KEYS:
-        return _NIET_LID_BELEID_STANDAARD
-    return club.niet_lid_beleid
+    """Beleid van deze club voor gast-zelfaanmeldingen: altijd geblokkeerd.
+
+    Niet-leden kunnen zich niet meer zelf aanmelden via de gastlink — dat is
+    per club-instelbaar geweest, maar is bewust uitgezet. De gastlink blijft
+    wel bruikbaar om het rooster te bekijken (zie app/routes/evenings.py).
+    Club.niet_lid_beleid wordt niet meer gelezen; de kolom blijft bestaan
+    voor eventuele toekomstige heractivatie.
+    """
+    return "geblokkeerd"
 
 
 def niet_lid_paar_beleid(club: Club | None) -> str:

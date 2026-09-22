@@ -21,7 +21,7 @@ from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
 from app.auth import SECRET_KEY  # noqa: E402 — must be after load_dotenv
 from app.csrf import require_csrf  # noqa: E402
-from app.routes import admin, auth, berichten, clubs, evenings, gdpr, members, registrations, rankings, uitslagen  # noqa: E402
+from app.routes import admin, auth, berichten, clubs, evenings, gdpr, members, partners, registrations, rankings, uitslagen  # noqa: E402
 from app.startup import run_startup_tasks  # noqa: E402
 from app.templates_env import templates as _templates  # noqa: E402
 
@@ -153,6 +153,7 @@ app.include_router(clubs.router)
 app.include_router(evenings.router)
 app.include_router(registrations.router)
 app.include_router(members.router)
+app.include_router(partners.router)
 app.include_router(admin.router)
 app.include_router(berichten.router)
 app.include_router(rankings.router)

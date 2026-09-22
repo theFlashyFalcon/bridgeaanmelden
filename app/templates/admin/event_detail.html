@@ -178,7 +178,7 @@
             {% endif %}
           </td>
           <td style="font-size:.85rem;color:var(--color-muted);">
-            {{ reg.gewijzigd_op.strftime('%d %b %H:%M') }}
+            {{ (reg.gewijzigd_op | lokale_tijd).strftime('%d %b %H:%M') }}
           </td>
         </tr>
         {% endfor %}

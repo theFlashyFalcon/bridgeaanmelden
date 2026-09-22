@@ -107,12 +107,14 @@ def require_wedstrijdleider(
     current_user: Member = Depends(require_auth),
     db: Session = Depends(get_db),
 ) -> Member:
-    """Geeft toegang aan globale admins/WLs én leden met een per-club WL-rol."""
-    if current_user.role in (MemberRole.wedstrijdleider.value, MemberRole.admin.value):
+    """Geeft toegang aan globale admins én leden met een per-club WL-rol.
+    Wedstrijdleiderschap is altijd per club (MemberClub.role) — er bestaat
+    geen globale wedstrijdleider-rol meer."""
+    if current_user.role == MemberRole.admin.value:
         return current_user
     mc = db.query(MemberClub).filter(
         MemberClub.member_id == current_user.id,
-        MemberClub.role.in_([MemberRole.admin.value, MemberRole.wedstrijdleider.value]),
+        MemberClub.role == MemberRole.wedstrijdleider.value,
     ).first()
     if not mc:
         raise HTTPException(status_code=403, detail="Geen toegang")
@@ -159,8 +161,9 @@ def can_manage_club(member: Member, club_id: Optional[int], db: Session) -> bool
     - de algemene club kan uitsluitend door globale admins beheerd worden,
       ongeacht eventuele (club-)rollen op MemberClub;
     - club_id None (legacy data zonder club) is voor elke WL toegankelijk;
-    - anders is een WL/admin-rol bij die club vereist (globale WL's zonder
-      enige clubkoppeling gelden als legacy en mogen ook).
+    - anders is een WL-rol bij die specifieke club vereist. Wedstrijdleiderschap
+      is altijd per club — er bestaat geen globale wedstrijdleider-rol meer die
+      hier automatisch rechten geeft.
     """
     if member.role == MemberRole.admin.value:
         return True
@@ -168,23 +171,26 @@ def can_manage_club(member: Member, club_id: Optional[int], db: Session) -> bool
         return False
     if club_id is None:
         return True
-    rows = db.query(MemberClub).filter(MemberClub.member_id == member.id).all()
-    if not rows and member.role == MemberRole.wedstrijdleider.value:
-        return True
-    beheer_rollen = (MemberRole.admin.value, MemberRole.wedstrijdleider.value)
-    return any(mc.club_id == club_id and mc.role in beheer_rollen for mc in rows)
+    return (
+        db.query(MemberClub)
+        .filter(
+            MemberClub.member_id == member.id,
+            MemberClub.club_id == club_id,
+            MemberClub.role == MemberRole.wedstrijdleider.value,
+        )
+        .first()
+        is not None
+    )
 
 
-def sync_global_role(member: Member, db: Session) -> None:
-    """Synchroniseert member.role met de hoogste rol in alle MemberClub-rijen."""
-    all_mc = db.query(MemberClub).filter(MemberClub.member_id == member.id).all()
-    roles = [mc.role for mc in all_mc]
-    if MemberRole.admin.value in roles:
-        member.role = MemberRole.admin.value
-    elif MemberRole.wedstrijdleider.value in roles:
-        member.role = MemberRole.wedstrijdleider.value
-    else:
-        member.role = MemberRole.lid.value
+def demote_other_club_roles(member_id: int, keep_club_id: int, db: Session) -> None:
+    """Zet de rol van dit lid bij alle andere clubs terug naar 'lid'. Een lid
+    kan maar bij één club tegelijk wedstrijdleider zijn — zie club_lid_rol_wijzigen
+    en club_lid_toevoegen in app/routes/admin/clubs_beheer.py."""
+    db.query(MemberClub).filter(
+        MemberClub.member_id == member_id,
+        MemberClub.club_id != keep_club_id,
+    ).update({"role": MemberRole.lid.value})
 
 
 def get_club_role(member: Member, club_id: int, db: Session) -> Optional[str]:
@@ -212,10 +218,10 @@ def get_member_club_ids(member: Member, db: Session) -> list[int]:
 
 
 def get_wedstrijdleider_clubs(member: Member, db: Session) -> list[Club]:
-    """Geeft alle clubs waarvan dit lid wedstrijdleider of admin is (via MemberClub)."""
+    """Geeft alle clubs waarvan dit lid wedstrijdleider is (via MemberClub)."""
     mc_rows = db.query(MemberClub).filter(
         MemberClub.member_id == member.id,
-        MemberClub.role.in_([MemberRole.admin.value, MemberRole.wedstrijdleider.value]),
+        MemberClub.role == MemberRole.wedstrijdleider.value,
     ).all()
     if not mc_rows:
         return []
@@ -252,7 +258,7 @@ def get_admin_club(
 
     mc_rows = db.query(MemberClub).filter(
         MemberClub.member_id == member.id,
-        MemberClub.role.in_([MemberRole.admin.value, MemberRole.wedstrijdleider.value]),
+        MemberClub.role == MemberRole.wedstrijdleider.value,
     ).all()
     valid_ids = {mc.club_id for mc in mc_rows}
 

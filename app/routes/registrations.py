@@ -361,6 +361,9 @@ async def registration_submit(
                     )
                 except Exception:
                     logger.exception("E-mail afmelding versturen mislukt naar wedstrijdleider %s", wl.email)
+        if not existing:
+            # Nooit aangemeld geweest: geen wijziging, dus ook geen "afgemeld"-bevestiging tonen.
+            return RedirectResponse(url="/", status_code=302)
         return RedirectResponse(url="/?afgemeld=1", status_code=302)
 
     # Vanaf hier: aanmelden. Niet-leden (gasten) worden hier pas aangemaakt —
@@ -995,6 +998,10 @@ async def verborgen_types_submit(
     beschikbaar = merged_event_types(user_clubs)
     hidden = [k for k in beschikbaar if not form.get(f"toon_{k}")]
     current_user.verborgen_types = ",".join(hidden)
+
+    hidden_clubs = [str(c.id) for c in user_clubs if not form.get(f"toon_club_{c.id}")]
+    current_user.verborgen_clubs = ",".join(hidden_clubs)
+
     db.commit()
     return RedirectResponse(url="/?voorkeuren_opgeslagen=1", status_code=302)
 

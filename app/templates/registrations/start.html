@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Aanmelden — {{ evening.naam or evening.type }} — Bridge Club{% endblock %}
+{% block extra_head %}<script src="/static/partner-zoek.js" defer></script>{% endblock %}
 {% block content %}
 <section class="card">
   <h1>{{ evening.naam or evening.type }}</h1>
@@ -98,6 +99,7 @@
           <label for="partner_voornaam">Voornaam teamgenoot 1</label>
           <input type="text" id="partner_voornaam" name="partner_voornaam"
                  autocomplete="off" placeholder="Voornaam"
+                 data-partner-zoek data-achternaam-id="partner_achternaam"
                  value="{{ p1.split(' ')[0] if p1 else '' }}">
         </div>
         <div class="form-group">
@@ -112,6 +114,7 @@
           <label for="partner2_voornaam">Voornaam teamgenoot 2</label>
           <input type="text" id="partner2_voornaam" name="partner2_voornaam"
                  autocomplete="off" placeholder="Voornaam"
+                 data-partner-zoek data-achternaam-id="partner2_achternaam"
                  value="{{ p2.split(' ')[0] if p2 else '' }}">
         </div>
         <div class="form-group">
@@ -126,6 +129,7 @@
           <label for="partner3_voornaam">Voornaam teamgenoot 3</label>
           <input type="text" id="partner3_voornaam" name="partner3_voornaam"
                  autocomplete="off" placeholder="Voornaam"
+                 data-partner-zoek data-achternaam-id="partner3_achternaam"
                  value="{{ p3.split(' ')[0] if p3 else '' }}">
         </div>
         <div class="form-group">
@@ -142,6 +146,7 @@
           <label for="reserve1_voornaam">Voornaam reserve 1</label>
           <input type="text" id="reserve1_voornaam" name="reserve1_voornaam"
                  autocomplete="off" placeholder="Voornaam"
+                 data-partner-zoek data-achternaam-id="reserve1_achternaam"
                  value="{{ r1.split(' ')[0] if r1 else '' }}">
         </div>
         <div class="form-group">
@@ -156,6 +161,7 @@
           <label for="reserve2_voornaam">Voornaam reserve 2</label>
           <input type="text" id="reserve2_voornaam" name="reserve2_voornaam"
                  autocomplete="off" placeholder="Voornaam"
+                 data-partner-zoek data-achternaam-id="reserve2_achternaam"
                  value="{{ r2.split(' ')[0] if r2 else '' }}">
         </div>
         <div class="form-group">
@@ -175,6 +181,7 @@
           <label for="partner_voornaam">Voornaam partner</label>
           <input type="text" id="partner_voornaam" name="partner_voornaam"
                  autocomplete="off" placeholder="Voornaam"
+                 data-partner-zoek data-achternaam-id="partner_achternaam"
                  value="{% if existing and existing.partner_naam %}{{ existing.partner_naam.split(' ')[0] }}{% elif existing and existing.person2 %}{{ existing.person2.voornaam }}{% endif %}">
         </div>
         <div class="form-group">
@@ -250,7 +257,8 @@
           <div class="form-group">
             <label for="h-partner-voornaam">Voornaam partner</label>
             <input type="text" id="h-partner-voornaam" name="partner_voornaam"
-                   autocomplete="off" placeholder="Voornaam">
+                   autocomplete="off" placeholder="Voornaam"
+                   data-partner-zoek data-achternaam-id="h-partner-achternaam">
           </div>
           <div class="form-group">
             <label for="h-partner-achternaam">Achternaam partner</label>

@@ -4,13 +4,13 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.auth import require_admin, require_wedstrijdleider, sync_global_role
+from app.auth import demote_other_club_roles, require_admin, require_wedstrijdleider
 from app.database import get_db
 from app.models import Club, Lid, Member, MemberClub, MemberRole
 from app.templates_env import templates
+from app.utils.ledenimport import importeer_ledenlijst_csv
 
 router = APIRouter(prefix="/beheer")
 
@@ -152,53 +152,26 @@ async def club_leden_importeer(
     club_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Member = Depends(require_admin),
+    current_user: Member = Depends(require_wedstrijdleider),
 ):
-    import csv
-    import io
-
-    club = db.query(Club).filter(Club.id == club_id).first()
-    if not club:
-        raise HTTPException(status_code=404, detail="Club niet gevonden")
-
+    club = _vereis_clubbeheer(current_user, club_id, db)
+    standaard_terug = "/beheer/clubs"
     form = await request.form()
+    terug = _veilig_pad(form.get("next")) or standaard_terug
     bestand = form.get("bestand")
     if not bestand or not bestand.filename:
-        return RedirectResponse(url="/beheer/clubs?import_fout=1", status_code=302)
+        scheidingsteken = "&" if "?" in terug else "?"
+        return RedirectResponse(url=f"{terug}{scheidingsteken}import_fout=1", status_code=302)
 
     inhoud = await bestand.read()
-    try:
-        tekst = inhoud.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        tekst = inhoud.decode("latin-1")
+    resultaat = importeer_ledenlijst_csv(inhoud, club.id, db)
 
-    reader = csv.DictReader(io.StringIO(tekst))
-    toegevoegd = 0
-    overgeslagen = 0
-    for rij in reader:
-        voornaam = (rij.get("voornaam") or rij.get("Voornaam") or "").strip()
-        achternaam = (rij.get("achternaam") or rij.get("Achternaam") or "").strip()
-        nbb = (rij.get("nbb_nummer") or rij.get("NBB") or rij.get("nbb") or "").strip() or None
-        if not voornaam or not achternaam:
-            overgeslagen += 1
-            continue
-        al_aanwezig = (
-            db.query(Lid)
-            .filter(
-                func.lower(Lid.voornaam) == voornaam.lower(),
-                func.lower(Lid.achternaam) == achternaam.lower(),
-                Lid.club_id == club_id,
-            )
-            .first()
-        )
-        if not al_aanwezig:
-            db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb, club_id=club_id))
-            toegevoegd += 1
-        else:
-            overgeslagen += 1
-    db.commit()
+    scheidingsteken = "&" if "?" in terug else "?"
+    url = f"{terug}{scheidingsteken}import_ok={resultaat.toegevoegd}&overgeslagen={resultaat.overgeslagen}"
+    if resultaat.gecorrigeerd:
+        url += f"&gecorrigeerd={len(resultaat.gecorrigeerd)}"
     return RedirectResponse(
-        url=f"/beheer/clubs?import_ok={toegevoegd}&overgeslagen={overgeslagen}",
+        url=url,
         status_code=302,
     )
 
@@ -225,14 +198,13 @@ def _vereis_clubbeheer(current_user: Member, club_id: int, db: Session) -> Club:
 
 def _toewijsbare_rollen(current_user: Member, club: Club) -> list[str]:
     """
-    Rollen die deze beheerder mag toekennen: alleen admins de admin-rol; de
-    algemene club kan uitsluitend door globale admins beheerd worden, dus
-    daar is wedstrijdleider/club-admin nooit toewijsbaar.
+    Rollen die per club toewijsbaar zijn: alleen 'lid' en 'wedstrijdleider' —
+    er bestaat geen per-club adminrol (admin is altijd een globale rol, zie
+    /leden). De algemene club kan uitsluitend door globale admins beheerd
+    worden, dus daar is wedstrijdleider nooit toewijsbaar.
     """
     if club.is_algemeen:
         return [MemberRole.lid.value]
-    if current_user.role == MemberRole.admin.value:
-        return [r.value for r in MemberRole]
     return [MemberRole.lid.value, MemberRole.wedstrijdleider.value]
 
 
@@ -322,8 +294,8 @@ async def club_lid_toevoegen(
     ).first()
     if not existing:
         db.add(MemberClub(member_id=member_id, club_id=club_id, role=role))
-        db.flush()  # autoflush staat uit; anders mist sync_global_role deze rij
-        sync_global_role(member, db)
+        if role == MemberRole.wedstrijdleider.value:
+            demote_other_club_roles(member_id, club_id, db)
         db.commit()
 
     scheidingsteken = "&" if "?" in terug else "?"
@@ -361,9 +333,8 @@ async def club_lid_rol_wijzigen(
         return RedirectResponse(url=f"{standaard_terug}?fout=rol", status_code=302)
 
     mc.role = role
-    member = db.query(Member).filter(Member.id == member_id).first()
-    if member:
-        sync_global_role(member, db)
+    if role == MemberRole.wedstrijdleider.value:
+        demote_other_club_roles(member_id, club_id, db)
     db.commit()
     scheidingsteken = "&" if "?" in terug else "?"
     return RedirectResponse(
@@ -392,19 +363,6 @@ async def club_lid_uit_club_verwijder(
         )
     if mc:
         db.delete(mc)
-        member = db.query(Member).filter(Member.id == member_id).first()
-        if member:
-            remaining = db.query(MemberClub).filter(
-                MemberClub.member_id == member_id, MemberClub.club_id != club_id,
-            ).all()
-            if remaining:
-                roles = [r.role for r in remaining]
-                if MemberRole.admin.value in roles:
-                    member.role = MemberRole.admin.value
-                elif MemberRole.wedstrijdleider.value in roles:
-                    member.role = MemberRole.wedstrijdleider.value
-                else:
-                    member.role = MemberRole.lid.value
         db.commit()
     return RedirectResponse(url=f"/beheer/clubs/{club_id}/leden?verwijderd=1", status_code=302)
 

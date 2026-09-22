@@ -11,6 +11,11 @@
   <div class="alert alert-success">Seizoen aangemaakt.</div>
 {% elif request.query_params.get('verwijderd') %}
   <div class="alert alert-info">Evenement verwijderd.</div>
+{% elif request.query_params.get('bulk_verwijderd') %}
+  {% set n = request.query_params.get('bulk_verwijderd') | int %}
+  <div class="alert alert-info">
+    {% if n == 0 %}Geen evenementen verwijderd.{% elif n == 1 %}1 evenement verwijderd.{% else %}{{ n }} evenementen verwijderd.{% endif %}
+  </div>
 {% elif request.query_params.get('fout') == 'seizoen' %}
   <div class="alert alert-error">Vul alle velden in voor het seizoen.</div>
 {% elif request.query_params.get('fout') == 'datum' %}
@@ -175,11 +180,23 @@
 </section>
 
 <section class="card">
-  <h2>Geplande evenementen</h2>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;flex-wrap:wrap;gap:.5rem;">
+    <h2 style="margin:0;">Geplande evenementen</h2>
+    {% if evenings %}
+    <form method="post" action="/beheer/avonden/bulk-verwijder" id="bulk-verwijder-form"
+          data-bevestig="Geselecteerde evenementen verwijderen?">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+      <button type="submit" class="btn btn-danger btn-sm" id="bulk-verwijder-btn" disabled>
+        Verwijder geselecteerde
+      </button>
+    </form>
+    {% endif %}
+  </div>
   {% if evenings %}
     <table class="data-table">
       <thead>
         <tr>
+          <th><input type="checkbox" id="evenementen-select-all" aria-label="Alles selecteren"></th>
           <th>Datum</th>
           <th>Naam</th>
           <th>Label</th>
@@ -190,19 +207,18 @@
       <tbody>
         {% for e in evenings %}
         <tr>
+          <td><input type="checkbox" class="evening-select" value="{{ e.id }}" aria-label="Selecteer {{ e.naam or e.type }}"></td>
           <td style="white-space:nowrap;">{{ e.datum.strftime('%d %b %Y') }}</td>
           <td>{{ e.naam or '—' }}</td>
           {% set lbl = event_label(e) %}
           <td>{% if lbl %}<span class="event-label label-{{ lbl.css }}">{{ lbl.naam }}</span>{% else %}—{% endif %}</td>
           <td style="font-size:.85rem;color:var(--color-muted);">{{ e.season.naam }}</td>
           <td>
-            {% if current_user.role == 'admin' %}
             <form method="post" action="/beheer/avonden/{{ e.id }}/verwijder" style="display:inline;"
                   data-bevestig="Evenement verwijderen?">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
               <button type="submit" class="btn btn-danger btn-sm">Verwijder</button>
             </form>
-            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -331,5 +347,54 @@
              openType === 'jeugdtraining' ? 'jeugdtraining' :
              openType === 'speciaal' ? 'speciaal' : 'clubavond');
   }
+
+  // Bulk selectie & verwijderen van evenementen
+  (function() {
+    var selectAll   = document.getElementById('evenementen-select-all');
+    var vinkjes     = document.querySelectorAll('.evening-select');
+    var bulkForm    = document.getElementById('bulk-verwijder-form');
+    var bulkBtn     = document.getElementById('bulk-verwijder-btn');
+    if (!bulkForm || !bulkBtn) return;
+
+    function updateBulkBtn() {
+      var aantal = document.querySelectorAll('.evening-select:checked').length;
+      bulkBtn.disabled = aantal === 0;
+      bulkBtn.textContent = aantal > 0 ? 'Verwijder geselecteerde (' + aantal + ')' : 'Verwijder geselecteerde';
+    }
+
+    vinkjes.forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        if (selectAll && !cb.checked) selectAll.checked = false;
+        updateBulkBtn();
+      });
+    });
+
+    if (selectAll) {
+      selectAll.addEventListener('change', function() {
+        vinkjes.forEach(function(cb) { cb.checked = selectAll.checked; });
+        updateBulkBtn();
+      });
+    }
+
+    function injecteer() {
+      bulkForm.querySelectorAll('input[name="event_ids"]').forEach(function(el) { el.remove(); });
+      document.querySelectorAll('.evening-select:checked').forEach(function(cb) {
+        var inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'event_ids';
+        inp.value = cb.value;
+        bulkForm.appendChild(inp);
+      });
+    }
+
+    // De bevestig-dialoog in base.html roept form.submit() rechtstreeks aan
+    // (bypasst het 'submit'-event), dus onderschep ook de methode zelf —
+    // zelfde patroon als de bulk-formulieren in index.html.
+    var origSubmit = HTMLFormElement.prototype.submit.bind(bulkForm);
+    bulkForm.submit = function() { injecteer(); origSubmit(); };
+    bulkForm.addEventListener('submit', injecteer);
+
+    updateBulkBtn();
+  })();
 </script>
 {% endblock %}

@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy import false, or_
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, get_member_club_ids, is_member_of_club, require_auth
@@ -54,6 +55,10 @@ async def index(
     if current_user and current_user.verborgen_types:
         hidden_types = [t for t in current_user.verborgen_types.split(",") if t]
 
+    hidden_club_ids: list[int] = []
+    if current_user and current_user.verborgen_clubs:
+        hidden_club_ids = [int(c) for c in current_user.verborgen_clubs.split(",") if c.isdigit()]
+
     user_club_ids: list[int] = []
     user_clubs: list[Club] = []
     gast_club: Optional[Club] = None
@@ -83,6 +88,10 @@ async def index(
         # Gasten zien uitsluitend de avonden van de club achter hun gastlink
         # (geen legacy avonden zonder club).
         query = query.filter(ClubEvening.club_id == gast_club.id)
+    else:
+        # Niet ingelogd en geen gastlink-sessie: geen agenda tonen (anders zou
+        # dit de agenda van alle clubs lekken naar elke anonieme bezoeker).
+        query = query.filter(false())
 
     if hidden_types:
         all_hidden_db: list[str] = []
@@ -90,6 +99,12 @@ async def index(
             all_hidden_db.extend(_TYPE_MAP.get(key, []))
         if all_hidden_db:
             query = query.filter(ClubEvening.type.notin_(all_hidden_db))
+
+    if hidden_club_ids:
+        # Legacy avonden zonder club (club_id None) blijven altijd zichtbaar.
+        query = query.filter(
+            or_(ClubEvening.club_id.is_(None), ClubEvening.club_id.notin_(hidden_club_ids))
+        )
 
     evenings = query.order_by(ClubEvening.datum).limit(30).all()
 
@@ -141,6 +156,7 @@ async def index(
             "user_regs": user_regs,
             "welkom": welkom,
             "hidden_types": hidden_types,
+            "hidden_club_ids": hidden_club_ids,
             "termijn_deadlines": termijn_deadlines,
             "user_clubs": user_clubs,
             "club_map": club_map,

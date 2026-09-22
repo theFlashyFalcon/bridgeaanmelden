@@ -690,7 +690,10 @@ async def aanwezigheid(
         for key in selected_types:
             db_types.extend(_AANWEZIGHEID_TYPE_MAP[key])
 
-    is_beheerder = current_user.role in (MemberRole.wedstrijdleider.value, MemberRole.admin.value)
+    # Wedstrijdleiderschap is altijd per club — de globale rol alleen dekt dit niet.
+    is_beheerder = current_user.role == MemberRole.admin.value or (
+        club is not None and can_manage_club(current_user, club.id, db)
+    )
 
     if is_beheerder and club:
         club_member_ids = [

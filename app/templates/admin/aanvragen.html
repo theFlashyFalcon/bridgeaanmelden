@@ -127,7 +127,7 @@
             {% if b.type == 'verwijderd_account' %}
               <span class="badge badge-warning" style="font-size:.7rem;">Verwijderd account</span>
             {% endif %}
-            <span class="bericht-datum">{{ b.aangemaakt_op.strftime('%d-%m-%Y %H:%M') }}</span>
+            <span class="bericht-datum">{{ (b.aangemaakt_op | lokale_tijd).strftime('%d-%m-%Y %H:%M') }}</span>
           </div>
           {% if b.email %}
             <div class="bericht-email">{{ b.email }}</div>

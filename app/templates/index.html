@@ -2,6 +2,8 @@
 
 {% block title %}Agenda — {{ club_naam }}{% endblock %}
 
+{% block extra_head %}<script src="/static/partner-zoek.js" defer></script>{% endblock %}
+
 {% block content %}
 
 {% if request.query_params.get('afgemeld_alles') %}
@@ -158,10 +160,14 @@
         </div>
       </div>
 
-      {# Zichtbare soorten (opslaan) #}
-      <div class="fdd-sectie">
+      {# Standaard zichtbaarheid (opslaan) — anders dan de filterknoppen hierboven,
+         die alleen tijdelijk tonen/verbergen tot je de pagina ververst #}
+      <div class="fdd-sectie" style="border-top:1px solid var(--color-border, #ddd);padding-top:.5rem;margin-top:.25rem;">
         <form method="post" action="/instellingen/verborgen-types">
           <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+          <p style="font-size:.75rem;color:var(--color-muted);margin:0 0 .5rem;">
+            Onderstaande instelling blijft bewaard (ook na het verversen van de pagina), in tegenstelling tot de filterknoppen hierboven.
+          </p>
           <span class="fdd-label">Toon soorten</span>
           {% set type_label_meervoud = {
             'clubavond': 'Clubavonden',
@@ -182,7 +188,9 @@
           <div class="toggle-list" style="margin-bottom:.5rem;">
             {% for club in user_clubs %}
             <label class="toggle-item">
-              <input type="checkbox" class="club-zichtbaar-cb" data-club-id="{{ club.id }}" checked>
+              <input type="checkbox" class="club-zichtbaar-cb" data-club-id="{{ club.id }}"
+                     name="toon_club_{{ club.id }}" value="1"
+                     {% if club.id not in hidden_club_ids %}checked{% endif %}>
               {{ club.naam }}
             </label>
             {% endfor %}
@@ -215,7 +223,8 @@
 </div>
 
 <div id="bulk-partner-velden" class="bulk-partner-velden" hidden>
-  <input type="text" id="bulk-partner-voornaam" placeholder="Voornaam partner" autocomplete="off">
+  <input type="text" id="bulk-partner-voornaam" placeholder="Voornaam partner" autocomplete="off"
+         data-partner-zoek data-achternaam-id="bulk-partner-achternaam">
   <input type="text" id="bulk-partner-achternaam" placeholder="Achternaam" autocomplete="off">
 </div>
 

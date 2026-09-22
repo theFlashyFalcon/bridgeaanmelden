@@ -77,13 +77,14 @@ def _wl_met_club(db_session, **club_kwargs):
 
 # ── Helpers-module (zonder HTTP) ──────────────────────────────────────────────
 
-def test_niet_lid_beleid_standaard_toegestaan():
+def test_niet_lid_beleid_altijd_geblokkeerd():
+    """Zelfaanmelding door niet-leden is uitgeschakeld, ongeacht club-instelling."""
     from app.models import Club
     from app.niet_leden import niet_lid_beleid
 
-    assert niet_lid_beleid(Club(naam="X")) == "toegestaan"
-    assert niet_lid_beleid(None) == "toegestaan"
-    assert niet_lid_beleid(Club(naam="X", niet_lid_beleid="onzin")) == "toegestaan"
+    assert niet_lid_beleid(Club(naam="X")) == "geblokkeerd"
+    assert niet_lid_beleid(None) == "geblokkeerd"
+    assert niet_lid_beleid(Club(naam="X", niet_lid_beleid="toegestaan")) == "geblokkeerd"
 
 
 def test_niet_lid_paar_beleid_standaard_toegestaan():
@@ -94,11 +95,10 @@ def test_niet_lid_paar_beleid_standaard_toegestaan():
     assert niet_lid_paar_beleid(Club(naam="X", niet_lid_paar_beleid="geblokkeerd")) == "toegestaan"
 
 
-def test_niet_lid_beleid_bekende_waarde():
+def test_niet_lid_paar_beleid_bekende_waarde():
     from app.models import Club
-    from app.niet_leden import niet_lid_beleid, niet_lid_paar_beleid
+    from app.niet_leden import niet_lid_paar_beleid
 
-    assert niet_lid_beleid(Club(naam="X", niet_lid_beleid="goedkeuring")) == "goedkeuring"
     assert niet_lid_paar_beleid(Club(naam="X", niet_lid_paar_beleid="verwijderd")) == "verwijderd"
 
 
@@ -115,23 +115,25 @@ def test_is_bekend_lid(db_session):
 
 # ── Instellingenscherm ────────────────────────────────────────────────────────
 
-async def test_instellingen_toont_niet_lid_opties_en_gastlink(client, db_session):
+async def test_instellingen_toont_geen_niet_lid_opties_meer(client, db_session):
     from app.main import app
 
     club, wl = _wl_met_club(db_session)
     _set_auth(app, wl=wl)
     response = await client.get("/beheer/instellingen")
     assert response.status_code == 200
-    assert 'name="niet_lid_beleid" value="geblokkeerd"' in response.text
-    assert 'name="niet_lid_beleid" value="toegestaan"' in response.text
+    assert 'name="niet_lid_beleid"' not in response.text
+    assert "niet meer zelf aanmelden" in response.text
     assert 'name="niet_lid_paar_beleid" value="verwijderd"' in response.text
     assert "/gast/" in response.text
 
 
-async def test_instellingen_slaat_niet_lid_beleid_op(client, db_session):
+async def test_instellingen_niet_lid_beleid_veld_wordt_genegeerd(client, db_session):
+    """Zelfaanmelding is niet meer instelbaar: het veld heeft geen effect meer,
+    ook al zou iemand het (bv. via een oude formuliercache) alsnog posten."""
     from app.main import app
 
-    club, wl = _wl_met_club(db_session)
+    club, wl = _wl_met_club(db_session, niet_lid_beleid="toegestaan")
     _set_auth(app, wl=wl)
     response = await client.post("/beheer/instellingen", data={
         "type_clubavond": "1",
@@ -142,21 +144,8 @@ async def test_instellingen_slaat_niet_lid_beleid_op(client, db_session):
     })
     assert response.status_code == 302
     db_session.refresh(club)
-    assert club.niet_lid_beleid == "goedkeuring"
-    assert club.niet_lid_paar_beleid == "verwijderd"
-
-
-async def test_instellingen_negeert_ongeldige_niet_lid_waarde(client, db_session):
-    from app.main import app
-
-    club, wl = _wl_met_club(db_session, niet_lid_beleid="toegestaan")
-    _set_auth(app, wl=wl)
-    await client.post("/beheer/instellingen", data={
-        "type_clubavond": "1", "ranking_spanning": "1", "label_paren": "1",
-        "niet_lid_beleid": "onzin",
-    })
-    db_session.refresh(club)
     assert club.niet_lid_beleid == "toegestaan"
+    assert club.niet_lid_paar_beleid == "verwijderd"
 
 
 async def test_instellingen_gast_token_lazy_en_idempotent(client, db_session):
@@ -210,7 +199,9 @@ async def test_aanmelden_zonder_login_en_zonder_gastlink_vereist_login(client, d
     assert response.headers["location"].startswith("/login")
 
 
-async def test_gast_aanmelden_individueel_toegestaan(client, db_session):
+async def test_gast_aanmelden_altijd_geblokkeerd_ongeacht_clubinstelling(client, db_session):
+    """Zelfaanmelding door niet-leden via de gastlink is uitgeschakeld, ook als
+    de club (uit oude data) nog 'toegestaan' o.i.d. heeft staan."""
     from app.main import app
     from app.models import Member, Registration
 
@@ -224,30 +215,9 @@ async def test_gast_aanmelden_individueel_toegestaan(client, db_session):
         "eigen_voornaam": "Gast", "eigen_achternaam": "Speler",
     })
     assert response.status_code == 302
-    assert "bevestigd=1" in response.headers["location"]
-
-    reg = db_session.query(Registration).join(Member, Registration.person1_id == Member.id).filter(
-        Member.voornaam == "Gast", Member.achternaam == "Speler",
-    ).first()
-    assert reg is not None
-    assert reg.status == "aangemeld"
-    assert reg.niet_lid_goedkeuring_vereist is False
-
-
-async def test_gast_aanmelden_zonder_eigen_naam_geweigerd(client, db_session):
-    from app.main import app
-    from app.models import Registration
-
-    _no_csrf(app)
-    club = make_club(db_session, niet_lid_beleid="toegestaan", gast_token="tok-naam")
-    season = make_season(db_session)
-    ev = make_evening(db_session, season.id, club_id=club.id, deelnemers_type="individueel")
-
-    await client.get("/gast/tok-naam")
-    response = await client.post(f"/aanmelden/{ev.id}", data={})
-    assert response.status_code == 302
-    assert "fout=eigen_naam" in response.headers["location"]
+    assert "fout=niet_lid" in response.headers["location"]
     assert db_session.query(Registration).count() == 0
+    assert db_session.query(Member).count() == 0
 
 
 async def test_gast_aanmelden_geblokkeerd(client, db_session):
@@ -269,64 +239,24 @@ async def test_gast_aanmelden_geblokkeerd(client, db_session):
     assert db_session.query(Member).count() == 0
 
 
-async def test_gast_aanmelden_goedkeuring_verschijnt_pas_na_goedkeuring(client, db_session):
+async def test_gast_kan_rooster_nog_wel_bekijken(client, db_session):
+    """De gastlink blijft werken om het rooster te bekijken, ook al kan er
+    niet meer mee aangemeld worden."""
     from app.main import app
-    from app.routes.admin.aanmeldingen import _af_aanmeldingen_data
 
     _no_csrf(app)
-    club = make_club(db_session, niet_lid_beleid="goedkeuring", gast_token="tok-goedkeuring")
+    club = make_club(db_session, gast_token="tok-bekijk")
     season = make_season(db_session)
     ev = make_evening(db_session, season.id, club_id=club.id, deelnemers_type="individueel")
 
-    await client.get("/gast/tok-goedkeuring")
-    response = await client.post(f"/aanmelden/{ev.id}", data={
-        "eigen_voornaam": "Gast", "eigen_achternaam": "Speler",
-    })
-    assert response.status_code == 302
-    assert "wacht_goedkeuring=1" in response.headers["location"]
+    await client.get("/gast/tok-bekijk")
+    response = await client.get("/")
+    assert response.status_code == 200
+    assert f'data-club="{ev.club_id}"' in response.text
 
-    data = _af_aanmeldingen_data(db_session, ev.id)
-    assert len(data["niet_lid_wachtend"]) == 1
-    assert len(data["volledig_aangemeld"]) == 0
-
-    wl = make_member(db_session, lidnummer="WLGOED", role="wedstrijdleider")
-    make_member_club(db_session, wl.id, club.id, role="wedstrijdleider")
-    _set_auth(app, wl=wl)
-
-    reg_id = data["niet_lid_wachtend"][0].id
-    approve = await client.post(f"/beheer/niet-lid/{reg_id}/goedkeuren")
-    assert approve.status_code == 302
-    assert "niet_lid_goedgekeurd=1" in approve.headers["location"]
-
-    data2 = _af_aanmeldingen_data(db_session, ev.id)
-    assert len(data2["niet_lid_wachtend"]) == 0
-    assert len(data2["volledig_aangemeld"]) == 1
-
-
-async def test_gast_aanmelden_afwijzen_verwijdert_registratie(client, db_session):
-    from app.main import app
-    from app.models import Registration
-    from app.routes.admin.aanmeldingen import _af_aanmeldingen_data
-
-    _no_csrf(app)
-    club = make_club(db_session, niet_lid_beleid="goedkeuring", gast_token="tok-afwijzen")
-    season = make_season(db_session)
-    ev = make_evening(db_session, season.id, club_id=club.id, deelnemers_type="individueel")
-
-    await client.get("/gast/tok-afwijzen")
-    await client.post(f"/aanmelden/{ev.id}", data={
-        "eigen_voornaam": "Gast", "eigen_achternaam": "Speler",
-    })
-    data = _af_aanmeldingen_data(db_session, ev.id)
-    reg_id = data["niet_lid_wachtend"][0].id
-
-    wl = make_member(db_session, lidnummer="WLAFW", role="wedstrijdleider")
-    make_member_club(db_session, wl.id, club.id, role="wedstrijdleider")
-    _set_auth(app, wl=wl)
-    response = await client.post(f"/beheer/niet-lid/{reg_id}/afwijzen")
-    assert response.status_code == 302
-    assert "niet_lid_afgewezen=1" in response.headers["location"]
-    assert db_session.query(Registration).filter(Registration.id == reg_id).first() is None
+    aanmeld_pagina = await client.get(f"/aanmelden/{ev.id}")
+    assert aanmeld_pagina.status_code == 200
+    assert "Niet-leden kunnen niet aangemeld worden" in aanmeld_pagina.text
 
 
 # ── Niet-lid-partnerbeleid (ingelogd lid) ─────────────────────────────────────

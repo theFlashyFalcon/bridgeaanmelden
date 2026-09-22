@@ -177,13 +177,13 @@ async def bericht_verstuur(request: Request, db: Session = Depends(get_db)):
 
     # ── Nieuwsbericht (admin / wedstrijdleider, ook per-club WL-rol) ──────
     if is_nieuws:
-        is_beheerder = current_user.role in (MemberRole.admin, MemberRole.wedstrijdleider)
+        is_beheerder = current_user.role == MemberRole.admin
         if not is_beheerder:
             is_beheerder = (
                 db.query(MemberClub)
                 .filter(
                     MemberClub.member_id == current_user.id,
-                    MemberClub.role.in_([MemberRole.admin.value, MemberRole.wedstrijdleider.value]),
+                    MemberClub.role == MemberRole.wedstrijdleider.value,
                 )
                 .first()
                 is not None

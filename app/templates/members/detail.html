@@ -167,7 +167,7 @@
     </dd>
     {% if member.verwijderd_op %}
     <dt>Verwijderd op</dt>
-    <dd>{{ member.verwijderd_op.strftime('%d-%m-%Y %H:%M') }}</dd>
+    <dd>{{ (member.verwijderd_op | lokale_tijd).strftime('%d-%m-%Y %H:%M') }}</dd>
     {% endif %}
   </dl>
 </section>

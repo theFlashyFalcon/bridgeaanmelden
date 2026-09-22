@@ -29,6 +29,9 @@
       {% if current_user %}
         {% set view_as_role = request.session.get('view_as_role') if current_user.role == 'admin' else None %}
         {% set display_role = view_as_role if view_as_role else current_user.role %}
+        {# Wedstrijdleiderschap is altijd per club (nooit een globale rol) — dus naast
+           display_role ('admin'/'lid') ook echt navragen of dit lid ergens WL is. #}
+        {% set is_club_wl = current_user.role != 'admin' and get_beheer_clubs(request) | length > 0 %}
 
         <a href="/profiel" class="nav-user" style="text-decoration:none;color:inherit;">
           Mijn account
@@ -52,7 +55,7 @@
 
         <a href="/uitslagen">Ranking/Uitslagen</a>
 
-        {% if display_role in ['wedstrijdleider', 'admin'] %}
+        {% if display_role in ['wedstrijdleider', 'admin'] or is_club_wl %}
         <div class="nav-dropdown">
           <span class="nav-dropdown-toggle">Clubagenda &#9660;</span>
           <div class="nav-dropdown-menu">

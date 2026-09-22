@@ -11,10 +11,10 @@ from app.auth import (
     get_wedstrijdleider_clubs,
     require_admin,
     require_wedstrijdleider,
-    sync_global_role,
 )
 from app.database import get_db
 from app.models import Club, ClubEvening, Lid, Member, MemberClub, MemberRole, Registration
+from app.utils.nbb import zelfde_nbb
 
 router = APIRouter(prefix="/leden")
 from app.templates_env import templates
@@ -31,8 +31,6 @@ def _kan_lid_beheren(current_user: Member, member: Member, db: Session) -> bool:
     if not member_club_ids:
         return True  # legacy lid zonder clubkoppeling
     beheer_ids = {c.id for c in get_wedstrijdleider_clubs(current_user, db)}
-    if not beheer_ids and current_user.role == MemberRole.wedstrijdleider.value:
-        return True  # legacy globale WL zonder clubkoppelingen
     return bool(member_club_ids & beheer_ids)
 
 _SORT_MAP = {
@@ -71,6 +69,23 @@ async def member_list(
     members = q.order_by(*sort_cols).all()
     lid_nummers = {l.nbb_nummer for l in db.query(Lid.nbb_nummer).all() if l.nbb_nummer}
 
+    # Per lid de club(s) waar dit lid wedstrijdleider van is — wedstrijdleiderschap
+    # is altijd per club, dus dit staat niet in m.role (die is alleen lid/admin).
+    member_ids = [m.id for m in members]
+    wl_clubs_per_member: dict[int, list[str]] = {}
+    if member_ids:
+        wl_rows = (
+            db.query(MemberClub, Club.naam)
+            .join(Club, Club.id == MemberClub.club_id)
+            .filter(
+                MemberClub.member_id.in_(member_ids),
+                MemberClub.role == MemberRole.wedstrijdleider.value,
+            )
+            .all()
+        )
+        for mc, club_naam_row in wl_rows:
+            wl_clubs_per_member.setdefault(mc.member_id, []).append(club_naam_row)
+
     return templates.TemplateResponse(
         request,
         "members/list.html",
@@ -81,6 +96,7 @@ async def member_list(
             "lid_nummers": lid_nummers,
             "clubs": clubs,
             "active_club": active_club,
+            "wl_clubs_per_member": wl_clubs_per_member,
         },
     )
 
@@ -116,6 +132,15 @@ async def member_detail(
         .filter(Lid.nbb_nummer == member.lidnummer)
         .first()
     )
+    if not lid_match:
+        # Voorloopnullen negeren (bv. "012345" i.p.v. "12345")
+        lid_match = next(
+            (
+                lid for lid in db.query(Lid).filter(Lid.nbb_nummer.isnot(None)).all()
+                if zelfde_nbb(lid.nbb_nummer, member.lidnummer)
+            ),
+            None,
+        )
 
     club_memberships = (
         db.query(MemberClub)
@@ -163,7 +188,8 @@ async def member_rol_wijzigen(
 ):
     """
     Zet de globale rol van een lid: lid of admin. Wedstrijdleiderschap is
-    altijd per club en loopt via de club-ledenbeheerroutes (/beheer/clubs/...).
+    altijd per club en loopt via de club-ledenbeheerroutes (/beheer/clubs/...)
+    en raakt deze globale rol nooit.
     """
     form = await request.form()
     role = form.get("role", "").strip()
@@ -174,12 +200,7 @@ async def member_rol_wijzigen(
     if not member:
         raise HTTPException(status_code=404)
 
-    if role == MemberRole.admin.value:
-        member.role = MemberRole.admin.value
-    else:
-        # Niet blind op 'lid' zetten: als dit lid nog per-club wedstrijdleider
-        # is, moet de globale rol dat blijven weerspiegelen.
-        sync_global_role(member, db)
+    member.role = role
     db.commit()
     return RedirectResponse(url=f"/leden/{member_id}?opgeslagen=1", status_code=302)
 

@@ -28,7 +28,7 @@
           {{ root.afzender.voornaam }} {{ root.afzender.achternaam }}
         {% endif %}
       </strong>
-      <span class="bericht-datum">{{ root.aangemaakt_op.strftime('%d-%m-%Y om %H:%M') }}</span>
+      <span class="bericht-datum">{{ (root.aangemaakt_op | lokale_tijd).strftime('%d-%m-%Y om %H:%M') }}</span>
     </div>
     <div class="bericht-tekst">{{ root.tekst }}</div>
   </div>
@@ -45,7 +45,7 @@
             {{ reply.afzender.voornaam }} {{ reply.afzender.achternaam }}
           {% endif %}
         </strong>
-        <span class="bericht-datum">{{ reply.aangemaakt_op.strftime('%d-%m-%Y om %H:%M') }}</span>
+        <span class="bericht-datum">{{ (reply.aangemaakt_op | lokale_tijd).strftime('%d-%m-%Y om %H:%M') }}</span>
       </div>
       <div class="bericht-tekst">{{ reply.tekst }}</div>
     </div>

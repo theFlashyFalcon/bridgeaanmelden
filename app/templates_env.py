@@ -5,6 +5,7 @@ from fastapi.templating import Jinja2Templates
 from app.club_settings import evening_label
 from app.csrf import csrf_input, get_csrf_token
 from app.config import ANDERE_CLUBS, CLUB_NAAM, CLUB_STAD
+from app.utils.tijd import naar_lokale_tijd
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.globals["csrf_token"] = get_csrf_token
@@ -13,6 +14,7 @@ templates.env.globals["club_naam"] = CLUB_NAAM
 templates.env.globals["club_stad"] = CLUB_STAD
 templates.env.globals["andere_clubs"] = ANDERE_CLUBS
 templates.env.globals["event_label"] = evening_label
+templates.env.filters["lokale_tijd"] = naar_lokale_tijd
 
 
 def _get_beheer_clubs(request):
@@ -36,7 +38,7 @@ def _get_beheer_clubs(request):
                 return db.query(Club).order_by(Club.naam).all()
             mc_rows = db.query(MemberClub).filter(
                 MemberClub.member_id == member.id,
-                MemberClub.role.in_([MemberRole.admin.value, MemberRole.wedstrijdleider.value]),
+                MemberClub.role == MemberRole.wedstrijdleider.value,
             ).all()
             if not mc_rows:
                 return []

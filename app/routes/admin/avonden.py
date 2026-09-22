@@ -378,10 +378,11 @@ async def avonden_delete(
     event_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Member = Depends(require_admin),
+    current_user: Member = Depends(require_wedstrijdleider),
 ):
+    club = get_admin_club(current_user, db, request)
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
-    if evening:
+    if evening and (not club or evening.club_id == club.id):
         db.query(Registration).filter(Registration.evening_id == event_id).delete(synchronize_session=False)
         db.query(ManualPair).filter(ManualPair.evening_id == event_id).delete(synchronize_session=False)
         db.query(PartnerRequest).filter(PartnerRequest.evening_id == event_id).delete(synchronize_session=False)
@@ -389,6 +390,35 @@ async def avonden_delete(
         db.delete(evening)
         db.commit()
     return RedirectResponse(url="/beheer/avonden?verwijderd=1", status_code=302)
+
+
+@router.post("/avonden/bulk-verwijder")
+async def avonden_bulk_delete(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    club = get_admin_club(current_user, db, request)
+    form = await request.form()
+    event_ids = [int(v) for v in form.getlist("event_ids") if v.isdigit()]
+
+    aantal = 0
+    if event_ids:
+        q = db.query(ClubEvening).filter(ClubEvening.id.in_(event_ids))
+        if club:
+            q = q.filter(ClubEvening.club_id == club.id)
+        te_verwijderen_ids = [e.id for e in q.all()]
+
+        if te_verwijderen_ids:
+            db.query(Registration).filter(Registration.evening_id.in_(te_verwijderen_ids)).delete(synchronize_session=False)
+            db.query(ManualPair).filter(ManualPair.evening_id.in_(te_verwijderen_ids)).delete(synchronize_session=False)
+            db.query(PartnerRequest).filter(PartnerRequest.evening_id.in_(te_verwijderen_ids)).delete(synchronize_session=False)
+            db.query(Uitslag).filter(Uitslag.evening_id.in_(te_verwijderen_ids)).delete(synchronize_session=False)
+            db.query(ClubEvening).filter(ClubEvening.id.in_(te_verwijderen_ids)).delete(synchronize_session=False)
+            db.commit()
+            aantal = len(te_verwijderen_ids)
+
+    return RedirectResponse(url=f"/beheer/avonden?bulk_verwijderd={aantal}", status_code=302)
 
 
 # ── Seizoenen (Admin only) ────────────────────────────────────────────────────
@@ -484,10 +514,8 @@ async def instellingen_form(
         enabled_rankings,
     )
     from app.niet_leden import (
-        NIET_LID_BELEID_KEUZES,
         NIET_LID_PAAR_BELEID_KEUZES,
         maak_gast_token,
-        niet_lid_beleid,
         niet_lid_paar_beleid,
     )
     from app.routes.admin.helpers import _base_url
@@ -514,9 +542,7 @@ async def instellingen_form(
             "actieve_types": enabled_event_types(club),
             "actieve_rankings": enabled_rankings(club),
             "actieve_labels": enabled_labels(club),
-            "niet_lid_beleid_keuzes": NIET_LID_BELEID_KEUZES,
             "niet_lid_paar_beleid_keuzes": NIET_LID_PAAR_BELEID_KEUZES,
-            "actief_niet_lid_beleid": niet_lid_beleid(club),
             "actief_niet_lid_paar_beleid": niet_lid_paar_beleid(club),
             "gast_link": gast_link,
         },
@@ -530,7 +556,7 @@ async def instellingen_save(
     current_user: Member = Depends(require_wedstrijdleider),
 ):
     from app.club_settings import EVENT_TYPE_KEYS, LABEL_KEYS, RANKING_KEYS
-    from app.niet_leden import NIET_LID_BELEID_KEYS, NIET_LID_PAAR_BELEID_KEYS
+    from app.niet_leden import NIET_LID_PAAR_BELEID_KEYS
 
     club = get_admin_club(current_user, db, request)
     if not club:
@@ -552,9 +578,6 @@ async def instellingen_save(
     club.ranking_weergaves = ",".join(gekozen_rankings)
     club.labels = ",".join(gekozen_labels)
 
-    niet_lid_beleid = form.get("niet_lid_beleid", "")
-    if niet_lid_beleid in NIET_LID_BELEID_KEYS:
-        club.niet_lid_beleid = niet_lid_beleid
     niet_lid_paar_beleid = form.get("niet_lid_paar_beleid", "")
     if niet_lid_paar_beleid in NIET_LID_PAAR_BELEID_KEYS:
         club.niet_lid_paar_beleid = niet_lid_paar_beleid

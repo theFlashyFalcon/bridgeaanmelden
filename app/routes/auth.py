@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 from app import ratelimit
-from app.auth import get_current_user, hash_password, needs_rehash, verify_password
+from app.auth import (
+    demote_other_club_roles,
+    get_current_user,
+    hash_password,
+    needs_rehash,
+    verify_password,
+)
 from app.database import get_db
 from app.models import (
     AccountRequest,
@@ -25,13 +31,18 @@ from app.models import (
     MemberRole,
     PasswordResetToken,
 )
+from app.utils.nbb import zelfde_nbb
 
 router = APIRouter()
 from app.templates_env import templates
 
 
-def _koppel_aan_club(member: Member, db: Session, club_id: int | None = None) -> None:
-    """Maak een MemberClub record aan als die nog niet bestaat."""
+def _koppel_aan_club(
+    member: Member, db: Session, club_id: int | None = None, role: str | None = None,
+) -> None:
+    """Maak een MemberClub record aan als die nog niet bestaat. `role` is de
+    rol bij déze club (standaard 'lid') — member.role (globaal: lid/admin)
+    wordt hier nooit voor gebruikt, wedstrijdleiderschap is altijd per club."""
     if club_id is None:
         club = db.query(Club).first()
         if club is None:
@@ -42,7 +53,7 @@ def _koppel_aan_club(member: Member, db: Session, club_id: int | None = None) ->
         MemberClub.club_id == club_id,
     ).first()
     if not exists:
-        db.add(MemberClub(member_id=member.id, club_id=club_id, role=member.role))
+        db.add(MemberClub(member_id=member.id, club_id=club_id, role=role or MemberRole.lid.value))
 
 
 # ── Login ──────────────────────────────────────────────────────────────────────
@@ -221,14 +232,28 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
 
     # ── Controleer: account bestaat al ───────────────────────────────────────
     # Het lidnummer is de onderscheidende factor voor een account — meerdere
-    # leden (bv. gezinsleden) mogen hetzelfde e-mailadres gebruiken.
+    # leden (bv. gezinsleden) mogen hetzelfde e-mailadres gebruiken. Voorloop-
+    # nullen worden genegeerd (sommige leden vullen bv. "012345" i.p.v. "12345" in).
     bestaand_op_nbb = db.query(Member).filter(Member.lidnummer == nbb_nummer).first()
+    if not bestaand_op_nbb:
+        bestaand_op_nbb = next(
+            (
+                m for m in db.query(Member).filter(Member.lidnummer.isnot(None)).all()
+                if zelfde_nbb(m.lidnummer, nbb_nummer)
+            ),
+            None,
+        )
     if bestaand_op_nbb:
         return _render({"melding": "al_account"})
 
     # ── Zoek in ledenlijsten van alle aangesloten clubs ───────────────────────
-    # Primair: zoek op NBB-nummer
+    # Primair: zoek op NBB-nummer (voorloopnullen genegeerd)
     leden_op_nbb = db.query(Lid).filter(Lid.nbb_nummer == nbb_nummer).all()
+    if not leden_op_nbb:
+        leden_op_nbb = [
+            lid for lid in db.query(Lid).filter(Lid.nbb_nummer.isnot(None)).all()
+            if zelfde_nbb(lid.nbb_nummer, nbb_nummer)
+        ]
 
     if leden_op_nbb:
         # Dit lidnummer staat in een ledenlijst — de naam moet dan wel kloppen,
@@ -250,8 +275,13 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         ).all()
 
     # ── Account aanmaken; clubtoegang volgt uit de ledenlijst ─────────────────
+    # Een vooraf toegewezen rol (via /beheer/uitnodigingen) mag alleen een
+    # globale admin opleveren — wedstrijdleiderschap is altijd per club en
+    # wordt hieronder aan de gekoppelde club(s) toegekend, nooit globaal.
     assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == email).first()
-    role = assignment.role if assignment else MemberRole.lid
+    toegewezen_rol = assignment.role if assignment else MemberRole.lid.value
+    globale_rol = toegewezen_rol if toegewezen_rol == MemberRole.admin.value else MemberRole.lid.value
+    club_rol = toegewezen_rol if toegewezen_rol == MemberRole.wedstrijdleider.value else MemberRole.lid.value
 
     member = Member(
         voornaam=voornaam,
@@ -259,7 +289,7 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
         lidnummer=nbb_nummer,
         email=email,
         wachtwoord_hash=hash_password(password),
-        role=role,
+        role=globale_rol,
         toestemming_op=datetime.now(timezone.utc),
     )
     db.add(member)
@@ -269,7 +299,10 @@ async def registreren_submit(request: Request, db: Session = Depends(get_db)):
     # treffer blijft het account clubloos tot een wedstrijdleider het toevoegt
     club_ids = {lid.club_id for lid in gekoppelde_leden if lid.club_id}
     for club_id in club_ids:
-        _koppel_aan_club(member, db, club_id=club_id)
+        _koppel_aan_club(member, db, club_id=club_id, role=club_rol)
+    if club_rol == MemberRole.wedstrijdleider.value and club_ids:
+        # Een lid kan maar bij één club tegelijk wedstrijdleider zijn.
+        demote_other_club_roles(member.id, next(iter(club_ids)), db)
 
     try:
         db.commit()
@@ -367,8 +400,13 @@ async def register_submit(token: str, request: Request, db: Session = Depends(ge
             status_code=422,
         )
 
+    # Een toegewezen rol mag alleen een globale admin opleveren — wedstrijd-
+    # leiderschap is altijd per club en wordt alleen aan de uitgenodigde club
+    # toegekend, nooit globaal (zie ook registreren_submit hierboven).
     assignment = db.query(EmailRoleAssignment).filter(EmailRoleAssignment.email == email).first()
-    role = assignment.role if assignment else MemberRole.lid
+    toegewezen_rol = assignment.role if assignment else MemberRole.lid.value
+    globale_rol = toegewezen_rol if toegewezen_rol == MemberRole.admin.value else MemberRole.lid.value
+    club_rol = toegewezen_rol if toegewezen_rol == MemberRole.wedstrijdleider.value else MemberRole.lid.value
 
     member = Member(
         voornaam=voornaam,
@@ -376,18 +414,23 @@ async def register_submit(token: str, request: Request, db: Session = Depends(ge
         lidnummer=lidnummer or f"lid_{secrets.token_hex(4)}",
         email=email,
         wachtwoord_hash=hash_password(password),
-        role=role,
+        role=globale_rol,
         toestemming_op=datetime.now(timezone.utc),
     )
     db.add(member)
     db.flush()
 
     # Koppel aan de uitgenodigde club
-    _koppel_aan_club(member, db, club_id=invitation.club_id)
+    _koppel_aan_club(member, db, club_id=invitation.club_id, role=club_rol)
 
-    # Zoek ook in alle andere clubs op NBB-nummer of naam
+    # Zoek ook in alle andere clubs op NBB-nummer of naam (voorloopnullen genegeerd)
     if lidnummer and not lidnummer.startswith("lid_"):
         extra_leden = db.query(Lid).filter(Lid.nbb_nummer == lidnummer).all()
+        if not extra_leden:
+            extra_leden = [
+                lid for lid in db.query(Lid).filter(Lid.nbb_nummer.isnot(None)).all()
+                if zelfde_nbb(lid.nbb_nummer, lidnummer)
+            ]
     else:
         extra_leden = db.query(Lid).filter(
             Lid.voornaam.ilike(voornaam),

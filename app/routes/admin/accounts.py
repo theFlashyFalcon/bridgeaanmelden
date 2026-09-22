@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_admin_club, require_admin
@@ -24,6 +23,7 @@ from app.models import (
 )
 from app.routes.admin.helpers import _base_url, _rol_opties
 from app.templates_env import templates
+from app.utils.ledenimport import importeer_ledenlijst_csv
 
 logger = logging.getLogger(__name__)
 
@@ -269,13 +269,16 @@ async def aanvraag_goedkeuren(
             db.commit()
             return RedirectResponse(url="/beheer/aanvragen?goedgekeurd=1", status_code=302)
 
+        # Alleen 'admin' mag de globale rol raken — wedstrijdleiderschap is
+        # altijd per club en wordt hieronder alleen aan deze club toegekend.
+        globale_rol = role if role == MemberRole.admin.value else MemberRole.lid.value
         member = Member(
             voornaam=aanvraag.voornaam,
             achternaam=aanvraag.achternaam,
             lidnummer=aanvraag.lidnummer,
             email=aanvraag.email,
             wachtwoord_hash=aanvraag.wachtwoord_hash,
-            role=role,
+            role=globale_rol,
             toestemming_op=aanvraag.toestemming_op,
         )
         db.add(member)
@@ -420,9 +423,6 @@ async def leden_importeer(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_admin),
 ):
-    import csv
-    import io
-
     club = get_admin_club(current_user, db, request)
     club_id = club.id if club else None
     form = await request.form()
@@ -431,36 +431,10 @@ async def leden_importeer(
         return RedirectResponse(url="/beheer/leden?import_fout=1", status_code=302)
 
     inhoud = await bestand.read()
-    try:
-        tekst = inhoud.decode("utf-8-sig")  # utf-8-sig handles Excel BOM
-    except UnicodeDecodeError:
-        tekst = inhoud.decode("latin-1")
-
-    reader = csv.DictReader(io.StringIO(tekst))
-    toegevoegd = 0
-    overgeslagen = 0
-    for rij in reader:
-        voornaam = (rij.get("voornaam") or rij.get("Voornaam") or "").strip()
-        achternaam = (rij.get("achternaam") or rij.get("Achternaam") or "").strip()
-        nbb = (rij.get("nbb_nummer") or rij.get("NBB") or rij.get("nbb") or "").strip() or None
-        if not voornaam or not achternaam:
-            overgeslagen += 1
-            continue
-        al_aanwezig = (
-            db.query(Lid)
-            .filter(
-                func.lower(Lid.voornaam) == voornaam.lower(),
-                func.lower(Lid.achternaam) == achternaam.lower(),
-                Lid.club_id == club_id,
-            )
-            .first()
-        )
-        if not al_aanwezig:
-            db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb, club_id=club_id))
-            toegevoegd += 1
-        else:
-            overgeslagen += 1
-    db.commit()
-    return RedirectResponse(url=f"/beheer/leden?import_ok={toegevoegd}&overgeslagen={overgeslagen}", status_code=302)
+    resultaat = importeer_ledenlijst_csv(inhoud, club_id, db)
+    url = f"/beheer/leden?import_ok={resultaat.toegevoegd}&overgeslagen={resultaat.overgeslagen}"
+    if resultaat.gecorrigeerd:
+        url += f"&gecorrigeerd={len(resultaat.gecorrigeerd)}"
+    return RedirectResponse(url=url, status_code=302)
 
 

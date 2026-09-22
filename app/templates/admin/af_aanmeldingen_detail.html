@@ -349,7 +349,7 @@
             {% endif %}
           </div>
           <div style="font-size:.8rem;color:var(--color-muted);">
-            Aangemeld op {{ reg.aangemeld_op.strftime('%d-%m-%Y %H:%M') }}
+            Aangemeld op {{ (reg.aangemeld_op | lokale_tijd).strftime('%d-%m-%Y %H:%M') }}
           </div>
           <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
             <form method="post" action="/beheer/niet-lid/{{ reg.id }}/goedkeuren">
@@ -390,7 +390,7 @@
             {% endif %}
           </div>
           <div style="font-size:.8rem;color:var(--color-muted);">
-            Aangemeld op {{ reg.aangemeld_op.strftime('%d-%m-%Y %H:%M') }}
+            Aangemeld op {{ (reg.aangemeld_op | lokale_tijd).strftime('%d-%m-%Y %H:%M') }}
           </div>
           {% if reg.te_laat_goedgekeurd %}
             <span class="badge badge-success">Goedgekeurd</span>

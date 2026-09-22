@@ -23,6 +23,15 @@
     <div class="alert alert-success">Mail met de aanmeldlink is verstuurd.</div>
   {% elif request.query_params.get('mail_fout') %}
     <div class="alert alert-error">Mail versturen is mislukt. Controleer het e-mailadres en de mailinstellingen.</div>
+  {% elif request.query_params.get('import_ok') is not none %}
+    <div class="alert alert-success">
+      {{ request.query_params.get('import_ok') }} leden toegevoegd, {{ request.query_params.get('overgeslagen') or 0 }} overgeslagen (al aanwezig of onvolledig).
+      {% if request.query_params.get('gecorrigeerd') %}
+        {{ request.query_params.get('gecorrigeerd') }} naam/namen automatisch gecorrigeerd (verkeerd gecodeerde tekens, bv. "Ã©" → "é").
+      {% endif %}
+    </div>
+  {% elif request.query_params.get('import_fout') %}
+    <div class="alert alert-error">Kies een bestand om te importeren.</div>
   {% endif %}
 
   <form method="post" action="/beheer/instellingen">
@@ -75,18 +84,10 @@
     </div>
 
     <h2 style="font-size:1.05rem;margin:1rem 0 .25rem;">Aanmelden door niet-leden</h2>
-    <p style="color: var(--color-muted); margin-bottom: .5rem; font-size: .85rem;">
-      Als er iemand wordt aangemeld die niet in de ledenlijst staat, moet het volgende gebeuren:
+    <p style="color: var(--color-muted); margin-bottom: 1.25rem; font-size: .85rem;">
+      Niet-leden kunnen zich niet meer zelf aanmelden via de gastlink. De gastlink werkt nog
+      wel om het rooster te bekijken.
     </p>
-    <div class="toggle-list" style="margin-bottom:1.25rem;">
-      {% for key, label in niet_lid_beleid_keuzes %}
-      <label class="toggle-item">
-        <input type="radio" name="niet_lid_beleid" value="{{ key }}"
-               {% if key == actief_niet_lid_beleid %}checked{% endif %}>
-        {{ label }}
-      </label>
-      {% endfor %}
-    </div>
 
     <h2 style="font-size:1.05rem;margin:1rem 0 .25rem;">Niet-lid-partner opgeven</h2>
     <p style="color: var(--color-muted); margin-bottom: .5rem; font-size: .85rem;">
@@ -106,17 +107,36 @@
   </form>
 </section>
 
+{% if club %}
+<section class="card">
+  <h2 style="font-size:1.05rem;margin-bottom:.25rem;">Ledenlijst importeren</h2>
+  <p style="color: var(--color-muted); margin-bottom: .75rem; font-size: .9rem;">
+    Importeer of ververs de ledenlijst van {{ club.naam }} vanuit een CSV-export (kolommen
+    voornaam, achternaam, optioneel nbb_nummer). Bestaande namen worden overgeslagen, niet
+    overschreven.
+  </p>
+  <form method="post" action="/beheer/clubs/{{ club.id }}/leden/importeer" enctype="multipart/form-data" class="form-row" style="align-items:flex-end;">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+    <input type="hidden" name="next" value="/beheer/instellingen">
+    <div class="form-group" style="flex:1;">
+      <label for="ledenlijst-bestand">CSV-bestand</label>
+      <input type="file" id="ledenlijst-bestand" name="bestand" accept=".csv" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Importeren</button>
+  </form>
+</section>
+{% endif %}
+
 {% if gast_link %}
 <section class="card">
-  <h2 style="font-size:1.05rem;margin-bottom:.25rem;">Niet-leden uitnodigen</h2>
+  <h2 style="font-size:1.05rem;margin-bottom:.25rem;">Rooster delen met niet-leden</h2>
   <p style="color: var(--color-muted); margin-bottom: .75rem; font-size: .9rem;">
-    Om niet-leden uit te nodigen om aan te melden voor je gebeurtenissen stuur ze deze link.
-    Ze komen dan bij de aanmeldpagina van je club en kunnen zich aanmelden — ze worden dan wel
-    gelabeld als niet-leden.
+    Deze link laat niet-leden het rooster van je club bekijken. Ze kunnen zich er niet zelf
+    mee aanmelden.
   </p>
   <div class="form-row" style="align-items:flex-end;">
     <div class="form-group" style="flex:1;">
-      <label for="gast-link-veld">Aanmeldlink voor niet-leden</label>
+      <label for="gast-link-veld">Roosterlink voor niet-leden</label>
       <input type="text" id="gast-link-veld" value="{{ gast_link }}" readonly
              style="width:100%;" onclick="this.select();">
     </div>

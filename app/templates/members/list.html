@@ -61,7 +61,13 @@
           </td>
           <td>{{ m.lidnummer or '—' }}</td>
           <td>{{ m.email or '—' }}</td>
-          <td><span class="role-badge-tabel role-{{ m.role }}">{{ m.role }}</span></td>
+          <td>
+            <span class="role-badge-tabel role-{{ m.role }}">{{ m.role }}</span>
+            {% set wl_clubs = wl_clubs_per_member.get(m.id) %}
+            {% if wl_clubs %}
+              <span class="role-badge-tabel role-wedstrijdleider" title="Wedstrijdleider">WL: {{ wl_clubs | join(', ') }}</span>
+            {% endif %}
+          </td>
           <td onclick="event.stopPropagation()">
             {% if m.id != current_user.id %}
             <form method="post" action="/leden/{{ m.id }}/verwijder" data-bevestig="Weet je zeker dat je {{ m.voornaam }} {{ m.achternaam }} wilt verwijderen? Het account kan niet meer inloggen.">

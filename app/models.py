@@ -96,6 +96,7 @@ class Member(Base):
     wachtwoord_hash = Column(String, nullable=True)
     verwijderd_op = Column(DateTime, nullable=True)
     verborgen_types = Column(String, nullable=True)
+    verborgen_clubs = Column(String, nullable=True)
     toestemming_op = Column(DateTime, nullable=True)
 
     invitations = relationship("Invitation", back_populates="member")
@@ -239,6 +240,21 @@ class Lid(Base):
     achternaam = Column(String, nullable=False)
     nbb_nummer = Column(String, nullable=True, index=True)
     club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
+
+
+class Favorite(Base):
+    """Favoriete aanmeldpartner van een lid — voor de snelkeuze/sterretje bij
+    het invullen van een partnernaam (zie app/routes/partners.py)."""
+    __tablename__ = "favorites"
+
+    id = Column(Integer, primary_key=True, index=True)
+    member_id = Column(Integer, ForeignKey("members.id"), nullable=False)
+    voornaam = Column(String, nullable=False)
+    achternaam = Column(String, nullable=False)
+    nbb_nummer = Column(String, nullable=True)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+
+    member = relationship("Member")
 
 
 class PartnerRequest(Base):

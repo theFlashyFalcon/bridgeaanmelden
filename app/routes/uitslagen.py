@@ -10,6 +10,7 @@ from app.auth import (
     can_manage_club,
     get_current_user,
     get_member_club_ids,
+    get_wedstrijdleider_clubs,
     is_member_of_club,
     require_auth,
     require_wedstrijdleider,
@@ -51,7 +52,11 @@ async def uitslagen_pagina(
     current_user: Member = Depends(require_auth),
 ):
     display_role = _get_display_role(request, current_user)
-    kan_uploaden = display_role in ("wedstrijdleider", "admin")
+    # Wedstrijdleiderschap is altijd per club — display_role weerspiegelt dat
+    # niet (die is 'lid'/'admin', evt. overschreven door de admin-previewtoggle).
+    kan_uploaden = display_role in ("wedstrijdleider", "admin") or bool(
+        get_wedstrijdleider_clubs(current_user, db)
+    )
 
     q = request.query_params.get("q", "").strip()
     today = date.today()
