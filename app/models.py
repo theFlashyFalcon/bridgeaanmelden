@@ -10,6 +10,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    Time,
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -196,6 +197,7 @@ class ClubEvening(Base):
     id = Column(Integer, primary_key=True, index=True)
     naam = Column(String, nullable=True, default="")
     datum = Column(Date, nullable=False)
+    starttijd = Column(Time, nullable=True)
     type = Column(String, nullable=False, default=EveningType.clubavond)
     deelnemers_type = Column(String, nullable=False, default=DeelnemersType.paren)
     inschrijftermijn_uren = Column(Integer, nullable=True)

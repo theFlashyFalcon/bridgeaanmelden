@@ -63,11 +63,21 @@ def _synoniemen(event_type: str) -> list[str]:
     return _TYPE_SYNONIEMEN.get(event_type, [event_type])
 
 
-def _is_na_inschrijftermijn(evening: ClubEvening) -> bool:
+def _inschrijftermijn_deadline(evening: ClubEvening) -> Optional[datetime]:
+    """Moment waarop de inschrijftermijn verstrijkt, geteld terug vanaf de
+    starttijd van het evenement (of middernacht als er geen starttijd is
+    opgegeven — legacy-gedrag voor oudere evenementen)."""
     if not evening.inschrijftermijn_uren:
+        return None
+    referentietijd = evening.starttijd or datetime.min.time()
+    referentiemoment = datetime.combine(evening.datum, referentietijd, tzinfo=_TIJDZONE)
+    return referentiemoment - timedelta(hours=evening.inschrijftermijn_uren)
+
+
+def _is_na_inschrijftermijn(evening: ClubEvening) -> bool:
+    deadline = _inschrijftermijn_deadline(evening)
+    if deadline is None:
         return False
-    middernacht = datetime.combine(evening.datum, datetime.min.time(), tzinfo=_TIJDZONE)
-    deadline = middernacht - timedelta(hours=evening.inschrijftermijn_uren)
     return datetime.now(_TIJDZONE) > deadline
 
 

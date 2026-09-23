@@ -1227,3 +1227,110 @@ async def test_uc76_viertallen_ongewijzigde_teamgenoot_geen_dubbel_bericht(clien
     ontvangers = [b.ontvanger_id for b in berichten]
     assert ontvangers.count(teamgenoot2.id) == 1
     assert ontvangers.count(teamgenoot3.id) == 1
+
+
+# ── UC77–UC80: Starttijd evenement — accurate inschrijftermijn ──────────────
+
+def make_season_nu(db_session):
+    """Seizoen dat vandaag omvat (het conftest-seizoen loopt tot medio 2026)."""
+    from app.models import Season
+    s = Season(naam="Seizoen-nu", start_datum=date.today() - timedelta(days=30),
+               eind_datum=date.today() + timedelta(days=2500), actief=True)
+    db_session.add(s)
+    db_session.commit()
+    db_session.refresh(s)
+    return s
+
+
+async def test_uc77_avond_aanmaken_met_starttijd_telt_termijn_vanaf_starttijd(client, db_session):
+    """De inschrijftermijn wordt geteld terug vanaf de opgegeven starttijd,
+    niet vanaf middernacht."""
+    from datetime import time as dtime
+
+    from app.main import app
+    from app.models import ClubEvening
+    from app.routes.registrations import _inschrijftermijn_deadline
+
+    wl = make_member(db_session, lidnummer="UC77", role="wedstrijdleider")
+    make_season_nu(db_session)
+    _set_auth(app, wl=wl)
+
+    response = await client.post("/beheer/avonden", data={
+        "naam": "Clubavond met starttijd",
+        "datum": (date.today() + timedelta(days=7)).isoformat(),
+        "type": "clubavond",
+        "inschrijftermijn_waarde": "2",
+        "inschrijftermijn_eenheid": "uren",
+        "starttijd": "20:00",
+    })
+    assert response.status_code == 302
+
+    evt = db_session.query(ClubEvening).filter(ClubEvening.naam == "Clubavond met starttijd").first()
+    assert evt.starttijd == dtime(20, 0)
+
+    deadline = _inschrijftermijn_deadline(evt)
+    assert (deadline.hour, deadline.minute) == (18, 0)
+
+
+async def test_uc78_avond_zonder_starttijd_valt_terug_op_middernacht(client, db_session):
+    """Zonder opgegeven starttijd blijft het legacy-gedrag (termijn vanaf middernacht) intact."""
+    from app.main import app
+    from app.models import ClubEvening
+    from app.routes.registrations import _inschrijftermijn_deadline
+
+    wl = make_member(db_session, lidnummer="UC78", role="wedstrijdleider")
+    make_season_nu(db_session)
+    _set_auth(app, wl=wl)
+
+    response = await client.post("/beheer/avonden", data={
+        "naam": "Clubavond zonder starttijd",
+        "datum": (date.today() + timedelta(days=7)).isoformat(),
+        "type": "clubavond",
+        "inschrijftermijn_waarde": "2",
+        "inschrijftermijn_eenheid": "uren",
+    })
+    assert response.status_code == 302
+
+    evt = db_session.query(ClubEvening).filter(ClubEvening.naam == "Clubavond zonder starttijd").first()
+    assert evt.starttijd is None
+
+    deadline = _inschrijftermijn_deadline(evt)
+    assert deadline.hour == 22  # middernacht - 2 uur
+
+
+async def test_uc79_agenda_toont_starttijd_en_inschrijfdeadline(client, db_session):
+    """De agendakaart toont 'vindt plaats om <starttijd> en je hebt tot <deadline>
+    om in te schrijven' zodra een evenement een starttijd heeft."""
+    from datetime import time as dtime
+
+    from app.main import app
+
+    lid = make_member(db_session, voornaam="Test", achternaam="Lid", lidnummer="UC79")
+    season = make_season_nu(db_session)
+    evening = make_evening(db_session, season.id)
+    evening.starttijd = dtime(19, 30)
+    evening.inschrijftermijn_uren = 24
+    db_session.commit()
+
+    _set_auth(app, member=lid)
+    response = await client.get("/")
+
+    assert "vindt plaats om 19:30" in response.text
+    assert "om in te schrijven" in response.text
+
+
+async def test_uc80_agenda_toont_oude_bewoording_zonder_starttijd(client, db_session):
+    """Legacy-evenementen zonder starttijd blijven de oude 'Inschrijven voor …'-tekst tonen."""
+    from app.main import app
+
+    lid = make_member(db_session, voornaam="Test", achternaam="Lid2", lidnummer="UC80")
+    season = make_season_nu(db_session)
+    evening = make_evening(db_session, season.id)
+    evening.inschrijftermijn_uren = 24
+    db_session.commit()
+
+    _set_auth(app, member=lid)
+    response = await client.get("/")
+
+    assert "Inschrijven voor" in response.text
+    assert "vindt plaats om" not in response.text

@@ -1,6 +1,6 @@
 """Beheer: avonden en seizoenen."""
 import logging
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
@@ -321,13 +321,21 @@ async def avonden_add(
         except ValueError:
             pass
 
+    starttijd_str = form.get("starttijd", "").strip()
+    starttijd = None
+    if starttijd_str:
+        try:
+            starttijd = time.fromisoformat(starttijd_str)
+        except ValueError:
+            pass
+
     herhaal_elke_str = (form.get("herhaal_elke", "").strip() or "1")
     herhaal_eenheid = form.get("herhaal_eenheid", "weken")
     herhaal_tot_str = form.get("herhaal_tot", "").strip()
 
     club_id = club.id if club else None
     new_events = []
-    first_event = ClubEvening(naam=naam, datum=datum, type=type_, deelnemers_type=deelnemers_type,
+    first_event = ClubEvening(naam=naam, datum=datum, starttijd=starttijd, type=type_, deelnemers_type=deelnemers_type,
                                inschrijftermijn_uren=inschrijftermijn_uren, season_id=season.id,
                                club_id=club_id, label=label)
     db.add(first_event)
@@ -353,7 +361,7 @@ async def avonden_add(
                     .first()
                 )
                 if next_season:
-                    evt = ClubEvening(naam=naam, datum=next_datum, type=type_, deelnemers_type=deelnemers_type,
+                    evt = ClubEvening(naam=naam, datum=next_datum, starttijd=starttijd, type=type_, deelnemers_type=deelnemers_type,
                                       inschrijftermijn_uren=inschrijftermijn_uren, season_id=next_season.id,
                                       club_id=club_id, label=label)
                     db.add(evt)

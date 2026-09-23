@@ -256,10 +256,15 @@
           </div>
           <div>
             <div class="event-name">{{ evening.naam or evening.type }}</div>
-            {% if termijn_deadlines.get(evening.id) %}
-              {% set dl = termijn_deadlines[evening.id] %}
+            {% set dl = termijn_deadlines.get(evening.id) %}
+            {% if evening.starttijd or dl %}
               <div class="event-termijn">
-                &#9200; Inschrijven voor {{ dl.strftime('%A %d %B, %H:%M') }}
+                &#9200;
+                {% if evening.starttijd %}
+                  Dit evenement vindt plaats om {{ evening.starttijd.strftime('%H:%M') }}{% if dl %} en je hebt tot {{ dl.strftime('%A %d %B, %H:%M') }} om in te schrijven.{% else %}.{% endif %}
+                {% else %}
+                  Inschrijven voor {{ dl.strftime('%A %d %B, %H:%M') }}
+                {% endif %}
               </div>
             {% endif %}
           </div>

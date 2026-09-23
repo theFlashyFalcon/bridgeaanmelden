@@ -133,18 +133,25 @@
         </span>
       </div>
 
-      <div class="form-group">
-        <label for="e-termijn-waarde">Inschrijftermijn</label>
-        <div style="display:flex;align-items:center;gap:.5rem;">
-          <input type="number" id="e-termijn-waarde" name="inschrijftermijn_waarde"
-                 min="1" max="8760" style="width:6rem;" placeholder="bijv. 24">
-          <button type="button" id="e-termijn-eenheid-btn" class="btn btn-secondary btn-sm"
-                  onclick="toggleTermijnEenheid()" style="min-width:5rem;color:var(--color-muted);">
-            uren
-          </button>
-          <input type="hidden" id="e-termijn-eenheid" name="inschrijftermijn_eenheid" value="uren">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="e-termijn-waarde">Inschrijftermijn</label>
+          <div style="display:flex;align-items:center;gap:.5rem;">
+            <input type="number" id="e-termijn-waarde" name="inschrijftermijn_waarde"
+                   min="1" max="8760" style="width:6rem;" placeholder="bijv. 24">
+            <button type="button" id="e-termijn-eenheid-btn" class="btn btn-secondary btn-sm"
+                    onclick="toggleTermijnEenheid()" style="min-width:5rem;color:var(--color-muted);">
+              uren
+            </button>
+            <input type="hidden" id="e-termijn-eenheid" name="inschrijftermijn_eenheid" value="uren">
+          </div>
+          <span class="form-hint">Laat leeg voor geen inschrijftermijn.</span>
         </div>
-        <span class="form-hint">Laat leeg voor geen inschrijftermijn.</span>
+        <div class="form-group">
+          <label for="e-starttijd">Aanvangstijd</label>
+          <input type="time" id="e-starttijd" name="starttijd" style="width:8rem;">
+          <span class="form-hint">Optioneel — zodat de inschrijftermijn hierboven vanaf de daadwerkelijke starttijd wordt geteld in plaats van middernacht.</span>
+        </div>
       </div>
 
       <!-- Herhaal-paneel (verborgen) -->

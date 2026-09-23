@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -137,10 +137,12 @@ async def index(
         for reg in regs1 + regs2:
             user_regs[reg.evening_id] = reg
 
+    from app.routes.registrations import _inschrijftermijn_deadline
+
     termijn_deadlines: dict[int, datetime] = {}
     for e in evenings:
-        if e.inschrijftermijn_uren:
-            deadline = datetime.combine(e.datum, datetime.min.time()) - timedelta(hours=e.inschrijftermijn_uren)
+        deadline = _inschrijftermijn_deadline(e)
+        if deadline:
             termijn_deadlines[e.id] = deadline
 
     # Alleen de evenementtypes die de club(s) van dit lid gebruiken (clubinstellingen)
