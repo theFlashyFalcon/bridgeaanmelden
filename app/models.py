@@ -308,9 +308,15 @@ class RecurringRegistration(Base):
     herhaal_tot = Column(Date, nullable=True)
     actief = Column(Boolean, default=True, nullable=False)
     referentie_datum = Column(Date, nullable=False)
+    # Club waarvoor deze herhaalaanmelding is aangemaakt; NULL = legacy rij
+    # (van vóór deze kolom), die uit compatibiliteit nog voor alle clubs van
+    # het lid blijft gelden. Nieuwe herhaalaanmeldingen gelden alleen voor
+    # avonden van deze specifieke club.
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
     aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
 
     member = relationship("Member")
+    club = relationship("Club")
 
 
 class AdminBericht(Base):

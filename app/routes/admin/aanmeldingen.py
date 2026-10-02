@@ -630,6 +630,7 @@ def _stel_vaste_aanmelding_in(
     db.query(RecurringRegistration).filter(
         RecurringRegistration.member_id == lid.id,
         RecurringRegistration.event_type == evening.type,
+        RecurringRegistration.club_id == evening.club_id,
         RecurringRegistration.actief == True,  # noqa: E712
     ).update({"actief": False})
     db.add(RecurringRegistration(
@@ -639,6 +640,7 @@ def _stel_vaste_aanmelding_in(
         interval=1,
         herhaal_tot=None,
         referentie_datum=today,
+        club_id=evening.club_id,
     ))
     return count
 

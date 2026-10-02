@@ -786,7 +786,12 @@ async def registration_herhaal(
                 Season.actief == True,  # noqa: E712
             )
         )
-        if user_club_ids:
+        # Een herhaalaanmelding wordt gestart vanaf één specifieke avond en
+        # geldt daarom alleen voor avonden van diezelfde club — niet voor
+        # andere clubs waar dit lid ook lid van is.
+        if evening.club_id:
+            query = query.filter(ClubEvening.club_id == evening.club_id)
+        elif user_club_ids:
             query = query.filter(
                 (ClubEvening.club_id.in_(user_club_ids)) | (ClubEvening.club_id.is_(None))
             )
@@ -834,6 +839,7 @@ async def registration_herhaal(
             db.query(RecurringRegistration).filter(
                 RecurringRegistration.member_id == current_user.id,
                 RecurringRegistration.event_type == evening.type,
+                RecurringRegistration.club_id == evening.club_id,
                 RecurringRegistration.actief == True,  # noqa: E712
             ).update({"actief": False})
             db.add(RecurringRegistration(
@@ -843,6 +849,7 @@ async def registration_herhaal(
                 interval=1,
                 herhaal_tot=None,
                 referentie_datum=today,
+                club_id=evening.club_id,
             ))
 
         db.commit()
@@ -975,6 +982,7 @@ async def definitief_aanmelden(
     db.query(RecurringRegistration).filter(
         RecurringRegistration.member_id == current_user.id,
         RecurringRegistration.event_type == primary_type,
+        RecurringRegistration.club_id == club_id,
         RecurringRegistration.actief == True,  # noqa: E712
     ).update({"actief": False})
     db.add(RecurringRegistration(
@@ -984,6 +992,7 @@ async def definitief_aanmelden(
         interval=1,
         herhaal_tot=None,
         referentie_datum=today,
+        club_id=club_id,
     ))
 
     db.commit()

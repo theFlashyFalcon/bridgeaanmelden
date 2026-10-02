@@ -92,6 +92,8 @@ def _apply_recurring_registrations(db: Session, event: ClubEvening, sender_id: O
             continue
         if is_training and not member.training_eligible:
             continue
+        if rr.club_id is not None and rr.club_id != event.club_id:
+            continue
         if not is_member_of_club(member, event.club_id, db):
             continue
         if rr.herhaal_tot and rr.herhaal_tot < event.datum:

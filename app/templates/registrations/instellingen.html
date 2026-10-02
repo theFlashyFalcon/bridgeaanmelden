@@ -19,6 +19,7 @@
     <li class="participant-item" style="display:flex; justify-content:space-between; align-items:center;">
       <span>
         <strong>{{ h.event_type }}</strong>
+        {% if h.club %}&nbsp;&middot;&nbsp; {{ h.club.naam }}{% endif %}
         {% if h.partner_naam %}&nbsp;&middot;&nbsp; partner: {{ h.partner_naam }}{% endif %}
         {% if h.herhaal_tot %}&nbsp;&middot;&nbsp; t/m {{ h.herhaal_tot.strftime('%d %B %Y') }}{% endif %}
       </span>
