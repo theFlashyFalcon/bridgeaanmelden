@@ -9,8 +9,12 @@
 
 {% if request.query_params.get('toegevoegd') %}
   <div class="alert alert-success">Handmatig toegevoegd.</div>
+{% elif request.query_params.get('permanent_toegevoegd') %}
+  <div class="alert alert-success">Paar toegevoegd voor onbepaalde tijd. Een gekoppeld lid-account ziet de aanmelding voortaan ook zelf en kan zich per avond afmelden.</div>
 {% elif request.query_params.get('fout') == 'naam_verplicht' %}
   <div class="alert alert-error">Vul minimaal de naam van speler 1 in.</div>
+{% elif request.query_params.get('fout') == 'geen_account_gevonden' %}
+  <div class="alert alert-error">Geen lid-account gevonden bij deze naam of dit lidnummer. Vul een lidnummer in van een bestaand account, of gebruik gewoon "Toevoegen" voor een eenmalige aanmelding.</div>
 {% elif request.query_params.get('bericht_verstuurd') %}
   <div class="alert alert-success">Bericht verstuurd.</div>
 {% elif request.query_params.get('te_laat_goedgekeurd') %}
@@ -233,6 +237,13 @@
       {% endif %}
 
       <button type="submit" class="btn btn-primary btn-sm">Toevoegen</button>
+      {% if dtype == 'paren' %}
+        <button type="submit" class="btn btn-secondary btn-sm"
+                formaction="/beheer/af-aanmeldingen/{{ evening.id }}/toevoegen-permanent"
+                title="Meldt dit paar aan voor elke (toekomstige) avond van dit type bij deze club. Bij een gekoppeld lid-account (via lidnummer of naam) is de aanmelding ook in dat account zichtbaar en afmeldbaar.">
+          Toevoegen voor onbepaalde tijd
+        </button>
+      {% endif %}
     </form>
   </section>
 

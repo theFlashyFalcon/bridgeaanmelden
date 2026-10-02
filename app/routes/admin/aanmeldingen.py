@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -21,8 +22,10 @@ from app.models import (
     Member,
     MemberClub,
     MemberRole,
+    RecurringRegistration,
     Registration,
     RegistrationStatus,
+    RegistrationType,
     Season,
 )
 from app.templates_env import templates
@@ -191,6 +194,32 @@ def _bekende_leden_set(db: Session, club_id: Optional[int]) -> set[tuple[str, st
     if club_id:
         q = q.filter(Lid.club_id == club_id)
     return {(vn.strip().lower(), an.strip().lower()) for vn, an in q.all()}
+
+
+def _match_member(db: Session, naam: str, lidnummer: Optional[str], club_id: Optional[int]) -> Optional[Member]:
+    """Koppel een handmatig ingevulde naam aan een bestaand lid-account, zodat
+    een vaste aanmelding ook in dat account zichtbaar wordt. Lidnummer heeft
+    voorrang; anders wordt op volledige naam binnen de club gezocht."""
+    if lidnummer:
+        member = (
+            db.query(Member)
+            .filter(Member.lidnummer == lidnummer, Member.verwijderd_op.is_(None))
+            .first()
+        )
+        if member:
+            return member
+    naam = (naam or "").strip()
+    if not naam or " " not in naam:
+        return None
+    voornaam, _, achternaam = naam.partition(" ")
+    q = db.query(Member).filter(
+        func.lower(Member.voornaam) == voornaam.lower(),
+        func.lower(Member.achternaam) == achternaam.lower(),
+        Member.verwijderd_op.is_(None),
+    )
+    if club_id:
+        q = q.join(MemberClub, MemberClub.member_id == Member.id).filter(MemberClub.club_id == club_id)
+    return q.first()
 
 
 _AF_TYPE_MAP: dict[str, list[str]] = {
@@ -540,6 +569,124 @@ async def af_aanmeldingen_toevoegen(
 
     db.commit()
     return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?toegevoegd=1", status_code=302)
+
+
+# Legacy-synoniemen: oude en nieuwe naam voor hetzelfde type evenement
+# (zelfde mapping als in app/routes/registrations.py en app/routes/admin/avonden.py)
+_TYPE_SYNONIEMEN: dict[str, list[str]] = {
+    "clubavond": ["clubavond", "regulier"],
+    "regulier": ["clubavond", "regulier"],
+    "jeugdtraining": ["jeugdtraining", "training"],
+    "training": ["jeugdtraining", "training"],
+}
+
+
+def _synoniemen(event_type: str) -> list[str]:
+    return _TYPE_SYNONIEMEN.get(event_type, [event_type])
+
+
+def _stel_vaste_aanmelding_in(
+    db: Session, lid: Member, evening: ClubEvening, partner_naam: Optional[str]
+) -> int:
+    """Meld `lid` definitief aan voor elke huidige/toekomstige avond van hetzelfde
+    type bij deze club, en bewaar een herhaalaanmelding zodat nieuwe avonden
+    automatisch meekomen (zelfde mechanisme als de zelf-aanmeldflow)."""
+    today = date.today()
+    q = (
+        db.query(ClubEvening)
+        .join(Season)
+        .filter(
+            ClubEvening.type.in_(_synoniemen(evening.type)),
+            ClubEvening.datum >= today,
+            Season.actief == True,  # noqa: E712
+        )
+    )
+    if evening.club_id:
+        q = q.filter(ClubEvening.club_id == evening.club_id)
+    future_events = q.order_by(ClubEvening.datum).all()
+
+    count = 0
+    for evt in future_events:
+        existing = (
+            db.query(Registration)
+            .filter(
+                Registration.evening_id == evt.id,
+                Registration.person1_id == lid.id,
+                Registration.status != RegistrationStatus.afgemeld,
+            )
+            .first()
+        )
+        if existing:
+            continue
+        db.add(Registration(
+            evening_id=evt.id,
+            person1_id=lid.id,
+            partner_naam=partner_naam,
+            type=RegistrationType.vast,
+            status=RegistrationStatus.aangemeld if partner_naam else RegistrationStatus.beschikbaar_solo,
+        ))
+        count += 1
+
+    db.query(RecurringRegistration).filter(
+        RecurringRegistration.member_id == lid.id,
+        RecurringRegistration.event_type == evening.type,
+        RecurringRegistration.actief == True,  # noqa: E712
+    ).update({"actief": False})
+    db.add(RecurringRegistration(
+        member_id=lid.id,
+        event_type=evening.type,
+        partner_naam=partner_naam,
+        interval=1,
+        herhaal_tot=None,
+        referentie_datum=today,
+    ))
+    return count
+
+
+@router.post("/af-aanmeldingen/{event_id}/toevoegen-permanent")
+async def af_aanmeldingen_toevoegen_permanent(
+    event_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    """Koppel een handmatig paar aan bestaande lid-accounts (via lidnummer of
+    naam) en meld hen definitief aan voor elk evenement van dit type bij deze
+    club — inclusief toekomstige, nog aan te maken avonden. Een gekoppeld lid
+    ziet de aanmelding voortaan ook in zijn eigen account en kan zich daar
+    per avond afmelden."""
+    evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
+    if not evening:
+        raise HTTPException(status_code=404, detail="Evenement niet gevonden")
+    if not can_manage_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
+    if (evening.deelnemers_type or "paren") != "paren":
+        raise HTTPException(status_code=400, detail="Alleen beschikbaar voor paren-avonden")
+
+    form = await request.form()
+    naam_1 = form.get("naam_1", "").strip()
+    if not naam_1:
+        return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?fout=naam_verplicht", status_code=302)
+    naam_2 = form.get("naam_2", "").strip() or None
+    lidnummer_1 = form.get("lidnummer_1", "").strip() or None
+    lidnummer_2 = form.get("lidnummer_2", "").strip() or None
+
+    lid1 = _match_member(db, naam_1, lidnummer_1, evening.club_id)
+    lid2 = _match_member(db, naam_2, lidnummer_2, evening.club_id) if naam_2 else None
+
+    if not lid1 and not lid2:
+        return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?fout=geen_account_gevonden", status_code=302)
+
+    gekoppeld = 0
+    if lid1:
+        _stel_vaste_aanmelding_in(db, lid1, evening, naam_2)
+        gekoppeld += 1
+    if lid2 and (not lid1 or lid2.id != lid1.id):
+        _stel_vaste_aanmelding_in(db, lid2, evening, naam_1)
+        gekoppeld += 1
+
+    db.commit()
+    return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?permanent_toegevoegd={gekoppeld}", status_code=302)
 
 
 @router.post("/af-aanmeldingen/{event_id}/manual/{pair_id}/verwijder")
