@@ -16,12 +16,14 @@ from app.auth import (
 )
 from app.database import get_db
 from app.models import (
+    Bericht,
     ClubEvening,
     Lid,
     ManualPair,
     Member,
     MemberClub,
     MemberRole,
+    RecurringManualPair,
     RecurringRegistration,
     Registration,
     RegistrationStatus,
@@ -645,6 +647,69 @@ def _stel_vaste_aanmelding_in(
     return count
 
 
+def _stel_vaste_aanmelding_manual_in(
+    db: Session,
+    naam_1: str,
+    naam_2: Optional[str],
+    lidnummer_1: Optional[str],
+    lidnummer_2: Optional[str],
+    evening: ClubEvening,
+) -> int:
+    """Zelfde als _stel_vaste_aanmelding_in, maar voor een paar waarvan geen
+    van beide spelers een lid-account heeft: meld hen definitief aan via
+    handmatige (niet-lid) aanmeldingen, met een herhaalaanmelding zodat nieuwe
+    avonden automatisch meekomen."""
+    today = date.today()
+    q = (
+        db.query(ClubEvening)
+        .join(Season)
+        .filter(
+            ClubEvening.type.in_(_synoniemen(evening.type)),
+            ClubEvening.datum >= today,
+            Season.actief == True,  # noqa: E712
+        )
+    )
+    if evening.club_id:
+        q = q.filter(ClubEvening.club_id == evening.club_id)
+    future_events = q.order_by(ClubEvening.datum).all()
+
+    count = 0
+    for evt in future_events:
+        existing = (
+            db.query(ManualPair)
+            .filter(
+                ManualPair.evening_id == evt.id,
+                func.lower(ManualPair.naam_1) == naam_1.lower(),
+            )
+            .first()
+        )
+        if existing:
+            continue
+        db.add(ManualPair(
+            evening_id=evt.id,
+            naam_1=naam_1, naam_2=naam_2,
+            lidnummer_1=lidnummer_1, lidnummer_2=lidnummer_2,
+        ))
+        count += 1
+
+    db.query(RecurringManualPair).filter(
+        func.lower(RecurringManualPair.naam_1) == naam_1.lower(),
+        RecurringManualPair.event_type == evening.type,
+        RecurringManualPair.club_id == evening.club_id,
+        RecurringManualPair.actief == True,  # noqa: E712
+    ).update({"actief": False})
+    db.add(RecurringManualPair(
+        naam_1=naam_1, naam_2=naam_2,
+        lidnummer_1=lidnummer_1, lidnummer_2=lidnummer_2,
+        event_type=evening.type,
+        interval=1,
+        herhaal_tot=None,
+        referentie_datum=today,
+        club_id=evening.club_id,
+    ))
+    return count
+
+
 @router.post("/af-aanmeldingen/{event_id}/toevoegen-permanent")
 async def af_aanmeldingen_toevoegen_permanent(
     event_id: int,
@@ -652,11 +717,12 @@ async def af_aanmeldingen_toevoegen_permanent(
     db: Session = Depends(get_db),
     current_user: Member = Depends(require_wedstrijdleider),
 ):
-    """Koppel een handmatig paar aan bestaande lid-accounts (via lidnummer of
-    naam) en meld hen definitief aan voor elk evenement van dit type bij deze
-    club — inclusief toekomstige, nog aan te maken avonden. Een gekoppeld lid
-    ziet de aanmelding voortaan ook in zijn eigen account en kan zich daar
-    per avond afmelden."""
+    """Meld een handmatig paar definitief aan voor elk evenement van dit type
+    bij deze club — inclusief toekomstige, nog aan te maken avonden. Spelers
+    hoeven geen lid-account te hebben; wordt er via lidnummer of naam toch een
+    bestaand account gevonden, dan ziet dat lid de aanmelding voortaan ook
+    zelf en kan zich daar per avond afmelden. Zonder match blijft het een
+    niet-gekoppelde, maar nog altijd structurele aanmelding."""
     evening = db.query(ClubEvening).filter(ClubEvening.id == event_id).first()
     if not evening:
         raise HTTPException(status_code=404, detail="Evenement niet gevonden")
@@ -676,9 +742,6 @@ async def af_aanmeldingen_toevoegen_permanent(
     lid1 = _match_member(db, naam_1, lidnummer_1, evening.club_id)
     lid2 = _match_member(db, naam_2, lidnummer_2, evening.club_id) if naam_2 else None
 
-    if not lid1 and not lid2:
-        return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?fout=geen_account_gevonden", status_code=302)
-
     gekoppeld = 0
     if lid1:
         _stel_vaste_aanmelding_in(db, lid1, evening, naam_2)
@@ -686,6 +749,9 @@ async def af_aanmeldingen_toevoegen_permanent(
     if lid2 and (not lid1 or lid2.id != lid1.id):
         _stel_vaste_aanmelding_in(db, lid2, evening, naam_1)
         gekoppeld += 1
+
+    if not lid1 and not lid2:
+        _stel_vaste_aanmelding_manual_in(db, naam_1, naam_2, lidnummer_1, lidnummer_2, evening)
 
     db.commit()
     return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?permanent_toegevoegd={gekoppeld}", status_code=302)
@@ -706,6 +772,51 @@ async def manual_pair_verwijder(
         db.delete(pair)
         db.commit()
     return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}", status_code=302)
+
+
+@router.post("/af-aanmeldingen/{event_id}/reg/{reg_id}/verwijder")
+async def af_aanmeldingen_registratie_verwijderen(
+    event_id: int,
+    reg_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Member = Depends(require_wedstrijdleider),
+):
+    """Een wedstrijdleider meldt een paar handmatig af vanaf het af-aanmeldingen-
+    overzicht. De betrokken lid-account(s) krijgen hierover een bericht."""
+    reg = (
+        db.query(Registration)
+        .filter(Registration.id == reg_id, Registration.evening_id == event_id)
+        .first()
+    )
+    if not reg:
+        return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}", status_code=302)
+
+    evening = reg.evening
+    if not can_manage_club(current_user, evening.club_id, db):
+        raise HTTPException(status_code=403, detail="Geen toegang tot deze club")
+
+    reg.status = RegistrationStatus.afgemeld
+    reg.partner_naam = None
+    reg.partner2_naam = None
+    reg.partner3_naam = None
+
+    event_naam = evening.naam or evening.type
+    datum_str = evening.datum.strftime("%d-%m-%Y")
+    betrokkenen = [p for p in (reg.person1, reg.person2) if p is not None]
+    for betrokkene in betrokkenen:
+        db.add(Bericht(
+            afzender_id=current_user.id,
+            ontvanger_id=betrokkene.id,
+            onderwerp=f"Afgemeld door wedstrijdleider: {event_naam} op {datum_str}",
+            tekst=(
+                f"Je bent door de wedstrijdleider afgemeld voor {event_naam} op {datum_str}."
+            ),
+            is_systeem=True,
+        ))
+
+    db.commit()
+    return RedirectResponse(url=f"/beheer/af-aanmeldingen/{event_id}?paar_verwijderd=1", status_code=302)
 
 
 @router.post("/te-laat/{reg_id}/goedkeuren")

@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -20,6 +21,7 @@ from app.models import (
     ManualPair,
     Member,
     PartnerRequest,
+    RecurringManualPair,
     RecurringRegistration,
     Registration,
     RegistrationStatus,
@@ -153,6 +155,48 @@ def _apply_recurring_registrations(db: Session, event: ClubEvening, sender_id: O
                     ),
                     is_systeem=True,
                 ))
+
+    recurring_manual_pairs = (
+        db.query(RecurringManualPair)
+        .filter(
+            RecurringManualPair.event_type.in_(_synoniemen(event.type)),
+            RecurringManualPair.actief == True,  # noqa: E712
+        )
+        .all()
+    )
+    for rmp in recurring_manual_pairs:
+        if rmp.club_id is not None and rmp.club_id != event.club_id:
+            continue
+        if rmp.herhaal_tot and rmp.herhaal_tot < event.datum:
+            continue
+        if rmp.interval > 1:
+            count_q = (
+                db.query(ClubEvening)
+                .filter(
+                    ClubEvening.type.in_(_synoniemen(event.type)),
+                    ClubEvening.datum >= rmp.referentie_datum,
+                    ClubEvening.datum < event.datum,
+                )
+            )
+            if event.club_id:
+                count_q = count_q.filter(ClubEvening.club_id == event.club_id)
+            count = count_q.count()
+            if count % rmp.interval != 0:
+                continue
+        existing = (
+            db.query(ManualPair)
+            .filter(
+                ManualPair.evening_id == event.id,
+                func.lower(ManualPair.naam_1) == rmp.naam_1.lower(),
+            )
+            .first()
+        )
+        if not existing:
+            db.add(ManualPair(
+                evening_id=event.id,
+                naam_1=rmp.naam_1, naam_2=rmp.naam_2,
+                lidnummer_1=rmp.lidnummer_1, lidnummer_2=rmp.lidnummer_2,
+            ))
 
 
 # ── Avonden (Wedstrijdleider + Admin) ─────────────────────────────────────────

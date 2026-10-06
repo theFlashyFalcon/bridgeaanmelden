@@ -124,13 +124,15 @@ async def test_eenzijdige_match_registreert_alleen_dat_lid(client, db_session):
     ).count() == 1
 
 
-async def test_geen_match_geeft_foutmelding_zonder_registraties(client, db_session):
+async def test_geen_match_registreert_toch_als_niet_lid_paar(client, db_session):
     from app.main import app
-    from app.models import RecurringRegistration, Registration
+    from app.models import ManualPair, RecurringManualPair, RecurringRegistration, Registration
 
     club, wl = _wl_met_club(db_session)
     season = make_season(db_session)
     ev = make_evening(db_session, season.id, club_id=club.id)
+    # Tweede, verder in de toekomst liggende avond van hetzelfde type moet ook meegenomen worden.
+    ev2 = make_evening(db_session, season.id, club_id=club.id, datum=date.today() + timedelta(days=21))
 
     _set_auth(app, wl)
     response = await client.post(
@@ -138,9 +140,18 @@ async def test_geen_match_geeft_foutmelding_zonder_registraties(client, db_sessi
         data={"naam_1": "Onbekende Speler", "naam_2": "Nog Een Onbekende"},
     )
     assert response.status_code == 302
-    assert "fout=geen_account_gevonden" in response.headers["location"]
+    assert "permanent_toegevoegd=0" in response.headers["location"]
+    # Geen lid-accounts gekoppeld, dus geen Registration/RecurringRegistration...
     assert db_session.query(Registration).count() == 0
     assert db_session.query(RecurringRegistration).count() == 0
+    # ...maar wel een handmatige aanmelding voor elke (toekomstige) avond, plus
+    # een herhaalaanmelding zodat nieuwe avonden automatisch meekomen.
+    pairs = db_session.query(ManualPair).all()
+    assert {p.evening_id for p in pairs} == {ev.id, ev2.id}
+    assert all(p.naam_1 == "Onbekende Speler" and p.naam_2 == "Nog Een Onbekende" for p in pairs)
+    assert db_session.query(RecurringManualPair).filter(
+        RecurringManualPair.actief == True  # noqa: E712
+    ).count() == 1
 
 
 async def test_niet_beschikbaar_voor_viertallen(client, db_session):

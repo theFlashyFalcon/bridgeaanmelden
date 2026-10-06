@@ -9,12 +9,14 @@
 
 {% if request.query_params.get('toegevoegd') %}
   <div class="alert alert-success">Handmatig toegevoegd.</div>
+{% elif request.query_params.get('paar_verwijderd') %}
+  <div class="alert alert-success">Paar afgemeld. Een gekoppeld lid-account ontvangt hierover een bericht.</div>
+{% elif request.query_params.get('permanent_toegevoegd') == '0' %}
+  <div class="alert alert-success">Paar toegevoegd voor onbepaalde tijd. Geen van beiden heeft een lid-account, dus er worden geen automatische berichten gestuurd.</div>
 {% elif request.query_params.get('permanent_toegevoegd') %}
   <div class="alert alert-success">Paar toegevoegd voor onbepaalde tijd. Een gekoppeld lid-account ziet de aanmelding voortaan ook zelf en kan zich per avond afmelden.</div>
 {% elif request.query_params.get('fout') == 'naam_verplicht' %}
   <div class="alert alert-error">Vul minimaal de naam van speler 1 in.</div>
-{% elif request.query_params.get('fout') == 'geen_account_gevonden' %}
-  <div class="alert alert-error">Geen lid-account gevonden bij deze naam of dit lidnummer. Vul een lidnummer in van een bestaand account, of gebruik gewoon "Toevoegen" voor een eenmalige aanmelding.</div>
 {% elif request.query_params.get('bericht_verstuurd') %}
   <div class="alert alert-success">Bericht verstuurd.</div>
 {% elif request.query_params.get('te_laat_goedgekeurd') %}
@@ -80,7 +82,8 @@
 
         {# Reguliere aanmeldingen #}
         {% for reg in volledig_aangemeld | sort(attribute='person1.achternaam') %}
-          <li class="participant-item">
+          <li class="participant-item" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+            <span>
             {% if dtype == 'viertallen' %}
               {# Toon teamnaam als klikbare knop #}
               <button type="button" class="team-toggle-btn"
@@ -108,6 +111,12 @@
             {% if reg.te_laat and not reg.te_laat_goedgekeurd %}
               <span class="badge badge-warning" style="margin-left:.4rem;font-size:.7rem;">te laat</span>
             {% endif %}
+            </span>
+            <form method="post" action="/beheer/af-aanmeldingen/{{ evening.id }}/reg/{{ reg.id }}/verwijder"
+                  data-bevestig="Dit paar afmelden?" style="flex-shrink:0;">
+  <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+              <button type="submit" class="btn btn-danger" style="padding:.2rem .45rem;font-size:.75rem;">&#10005;</button>
+            </form>
           </li>
         {% endfor %}
 

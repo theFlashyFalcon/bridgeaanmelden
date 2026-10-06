@@ -319,6 +319,29 @@ class RecurringRegistration(Base):
     club = relationship("Club")
 
 
+class RecurringManualPair(Base):
+    """Herhaalaanmelding voor een paar waarvan geen van beide spelers een
+    lid-account heeft (gekoppeld via naam of lidnummer). Werkt verder als
+    RecurringRegistration, maar zonder member_id: nieuwe avonden krijgen een
+    ManualPair in plaats van een Registration."""
+    __tablename__ = "recurring_manual_pairs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_type = Column(String, nullable=False)
+    naam_1 = Column(String, nullable=False)
+    naam_2 = Column(String, nullable=True)
+    lidnummer_1 = Column(String, nullable=True)
+    lidnummer_2 = Column(String, nullable=True)
+    interval = Column(Integer, default=1, nullable=False)
+    herhaal_tot = Column(Date, nullable=True)
+    actief = Column(Boolean, default=True, nullable=False)
+    referentie_datum = Column(Date, nullable=False)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=True)
+    aangemaakt_op = Column(DateTime, server_default=func.now(), nullable=False)
+
+    club = relationship("Club")
+
+
 class AdminBericht(Base):
     __tablename__ = "admin_berichten"
 
