@@ -278,6 +278,7 @@ async def registration_form(
     niet_lid_geblokkeerd = gast_toegang and niet_lid_beleid(evening.club) == "geblokkeerd"
 
     existing = None
+    existing_as_partner = None
     if current_user:
         existing = (
             db.query(Registration)
@@ -288,6 +289,18 @@ async def registration_form(
             )
             .first()
         )
+        if not existing:
+            # Iemand anders heeft jou als partner aangemeld voor deze avond:
+            # toon dat duidelijk zodat je niet nog eens los/dubbel aanmeldt.
+            existing_as_partner = (
+                db.query(Registration)
+                .filter(
+                    Registration.evening_id == event_id,
+                    Registration.person2_id == current_user.id,
+                    Registration.status != RegistrationStatus.afgemeld,
+                )
+                .first()
+            )
 
     return templates.TemplateResponse(
         request,
@@ -296,6 +309,7 @@ async def registration_form(
             "current_user": current_user,
             "evening": evening,
             "existing": existing,
+            "existing_as_partner": existing_as_partner,
             "gast_toegang": gast_toegang,
             "niet_lid_geblokkeerd": niet_lid_geblokkeerd,
         },
@@ -337,7 +351,10 @@ async def registration_submit(
             db.query(Registration)
             .filter(
                 Registration.evening_id == event_id,
-                Registration.person1_id == current_user.id,
+                or_(
+                    Registration.person1_id == current_user.id,
+                    Registration.person2_id == current_user.id,
+                ),
                 Registration.status != RegistrationStatus.afgemeld,
             )
             .first()
@@ -347,6 +364,7 @@ async def registration_submit(
             existing.partner_naam = None
             existing.partner2_naam = None
             existing.partner3_naam = None
+            existing.person2_id = None
             db.commit()
         # Also cancel pending partner request
         db.query(PartnerRequest).filter(
@@ -421,6 +439,25 @@ async def registration_submit(
             )
             .first()
         )
+
+    if not gast_toegang and not existing:
+        # Een ander lid heeft jou al als partner aangemeld voor deze avond:
+        # geen nieuwe, losse aanmelding toestaan (voorkomt een dubbel paar).
+        # Eerst afmelden (door jezelf of de partner, of door de WL) voordat
+        # er opnieuw aangemeld kan worden.
+        existing_as_partner = (
+            db.query(Registration)
+            .filter(
+                Registration.evening_id == event_id,
+                Registration.person2_id == current_user.id,
+                Registration.status != RegistrationStatus.afgemeld,
+            )
+            .first()
+        )
+        if existing_as_partner:
+            return RedirectResponse(
+                url=f"/aanmelden/{event_id}?fout=al_aangemeld_partner", status_code=302,
+            )
 
     deelnemers_type = evening.deelnemers_type or "paren"
 
@@ -528,6 +565,10 @@ async def registration_submit(
     if partner_voornaam and partner_achternaam:
         partner_naam = f"{partner_voornaam} {partner_achternaam}"
         partner_gewijzigd = not existing or existing.partner_naam != partner_naam
+        partner_lid = (
+            None if gast_toegang
+            else _partner_lid(db, current_user, partner_voornaam, partner_achternaam)
+        )
 
         paar_beleid = niet_lid_paar_beleid(evening.club) if not gast_toegang else "toegestaan"
         partner_onbekend = (
@@ -547,6 +588,7 @@ async def registration_submit(
             existing.partner_naam = partner_naam
             existing.partner2_naam = None
             existing.partner3_naam = None
+            existing.person2_id = partner_lid.id if partner_lid else None
             if te_laat:
                 existing.te_laat = True
                 # Nieuwe te-late wijziging: eerdere goedkeuring vervalt
@@ -558,6 +600,7 @@ async def registration_submit(
             db.add(Registration(
                 evening_id=event_id,
                 person1_id=current_user.id,
+                person2_id=partner_lid.id if partner_lid else None,
                 partner_naam=partner_naam,
                 type=RegistrationType.los,
                 status=RegistrationStatus.aangemeld,
@@ -566,10 +609,10 @@ async def registration_submit(
             ))
         db.commit()
 
-        if partner_gewijzigd:
-            partner_lid = _partner_lid(db, current_user, partner_voornaam, partner_achternaam)
-            if partner_lid:
-                _stuur_aanmeld_notificatie(db, current_user, partner_lid, evening.naam or evening.type)
+        if partner_gewijzigd and partner_lid:
+            _stuur_aanmeld_notificatie(
+                db, current_user, partner_lid, evening.naam or evening.type,
+            )
 
         beleid_voor_melding = gast_niet_lid_beleid if gast_toegang else paar_beleid
         return _niet_lid_redirect(
@@ -583,6 +626,7 @@ async def registration_submit(
             existing.partner_naam = None
             existing.partner2_naam = None
             existing.partner3_naam = None
+            existing.person2_id = None
             if te_laat:
                 existing.te_laat = True
                 # Nieuwe te-late wijziging: eerdere goedkeuring vervalt

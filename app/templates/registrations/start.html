@@ -46,13 +46,30 @@
         <em>zonder partner</em>
       {% endif %}.
     </div>
+  {% elif existing_as_partner %}
+    <div class="alert alert-success" style="margin-bottom:1rem;">
+      Je bent aangemeld door <strong>{{ existing_as_partner.person1.voornaam }} {{ existing_as_partner.person1.achternaam }}</strong>, met jou als partner, voor dit evenement.
+    </div>
+    <div class="alert alert-info" style="margin-bottom:1rem;">
+      Wil je iets wijzigen? Meld je eerst af — of vraag <strong>{{ existing_as_partner.person1.voornaam }}</strong> of de wedstrijdleider om dit te doen — voordat je opnieuw aanmeldt.
+    </div>
+    <form method="post" action="/aanmelden/{{ evening.id }}" class="form-stack">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
+      <div class="action-buttons">
+        <button type="submit" name="action" value="afmelden" class="btn btn-danger"
+                data-bevestig="Weet je zeker dat je je wilt afmelden?">
+          Afmelden
+        </button>
+        <a href="javascript:history.back()" class="btn btn-secondary">Terug</a>
+      </div>
+    </form>
   {% else %}
     <div class="alert alert-info" style="margin-bottom:1rem;">
       Je bent nog niet aangemeld voor dit evenement.
     </div>
   {% endif %}
 
-  {% if not training_niet_toegestaan and not niet_lid_geblokkeerd %}
+  {% if not training_niet_toegestaan and not niet_lid_geblokkeerd and not existing_as_partner %}
   <form method="post" action="/aanmelden/{{ evening.id }}" class="form-stack">
   <input type="hidden" name="_csrf_token" value="{{ csrf_token(request) }}">
 
@@ -209,7 +226,7 @@
 
   {% endif %}{# einde training_niet_toegestaan guard #}
 
-  {% if current_user and not training_niet_toegestaan and evening.deelnemers_type != 'individueel' %}
+  {% if current_user and not training_niet_toegestaan and not existing_as_partner and evening.deelnemers_type != 'individueel' %}
   <div style="margin-top:1.25rem;border-top:1px solid #e0e0e0;padding-top:1rem;">
     <button type="button" class="btn btn-secondary" onclick="toggleHerhaalPaneel()">
       Herhaal mijn aanmelding
