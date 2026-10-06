@@ -371,6 +371,7 @@ async def leden_list(
         .limit(PER_PAGINA)
         .all()
     )
+    ledenimport = request.session.pop("ledenimport_resultaat", None)
     return templates.TemplateResponse(
         request,
         "admin/leden.html",
@@ -380,6 +381,7 @@ async def leden_list(
             "pagina": pagina,
             "totaal_paginas": totaal_paginas,
             "totaal": totaal,
+            "ledenimport": ledenimport,
         },
     )
 
@@ -432,9 +434,12 @@ async def leden_importeer(
 
     inhoud = await bestand.read()
     resultaat = importeer_ledenlijst_csv(inhoud, club_id, db)
-    url = f"/beheer/leden?import_ok={resultaat.toegevoegd}&overgeslagen={resultaat.overgeslagen}"
-    if resultaat.gecorrigeerd:
-        url += f"&gecorrigeerd={len(resultaat.gecorrigeerd)}"
-    return RedirectResponse(url=url, status_code=302)
+    request.session["ledenimport_resultaat"] = {
+        "nieuwe_namen": resultaat.nieuwe_namen,
+        "verwijderde_namen": resultaat.verwijderde_namen,
+        "overgeslagen": resultaat.overgeslagen,
+        "gecorrigeerd": resultaat.gecorrigeerd,
+    }
+    return RedirectResponse(url="/beheer/leden?import_ok=1", status_code=302)
 
 

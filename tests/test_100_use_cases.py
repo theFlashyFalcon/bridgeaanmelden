@@ -1175,15 +1175,17 @@ async def test_uc175_leden_csv_import(client, db_session):
         "/beheer/leden/importeer",
         files={"bestand": ("leden.csv", csv_data, "text/csv")},
     )
-    assert "import_ok=2" in response.headers["location"]
+    assert "import_ok=1" in response.headers["location"]
     assert db_session.query(Lid).count() == 2
 
 
-async def test_uc176_leden_csv_import_dubbelen_overgeslagen(client, db_session):
+async def test_uc176_leden_csv_import_bestaand_lid_blijft_ongewijzigd(client, db_session):
+    """De import vervangt de ledenlijst: een lid dat in beide lijsten voorkomt
+    blijft exact hetzelfde record (zelfde id), nieuwe leden worden toegevoegd."""
     from app.main import app
     from app.models import Lid
     admin = make_member(db_session, lidnummer="UC176", role="admin")
-    make_lid_entry(db_session, "Jan", "Bestaand")
+    bestaand = make_lid_entry(db_session, "Jan", "Bestaand")
     _set_auth(app, admin=admin)
     csv_data = b"voornaam,achternaam\nJan,Bestaand\nNieuw,Persoon\n"
     response = await client.post(
@@ -1191,8 +1193,8 @@ async def test_uc176_leden_csv_import_dubbelen_overgeslagen(client, db_session):
         files={"bestand": ("leden.csv", csv_data, "text/csv")},
     )
     assert "import_ok=1" in response.headers["location"]
-    assert "overgeslagen=1" in response.headers["location"]
     assert db_session.query(Lid).count() == 2
+    assert db_session.query(Lid).filter(Lid.id == bestaand.id).first() is not None
 
 
 async def test_uc177_lid_toevoegen_en_verwijderen(client, db_session):

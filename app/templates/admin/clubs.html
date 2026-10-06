@@ -55,10 +55,28 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="alert alert-success" style="margin-bottom:1rem;">Wijzigingen opgeslagen.</div>
   {% elif request.query_params.get('verwijderd') %}
     <div class="alert alert-info" style="margin-bottom:1rem;">Club verwijderd.</div>
-  {% elif request.query_params.get('import_ok') is not none and request.query_params.get('import_ok') != '' %}
+  {% elif ledenimport %}
     <div class="alert alert-success" style="margin-bottom:1rem;">
-      Import klaar: <strong>{{ request.query_params.get('import_ok') }}</strong> leden toegevoegd,
-      {{ request.query_params.get('overgeslagen', '0') }} overgeslagen.
+      <p style="margin:0 0 .6rem;">Lijst succesvol geïmporteerd en de oude vervangen.</p>
+      <p style="margin:0 0 .25rem;font-weight:600;">Nieuwe leden{% if ledenimport.nieuwe_namen %} ({{ ledenimport.nieuwe_namen | length }}){% endif %}:</p>
+      {% if ledenimport.nieuwe_namen %}
+        <ul style="margin:0 0 .6rem;padding-left:1.1rem;">
+          {% for naam in ledenimport.nieuwe_namen %}<li>{{ naam }}</li>{% endfor %}
+        </ul>
+      {% else %}
+        <p style="margin:0 0 .6rem;color:var(--color-muted);font-size:.9rem;">Geen</p>
+      {% endif %}
+      <p style="margin:0 0 .25rem;font-weight:600;">Verwijderde leden{% if ledenimport.verwijderde_namen %} ({{ ledenimport.verwijderde_namen | length }}){% endif %}:</p>
+      {% if ledenimport.verwijderde_namen %}
+        <ul style="margin:0;padding-left:1.1rem;">
+          {% for naam in ledenimport.verwijderde_namen %}<li>{{ naam }}</li>{% endfor %}
+        </ul>
+      {% else %}
+        <p style="margin:0;color:var(--color-muted);font-size:.9rem;">Geen</p>
+      {% endif %}
+      {% if ledenimport.overgeslagen %}
+        <p style="margin:.6rem 0 0;color:var(--color-muted);font-size:.85rem;">{{ ledenimport.overgeslagen }} rij(en) overgeslagen (naam ontbreekt).</p>
+      {% endif %}
     </div>
   {% elif request.query_params.get('import_fout') %}
     <div class="alert alert-error" style="margin-bottom:1rem;">Upload mislukt. Kies een geldig CSV-bestand.</div>
@@ -174,7 +192,8 @@ document.addEventListener('DOMContentLoaded', function() {
         <summary style="cursor:pointer;font-weight:500;font-size:.9rem;color:var(--color-primary);">Ledenlijst importeren (CSV)</summary>
         <p style="color:var(--color-muted);font-size:.85rem;margin:.5rem 0 .5rem;">
           Upload een CSV met kolommen <code>voornaam</code>, <code>achternaam</code> en optioneel <code>nbb_nummer</code>.
-          Bestaande leden worden overgeslagen.
+          Dit vervangt de huidige ledenlijst van deze club: leden die in beide lijsten voorkomen blijven
+          ongewijzigd, nieuwe leden worden toegevoegd en leden die niet meer in het bestand staan worden verwijderd.
         </p>
         <form method="post" action="/beheer/clubs/{{ club.id }}/leden/importeer"
               enctype="multipart/form-data" class="form-stack">

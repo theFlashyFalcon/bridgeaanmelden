@@ -83,6 +83,7 @@ async def clubs_list(
     ledenlijst_counts = {}
     for club in clubs:
         ledenlijst_counts[club.id] = db.query(Lid).filter(Lid.club_id == club.id).count()
+    ledenimport = request.session.pop("ledenimport_resultaat", None)
     return templates.TemplateResponse(
         request,
         "admin/clubs.html",
@@ -91,6 +92,7 @@ async def clubs_list(
             "clubs": clubs,
             "lid_counts": lid_counts,
             "ledenlijst_counts": ledenlijst_counts,
+            "ledenimport": ledenimport,
         },
     )
 
@@ -165,13 +167,16 @@ async def club_leden_importeer(
 
     inhoud = await bestand.read()
     resultaat = importeer_ledenlijst_csv(inhoud, club.id, db)
+    request.session["ledenimport_resultaat"] = {
+        "nieuwe_namen": resultaat.nieuwe_namen,
+        "verwijderde_namen": resultaat.verwijderde_namen,
+        "overgeslagen": resultaat.overgeslagen,
+        "gecorrigeerd": resultaat.gecorrigeerd,
+    }
 
     scheidingsteken = "&" if "?" in terug else "?"
-    url = f"{terug}{scheidingsteken}import_ok={resultaat.toegevoegd}&overgeslagen={resultaat.overgeslagen}"
-    if resultaat.gecorrigeerd:
-        url += f"&gecorrigeerd={len(resultaat.gecorrigeerd)}"
     return RedirectResponse(
-        url=url,
+        url=f"{terug}{scheidingsteken}import_ok=1",
         status_code=302,
     )
 

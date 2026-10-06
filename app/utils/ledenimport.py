@@ -1,14 +1,16 @@
 """Gedeelde CSV-ledenlijst-import (gebruikt door /beheer/leden/importeer en
-/beheer/clubs/{club_id}/leden/importeer) — importeert namen in de `Lid`-tabel
-(de NBB-ledenlijst, los van gebruikersaccounts) en corrigeert daarbij namen
-die dubbel UTF-8/Latin-1-gecodeerd zijn geraakt (herkenbaar aan tekens als
-"Ã©"), zoals vaak voorkomt bij een export vanuit het bondssysteem.
+/beheer/clubs/{club_id}/leden/importeer) — vervangt de huidige `Lid`-lijst
+(de NBB-ledenlijst, los van gebruikersaccounts) van een club volledig door de
+geïmporteerde lijst. Leden die in beide lijsten voorkomen (zelfde voornaam +
+achternaam) blijven ongewijzigd staan; de rest wordt toegevoegd of verwijderd.
+Corrigeert daarbij namen die dubbel UTF-8/Latin-1-gecodeerd zijn geraakt
+(herkenbaar aan tekens als "Ã©"), zoals vaak voorkomt bij een export vanuit
+het bondssysteem.
 """
 import csv
 import io
 from dataclasses import dataclass, field
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models import Lid
@@ -35,8 +37,11 @@ def _corrigeer_mojibake(tekst: str) -> str:
 @dataclass
 class ImportResultaat:
     toegevoegd: int = 0
+    verwijderd: int = 0
     overgeslagen: int = 0
     gecorrigeerd: list[str] = field(default_factory=list)
+    nieuwe_namen: list[str] = field(default_factory=list)
+    verwijderde_namen: list[str] = field(default_factory=list)
 
 
 def importeer_ledenlijst_csv(inhoud: bytes, club_id: int | None, db: Session) -> ImportResultaat:
@@ -47,6 +52,9 @@ def importeer_ledenlijst_csv(inhoud: bytes, club_id: int | None, db: Session) ->
 
     reader = csv.DictReader(io.StringIO(tekst))
     resultaat = ImportResultaat()
+
+    # (voornaam_lower, achternaam_lower) -> (voornaam, achternaam, nbb_nummer)
+    geimporteerd: dict[tuple[str, str], tuple[str, str, str | None]] = {}
     for rij in reader:
         ruwe_voornaam = (rij.get("voornaam") or rij.get("Voornaam") or "").strip()
         ruwe_achternaam = (rij.get("achternaam") or rij.get("Achternaam") or "").strip()
@@ -60,19 +68,32 @@ def importeer_ledenlijst_csv(inhoud: bytes, club_id: int | None, db: Session) ->
         if not voornaam or not achternaam:
             resultaat.overgeslagen += 1
             continue
-        al_aanwezig = (
-            db.query(Lid)
-            .filter(
-                func.lower(Lid.voornaam) == voornaam.lower(),
-                func.lower(Lid.achternaam) == achternaam.lower(),
-                Lid.club_id == club_id,
-            )
-            .first()
-        )
-        if not al_aanwezig:
-            db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb, club_id=club_id))
-            resultaat.toegevoegd += 1
-        else:
-            resultaat.overgeslagen += 1
+        geimporteerd[(voornaam.lower(), achternaam.lower())] = (voornaam, achternaam, nbb)
+
+    bestaand_per_sleutel = {
+        (lid.voornaam.strip().lower(), lid.achternaam.strip().lower()): lid
+        for lid in db.query(Lid).filter(Lid.club_id == club_id).all()
+    }
+
+    nieuwe_sleutels = set(geimporteerd.keys())
+    bestaande_sleutels = set(bestaand_per_sleutel.keys())
+
+    # Alleen in de oude lijst: verwijderen. Aanwezig in beide: ongewijzigd laten.
+    for sleutel in bestaande_sleutels - nieuwe_sleutels:
+        lid = bestaand_per_sleutel[sleutel]
+        resultaat.verwijderde_namen.append(f"{lid.voornaam} {lid.achternaam}")
+        db.delete(lid)
+        resultaat.verwijderd += 1
+
+    # Alleen in de nieuwe lijst: toevoegen.
+    for sleutel in nieuwe_sleutels - bestaande_sleutels:
+        voornaam, achternaam, nbb = geimporteerd[sleutel]
+        db.add(Lid(voornaam=voornaam, achternaam=achternaam, nbb_nummer=nbb, club_id=club_id))
+        resultaat.nieuwe_namen.append(f"{voornaam} {achternaam}")
+        resultaat.toegevoegd += 1
+
+    resultaat.nieuwe_namen.sort()
+    resultaat.verwijderde_namen.sort()
+
     db.commit()
     return resultaat
